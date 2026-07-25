@@ -1,11 +1,44 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+
+import { useState, useEffect, useRef, useMemo } from "react";
 import React from 'react';
 import { getBoughtBills, getCompanies, deleteBoughtBill, updateBoughtBill } from "@/lib/data";
 import Card from "./Card";
 import { useRouter } from "next/navigation";
 import Select from "react-select";
-import { FiChevronUp, FiChevronDown, FiX, FiDownload, FiCamera, FiImage } from "react-icons/fi";
+import { 
+  FiChevronUp, 
+  FiChevronDown, 
+  FiX, 
+  FiDownload, 
+  FiCamera, 
+  FiImage, 
+  FiFilter, 
+  FiSearch, 
+  FiMaximize2, 
+  FiMinimize2 
+} from "react-icons/fi";
+
+// --- Advanced Filter Operators ---
+const STRING_OPERATORS = [
+  { value: "contains", label: "Contains" },
+  { value: "equals", label: "Equals" },
+  { value: "startsWith", label: "Starts with" },
+  { value: "endsWith", label: "Ends with" },
+  { value: "isEmpty", label: "Is empty" },
+  { value: "isNotEmpty", label: "Is not empty" }
+];
+
+const NUMBER_OPERATORS = [
+  { value: "equals", label: "Equals" },
+  { value: "notEquals", label: "Not equals" },
+  { value: "greaterThan", label: "> Greater than" },
+  { value: "greaterThanOrEqual", label: ">= Greater or eq" },
+  { value: "lessThan", label: "< Less than" },
+  { value: "lessThanOrEqual", label: "<= Less or eq" },
+  { value: "isEmpty", label: "Is empty" },
+  { value: "isNotEmpty", label: "Is not empty" }
+];
 
 // Helper functions
 const formatNumber = (number) => {
@@ -22,10 +55,8 @@ const formatNumber = (number) => {
 
 const formatDateToDDMMYYYY = (date) => {
   if (!date) return 'N/A';
-
   try {
     let dateObj = null;
-
     if (date?.toDate && typeof date.toDate === 'function') {
       dateObj = date.toDate();
     } else if (date?.seconds) {
@@ -46,21 +77,20 @@ const formatDateToDDMMYYYY = (date) => {
       const day = String(dateObj.getDate()).padStart(2, '0');
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
       const year = dateObj.getFullYear();
-      return `${day}/${month}/${year}`;
+      const hours = String(dateObj.getHours()).padStart(2, '0');
+      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
     }
   } catch (e) {
     console.error("Error formatting date:", e);
   }
-
   return 'N/A';
 };
 
 const formatExpireDate = (expireDate) => {
   if (!expireDate) return 'N/A';
-
   try {
     let dateObj = null;
-
     if (expireDate?.toDate && typeof expireDate.toDate === 'function') {
       dateObj = expireDate.toDate();
     } else if (expireDate?.seconds) {
@@ -86,7 +116,6 @@ const formatExpireDate = (expireDate) => {
   } catch (e) {
     console.error("Error formatting expire date:", e);
   }
-
   return 'N/A';
 };
 
@@ -124,7 +153,6 @@ const formatDateForInput = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// FIXED: Get out price based on bill's currency
 const getOutPrice = (item, billCurrency) => {
   if (billCurrency === "USD") {
     return item.outPriceUSD !== undefined && item.outPriceUSD !== null ? item.outPriceUSD : 0;
@@ -133,7 +161,6 @@ const getOutPrice = (item, billCurrency) => {
   }
 };
 
-// FIXED: Get purchase price based on bill's currency
 const getPurchasePrice = (item, billCurrency) => {
   if (billCurrency === "USD") {
     return item.basePriceUSD !== undefined && item.basePriceUSD !== null ? item.basePriceUSD : 0;
@@ -142,7 +169,6 @@ const getPurchasePrice = (item, billCurrency) => {
   }
 };
 
-// FIXED: Get net price based on bill's currency
 const getNetPrice = (item, billCurrency) => {
   if (billCurrency === "USD") {
     if (item.netPriceUSD !== undefined && item.netPriceUSD !== null) {
@@ -157,7 +183,6 @@ const getNetPrice = (item, billCurrency) => {
   }
 };
 
-// FIXED: Get transport fee based on bill's currency
 const getTransportFee = (bill, currency) => {
   if (currency === "USD") {
     return bill.totalTransportFeeUSD || 0;
@@ -166,7 +191,6 @@ const getTransportFee = (bill, currency) => {
   }
 };
 
-// FIXED: Get external expense based on bill's currency
 const getExternalExpense = (bill, currency) => {
   if (currency === "USD") {
     return bill.totalExternalExpenseUSD || 0;
@@ -199,6 +223,9 @@ export default function BuyingList({ refreshTrigger }) {
   const [displayCurrency, setDisplayCurrency] = useState("USD");
   const [sortConfig, setSortConfig] = useState({ key: 'billNumber', direction: 'desc' });
   const [fullScreenImage, setFullScreenImage] = useState(null);
+  const [columnFilters, setColumnFilters] = useState({});
+  const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const router = useRouter();
@@ -218,9 +245,19 @@ export default function BuyingList({ refreshTrigger }) {
   }, [refreshTrigger]);
 
   useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.filter-dropdown-container')) {
+        setActiveFilterDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
     const items = new Set();
     bills.forEach(bill => {
-      bill.items.forEach(item => {
+      bill.items?.forEach(item => {
         items.add(item.name);
       });
     });
@@ -239,6 +276,81 @@ export default function BuyingList({ refreshTrigger }) {
       setShowCompanySuggestions(false);
     }
   }, [filters.companySearch, companies]);
+
+  // Prepared normalized records for column-level filtering
+  const processedBills = useMemo(() => {
+    return bills.map(bill => {
+      const companyObj = companies.find(c => c.id === bill.companyId);
+      const companyName = companyObj?.name || 'Unknown Company';
+      const companyCode = companyObj?.code || 'N/A';
+      const formattedDate = formatDateToDDMMYYYY(bill.date);
+      const hasAttachment = bill.attachment ? 'Yes' : 'No';
+      const consignmentText = bill.isConsignment ? 'Consignment' : 'Owned';
+
+      return {
+        ...bill,
+        companyName,
+        companyCode,
+        formattedDate,
+        hasAttachment,
+        consignmentText,
+      };
+    });
+  }, [bills, companies]);
+
+  const evaluateFilter = (itemValue, filterData) => {
+    if (!filterData) return true;
+    const { operator, textValue, selectedValues } = filterData;
+
+    if (selectedValues && selectedValues.length > 0) {
+      if (!selectedValues.includes(String(itemValue))) return false;
+    }
+
+    if (operator && (textValue !== "" || ['isEmpty', 'isNotEmpty'].includes(operator))) {
+      const valStr = String(itemValue || '').toLowerCase();
+      const searchStr = String(textValue).toLowerCase();
+      const valNum = Number(itemValue);
+      const searchNum = Number(textValue);
+
+      switch (operator) {
+        case 'contains': if (!valStr.includes(searchStr)) return false; break;
+        case 'equals': if (valStr !== searchStr && valNum !== searchNum) return false; break;
+        case 'notEquals': if (valNum === searchNum) return false; break;
+        case 'startsWith': if (!valStr.startsWith(searchStr)) return false; break;
+        case 'endsWith': if (!valStr.endsWith(searchStr)) return false; break;
+        case 'greaterThan': if (valNum <= searchNum) return false; break;
+        case 'greaterThanOrEqual': if (valNum < searchNum) return false; break;
+        case 'lessThan': if (valNum >= searchNum) return false; break;
+        case 'lessThanOrEqual': if (valNum > searchNum) return false; break;
+        case 'isEmpty': if (itemValue !== null && itemValue !== undefined && itemValue !== '') return false; break;
+        case 'isNotEmpty': if (itemValue === null || itemValue === undefined || itemValue === '') return false; break;
+        default: break;
+      }
+    }
+    return true;
+  };
+
+  const handleUpdateColumnFilter = (columnKey, updates) => {
+    setColumnFilters(prev => {
+      const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
+      const next = { ...current, ...updates };
+
+      if (!next.operator && !next.textValue && (!next.selectedValues || next.selectedValues.length === 0)) {
+        const newFilters = { ...prev };
+        delete newFilters[columnKey];
+        return newFilters;
+      }
+      return { ...prev, [columnKey]: next };
+    });
+  };
+
+  const clearColumnFilter = (columnKey) => {
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      delete next[columnKey];
+      return next;
+    });
+  };
 
   const handleFilterChange = (field, value) => {
     setFilters({ ...filters, [field]: value });
@@ -262,21 +374,17 @@ export default function BuyingList({ refreshTrigger }) {
     setSortConfig({ key, direction });
   };
 
-  const getSortedAndFilteredBills = () => {
-    const filtered = bills.filter(bill => {
-      const matchesBillNumber = !filters.billNumber ||
-        bill.billNumber.toString().includes(filters.billNumber);
-      const matchesCompanyBillNumber = !filters.companyBillNumber ||
-        bill.companyBillNumber?.toString().includes(filters.companyBillNumber);
-      const matchesCompany = !filters.companySearch ||
-        companies.find(c => c.id === bill.companyId)?.name.toLowerCase().includes(filters.companySearch.toLowerCase());
+  const sortedAndFilteredBills = useMemo(() => {
+    let filtered = processedBills.filter(bill => {
+      const matchesBillNumber = !filters.billNumber || bill.billNumber.toString().includes(filters.billNumber);
+      const matchesCompanyBillNumber = !filters.companyBillNumber || bill.companyBillNumber?.toString().includes(filters.companyBillNumber);
+      const matchesCompany = !filters.companySearch || bill.companyName.toLowerCase().includes(filters.companySearch.toLowerCase());
       const billDate = parseDate(bill.date);
       const startDate = filters.startDate ? new Date(filters.startDate) : null;
       const endDate = filters.endDate ? new Date(filters.endDate) : null;
       const matchesStartDate = !startDate || (billDate && billDate >= startDate);
       const matchesEndDate = !endDate || (billDate && billDate <= endDate);
-      const matchesPaymentStatus = filters.paymentStatus === "all" ||
-        bill.paymentStatus === filters.paymentStatus;
+      const matchesPaymentStatus = filters.paymentStatus === "all" || bill.paymentStatus === filters.paymentStatus;
       const matchesConsignmentStatus = filters.consignmentStatus === "all" ||
         (filters.consignmentStatus === "consignment" && bill.isConsignment) ||
         (filters.consignmentStatus === "owned" && !bill.isConsignment);
@@ -288,10 +396,24 @@ export default function BuyingList({ refreshTrigger }) {
         bill.billNumber.toString().includes(searchQuery);
       const matchesItemFilters = itemFilters.length === 0 ||
         bill.items.some(item => itemFilters.includes(item.name));
-      return matchesBillNumber && matchesCompanyBillNumber && matchesCompany &&
-        matchesStartDate && matchesEndDate &&
-        matchesPaymentStatus && matchesSearch && matchesItemFilters &&
-        matchesConsignmentStatus;
+
+      if (!matchesBillNumber || !matchesCompanyBillNumber || !matchesCompany ||
+        !matchesStartDate || !matchesEndDate || !matchesPaymentStatus ||
+        !matchesSearch || !matchesItemFilters || !matchesConsignmentStatus) {
+        return false;
+      }
+
+      for (const [columnKey, filterData] of Object.entries(columnFilters)) {
+        let itemValue = bill[columnKey];
+        if (columnKey === 'company') itemValue = bill.companyName;
+        if (columnKey === 'date') itemValue = bill.formattedDate;
+        if (columnKey === 'consignment') itemValue = bill.consignmentText;
+        if (columnKey === 'hasAttachment') itemValue = bill.hasAttachment;
+
+        if (!evaluateFilter(itemValue, filterData)) return false;
+      }
+
+      return true;
     });
 
     if (sortConfig.key) {
@@ -302,8 +424,8 @@ export default function BuyingList({ refreshTrigger }) {
           aValue = a.billNumber;
           bValue = b.billNumber;
         } else if (sortConfig.key === 'company') {
-          aValue = companies.find(c => c.id === a.companyId)?.name || '';
-          bValue = companies.find(c => c.id === b.companyId)?.name || '';
+          aValue = a.companyName;
+          bValue = b.companyName;
         } else if (sortConfig.key === 'date') {
           aValue = parseDate(a.date)?.getTime() || 0;
           bValue = parseDate(b.date)?.getTime() || 0;
@@ -315,20 +437,14 @@ export default function BuyingList({ refreshTrigger }) {
           bValue = b.isConsignment ? 'Consignment' : 'Owned';
         }
 
-        if (aValue < bValue) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
     }
 
     return filtered;
-  };
-
-  const sortedAndFilteredBills = getSortedAndFilteredBills();
+  }, [processedBills, filters, searchQuery, itemFilters, columnFilters, sortConfig]);
 
   const handleUpdateBill = async (bill) => {
     try {
@@ -353,7 +469,6 @@ export default function BuyingList({ refreshTrigger }) {
         totalTransportFee: getTransportFee(bill, currency),
         totalExternalExpense: getExternalExpense(bill, currency),
         items: bill.items.map(item => {
-          const price = currency === "USD" ? item.basePriceUSD : item.basePriceIQD;
           return {
             ...item,
             basePriceUSD: item.basePriceUSD,
@@ -437,16 +552,7 @@ export default function BuyingList({ refreshTrigger }) {
             canvas.width = width;
             canvas.height = height;
             ctx.drawImage(img, 0, 0, width, height);
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-              const gray = 0.34 * data[i] + 0.5 * data[i + 1] + 0.16 * data[i + 2];
-              data[i] = gray;
-              data[i + 1] = gray;
-              data[i + 2] = gray;
-            }
-            ctx.putImageData(imageData, 0, 0);
-            const compressedImage = canvas.toDataURL('image/jpeg', 0.7);
+            const compressedImage = canvas.toDataURL('image/jpeg', 0.85);
             setAttachmentPreview(compressedImage);
           };
           img.src = e.target.result;
@@ -464,62 +570,59 @@ export default function BuyingList({ refreshTrigger }) {
     }
   };
 
-const saveAttachment = async () => {
-  if (!attachmentPreview || !attachmentModal) return;
-  try {
-    // Pass attachment data as a separate update - don't require items
-    await updateBoughtBill(attachmentModal.billNumber, {
-      attachment: attachmentPreview,
-      attachmentDate: new Date().toISOString()
-    });
-
-    // Update local state
-    setBills(bills.map(bill =>
-      bill.billNumber === attachmentModal.billNumber ?
-        { ...bill, attachment: attachmentPreview } : bill
-    ));
-
-    setAttachmentModal(prev => ({
-      ...prev,
-      attachment: attachmentPreview
-    }));
-
-    alert('Attachment saved successfully!');
-  } catch (error) {
-    console.error('Error saving attachment:', error);
-    alert('Failed to save attachment. Please try again.');
-  }
-};
-
- const removeAttachment = async () => {
-  if (!attachmentModal) return;
-
-  if (confirm("Are you sure you want to remove this attachment?")) {
+  const saveAttachment = async () => {
+    if (!attachmentPreview || !attachmentModal) return;
     try {
-      // Pass attachment: null to remove it
       await updateBoughtBill(attachmentModal.billNumber, {
-        attachment: null,
-        attachmentDate: null
+        attachment: attachmentPreview,
+        attachmentDate: new Date().toISOString()
       });
 
       setBills(bills.map(bill =>
         bill.billNumber === attachmentModal.billNumber ?
-          { ...bill, attachment: null } : bill
+          { ...bill, attachment: attachmentPreview } : bill
       ));
 
       setAttachmentModal(prev => ({
         ...prev,
-        attachment: null
+        attachment: attachmentPreview
       }));
-      setAttachmentPreview(null);
 
-      alert('Attachment removed successfully!');
+      alert('Attachment saved successfully!');
     } catch (error) {
-      console.error('Error removing attachment:', error);
-      alert('Failed to remove attachment. Please try again.');
+      console.error('Error saving attachment:', error);
+      alert('Failed to save attachment. Please try again.');
     }
-  }
-};
+  };
+
+  const removeAttachment = async () => {
+    if (!attachmentModal) return;
+
+    if (confirm("Are you sure you want to remove this attachment?")) {
+      try {
+        await updateBoughtBill(attachmentModal.billNumber, {
+          attachment: null,
+          attachmentDate: null
+        });
+
+        setBills(bills.map(bill =>
+          bill.billNumber === attachmentModal.billNumber ?
+            { ...bill, attachment: null } : bill
+        ));
+
+        setAttachmentModal(prev => ({
+          ...prev,
+          attachment: null
+        }));
+        setAttachmentPreview(null);
+
+        alert('Attachment removed successfully!');
+      } catch (error) {
+        console.error('Error removing attachment:', error);
+        alert('Failed to remove attachment. Please try again.');
+      }
+    }
+  };
 
   const triggerFileInput = () => {
     fileInputRef.current?.click();
@@ -554,14 +657,169 @@ const saveAttachment = async () => {
     );
   };
 
-  const toggleCurrency = () => {
-    setDisplayCurrency(prev => prev === "USD" ? "IQD" : "USD");
+  // Excel Filter Dropdown Component
+  const ExcelFilterDropdown = ({ columnKey, title, type = "string" }) => {
+    const [search, setSearch] = useState("");
+    const isOpen = activeFilterDropdown === columnKey;
+    const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
+
+    const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
+    const { operator, textValue, selectedValues } = filterState;
+
+    const uniqueValues = useMemo(() => {
+      const vals = new Set();
+      processedBills.forEach(item => {
+        let val = item[columnKey];
+        if (columnKey === 'company') val = item.companyName;
+        if (columnKey === 'date') val = item.formattedDate;
+        if (columnKey === 'consignment') val = item.consignmentText;
+        if (columnKey === 'hasAttachment') val = item.hasAttachment;
+        vals.add(String(val));
+      });
+      return Array.from(vals).sort();
+    }, [columnKey]);
+
+    const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+    const isActive = !!(textValue || (selectedValues && selectedValues.length > 0) || ['isEmpty', 'isNotEmpty'].includes(operator));
+
+    const handleCheckbox = (val, checked) => {
+      const current = selectedValues || [];
+      const updated = checked ? [...current, val] : current.filter(v => v !== val);
+      handleUpdateColumnFilter(columnKey, { selectedValues: updated });
+    };
+
+    const handleSelectAll = (checked) => {
+      handleUpdateColumnFilter(columnKey, { selectedValues: checked ? [...uniqueValues] : [] });
+    };
+
+    return (
+      <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
+        <div
+          onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
+          style={{
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justify: "center",
+            padding: "0.25rem",
+            borderRadius: "0.375rem",
+            background: isActive ? "#dbeafe" : "transparent",
+            color: isActive ? "#2563eb" : "#94a3b8",
+            transition: "all 0.2s"
+          }}
+        >
+          <FiFilter size={14} />
+        </div>
+
+        {isOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              marginTop: "0.5rem",
+              background: "white",
+              border: "1px solid #cbd5e1",
+              borderRadius: "0.5rem",
+              boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+              zIndex: 100,
+              width: "260px",
+              display: "flex",
+              flexDirection: "column",
+              cursor: "default",
+              overflow: "hidden"
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc" }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <select
+                  value={operator || operators[0].value}
+                  onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
+                  style={{ padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
+                >
+                  {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                </select>
+                {!['isEmpty', 'isNotEmpty'].includes(operator) && (
+                  <input
+                    type={type === "number" ? "number" : "text"}
+                    placeholder="Value..."
+                    value={textValue || ""}
+                    onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
+                    style={{ padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none" }}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", flex: 1 }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
+              <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem" }}>
+                <FiSearch size={14} color="#94a3b8" />
+                <input
+                  type="text"
+                  placeholder="Search values..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem", marginLeft: "0.5rem" }}
+                />
+              </div>
+
+              <div style={{ maxHeight: "180px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9", paddingBottom: "0.5rem", marginBottom: "0.25rem" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                  />
+                  <span>(Select All)</span>
+                </label>
+                {displayValues.map(val => (
+                  <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedValues.includes(val)}
+                      onChange={(e) => handleCheckbox(val, e.target.checked)}
+                      style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                    />
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "undefined" || val === "null" || val === "" ? "(Blank)" : val}</span>
+                  </label>
+                ))}
+                {displayValues.length === 0 && <div style={{ fontSize: "0.875rem", color: "#94a3b8", textAlign: "center", padding: "1rem 0" }}>No matches found</div>}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc" }}>
+              <button onClick={() => clearColumnFilter(columnKey)} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
+              <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
+
+  const TableHeader = ({ title, columnKey, type = "string", isLast = false }) => (
+    <th className="sortable" style={{ padding: "0.75rem", borderBottom: "2px solid #cbd5e1", borderRight: isLast ? "none" : "1px solid #cbd5e1", verticalAlign: "middle", whiteSpace: "nowrap", backgroundColor: "#f8fafc" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontWeight: "600", color: "#4b5563", fontSize: "0.875rem" }}>
+        <div onClick={() => requestSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.375rem", flex: 1, userSelect: "none" }}>
+          {title}
+          <span style={{ color: "#94a3b8", fontSize: "0.75rem", width: "12px" }}>
+            {sortConfig.key === columnKey ? (sortConfig.direction === "asc" ? "↑" : "↓") : "↕"}
+          </span>
+        </div>
+        <div style={{ paddingLeft: "0.5rem", borderLeft: "1px solid #e2e8f0", marginLeft: "0.5rem" }}>
+          <ExcelFilterDropdown columnKey={columnKey} title={title} type={type} />
+        </div>
+      </div>
+    </th>
+  );
 
   return (
     <>
       <style jsx global>{`
-        /* Main Container - Full width with max-width */
         .buying-list-wrapper {
           max-width: 100%;
           margin: 0 auto;
@@ -569,7 +827,6 @@ const saveAttachment = async () => {
           width: 100%;
         }
 
-        /* Table Container Styles */
         .table-container {
           background: white;
           border-radius: 12px;
@@ -577,9 +834,9 @@ const saveAttachment = async () => {
           overflow: hidden;
           margin-top: 1rem;
           width: 100%;
+          padding-bottom: 8rem;
         }
 
-        /* Scrollable Table Wrapper */
         .table-scroll-wrapper {
           overflow-x: auto;
           overflow-y: auto;
@@ -588,39 +845,12 @@ const saveAttachment = async () => {
           width: 100%;
         }
 
-        .table-scroll-wrapper::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-
-        .table-scroll-wrapper::-webkit-scrollbar-track {
-          background: #f1f5f9;
-          border-radius: 4px;
-        }
-
-        .table-scroll-wrapper::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 4px;
-        }
-
-        .table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
-
-        /* Main Table Styles */
         .purchase-table {
           width: 100%;
           border-collapse: separate;
           border-spacing: 0;
           font-size: 14px;
-          min-width: 700px;
-        }
-
-        .purchase-table thead tr {
-          background: #f8fafc;
-          position: sticky;
-          top: 0;
-          z-index: 10;
+          min-width: 900px;
         }
 
         .purchase-table th {
@@ -628,7 +858,7 @@ const saveAttachment = async () => {
           font-weight: 600;
           color: #4b5563;
           text-align: left;
-          border-bottom: 2px solid #e5e7eb;
+          border-bottom: 2px solid #cbd5e1;
           position: sticky;
           top: 0;
           background: #f8fafc;
@@ -637,29 +867,17 @@ const saveAttachment = async () => {
           white-space: nowrap;
         }
 
-        .purchase-table th:not(:last-child) {
-          border-right: 1px solid #e5e7eb;
-        }
-
-        .purchase-table th.sortable {
-          cursor: pointer;
-          user-select: none;
-        }
-
-        .purchase-table th.sortable:hover {
-          background-color: #f1f5f9;
-        }
-
         .purchase-table td {
           padding: 0.75rem;
           color: #374151;
           border-bottom: 1px solid #e5e7eb;
           transition: all 0.2s ease;
           font-size: 13px;
+          border-right: 1px solid #e5e7eb;
         }
 
-        .purchase-table td:not(:last-child) {
-          border-right: 1px solid #e5e7eb;
+        .purchase-table td:last-child {
+          border-right: none;
         }
 
         .purchase-table tbody tr {
@@ -675,18 +893,6 @@ const saveAttachment = async () => {
           background: #f0f9ff;
         }
 
-        /* Badge Styles */
-        .badge {
-          display: inline-block;
-          padding: 0.25rem 0.75rem;
-          border-radius: 20px;
-          font-size: 0.85rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
-        }
-
-        /* Action Button Styles */
         .action-buttons {
           display: flex;
           gap: 0.5rem;
@@ -706,18 +912,10 @@ const saveAttachment = async () => {
           gap: 0.25rem;
         }
 
-        .btn-icon:hover {
-          transform: translateY(-1px);
-        }
-
         .btn-edit {
           background: #dbeafe;
           color: #1e40af;
           border-color: #93c5fd;
-        }
-
-        .btn-edit:hover {
-          background: #bfdbfe;
         }
 
         .btn-delete {
@@ -726,18 +924,10 @@ const saveAttachment = async () => {
           border-color: #fca5a5;
         }
 
-        .btn-delete:hover {
-          background: #fecaca;
-        }
-
         .btn-attach {
           background: #f3f4f6;
           color: #374151;
           border-color: #d1d5db;
-        }
-
-        .btn-attach:hover {
-          background: #e5e7eb;
         }
 
         .btn-view {
@@ -746,11 +936,6 @@ const saveAttachment = async () => {
           border-color: #bbf7d0;
         }
 
-        .btn-view:hover {
-          background: #bbf7d0;
-        }
-
-        /* Expanded Details Panel */
         .details-panel {
           background: #f9fafb;
           border-top: 2px solid #3b82f6;
@@ -761,7 +946,6 @@ const saveAttachment = async () => {
           padding: 1rem;
         }
 
-        /* Info Grid */
         .info-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -793,7 +977,6 @@ const saveAttachment = async () => {
           color: #111827;
         }
 
-        /* Items Table inside Details */
         .items-table-container {
           background: white;
           border-radius: 8px;
@@ -817,14 +1000,9 @@ const saveAttachment = async () => {
           color: #374151;
           text-transform: uppercase;
           font-size: 0.8rem;
-          letter-spacing: 0.03em;
           border-bottom: 1px solid #e5e7eb;
           text-align: left;
           white-space: nowrap;
-        }
-
-        .items-table th:not(:last-child) {
-          border-right: 1px solid #e5e7eb;
         }
 
         .items-table td {
@@ -832,14 +1010,6 @@ const saveAttachment = async () => {
           border-bottom: 1px solid #e5e7eb;
           color: #111827;
           font-size: 0.85rem;
-        }
-
-        .items-table td:not(:last-child) {
-          border-right: 1px solid #e5e7eb;
-        }
-
-        .items-table tbody tr:hover {
-          background: #f9fafb;
         }
 
         .barcode-cell {
@@ -864,44 +1034,6 @@ const saveAttachment = async () => {
           font-size: 0.85rem;
         }
 
-        .price-usd {
-          color: #2563eb;
-          font-weight: 600;
-        }
-
-        .price-iqd {
-          color: #854d0e;
-          font-weight: 600;
-        }
-
-        .cost-price {
-          color: #b45309;
-          font-weight: 600;
-        }
-
-        .purchase-price {
-          font-weight: 600;
-        }
-
-        .expire-badge {
-          display: inline-block;
-          padding: 0.2rem 0.6rem;
-          border-radius: 20px;
-          font-size: 0.8rem;
-          font-weight: 600;
-        }
-
-        .expire-ok {
-          background: #dcfce7;
-          color: #166534;
-        }
-
-        .expire-na {
-          background: #fef9c3;
-          color: #854d0e;
-        }
-
-        /* Filter Section Styles */
         .filter-section {
           background: white;
           border: 1px solid #e5e7eb;
@@ -950,13 +1082,6 @@ const saveAttachment = async () => {
           border: 1px solid #e5e7eb;
           border-radius: 8px;
           font-size: 0.9rem;
-          transition: all 0.2s ease;
-        }
-
-        .filter-input:focus {
-          outline: none;
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .filter-label {
@@ -967,33 +1092,6 @@ const saveAttachment = async () => {
           margin-bottom: 0.25rem;
         }
 
-        /* Currency Toggle */
-        .currency-toggle {
-          display: flex;
-          justify-content: flex-end;
-          margin-bottom: 0.75rem;
-        }
-
-        .currency-button {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.4rem 0.8rem;
-          background: #eff6ff;
-          color: #2563eb;
-          border: 1px solid #bfdbfe;
-          border-radius: 8px;
-          font-size: 0.85rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .currency-button:hover {
-          background: #dbeafe;
-        }
-
-        /* Attachment Modal */
         .modal-overlay {
           position: fixed;
           top: 0;
@@ -1016,7 +1114,7 @@ const saveAttachment = async () => {
           max-width: 500px;
           max-height: 90vh;
           overflow-y: auto;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         .modal-header {
@@ -1041,11 +1139,6 @@ const saveAttachment = async () => {
         .modal-close {
           color: #9ca3af;
           cursor: pointer;
-          transition: color 0.2s ease;
-        }
-
-        .modal-close:hover {
-          color: #6b7280;
         }
 
         .modal-body {
@@ -1054,18 +1147,13 @@ const saveAttachment = async () => {
 
         .attachment-preview {
           width: 100%;
-          height: 180px;
+          height: 200px;
           object-fit: contain;
           border: 2px solid #e5e7eb;
           border-radius: 8px;
           margin-bottom: 0.75rem;
           background: #f9fafb;
-          cursor: pointer;
-          transition: transform 0.2s ease;
-        }
-
-        .attachment-preview:hover {
-          transform: scale(1.02);
+          cursor: zoom-in;
         }
 
         .attachment-placeholder {
@@ -1091,77 +1179,16 @@ const saveAttachment = async () => {
           font-size: 0.85rem;
           border: none;
           cursor: pointer;
-          transition: all 0.2s ease;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 0.5rem;
         }
 
-        .modal-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
+        .modal-btn-remove { background: #ef4444; color: white; }
+        .modal-btn-cancel { background: #6b7280; color: white; }
+        .modal-btn-save { background: #3b82f6; color: white; }
 
-        .modal-btn-remove {
-          background: #ef4444;
-          color: white;
-        }
-
-        .modal-btn-remove:hover:not(:disabled) {
-          background: #dc2626;
-        }
-
-        .modal-btn-cancel {
-          background: #6b7280;
-          color: white;
-        }
-
-        .modal-btn-cancel:hover {
-          background: #4b5563;
-        }
-
-        .modal-btn-save {
-          background: #3b82f6;
-          color: white;
-        }
-
-        .modal-btn-save:hover:not(:disabled) {
-          background: #2563eb;
-        }
-
-        .modal-btn-camera {
-          background: #10b981;
-          color: white;
-        }
-
-        .modal-btn-camera:hover {
-          background: #059669;
-        }
-
-        .file-input {
-          display: none;
-        }
-
-        .file-upload-btn {
-          width: 100%;
-          padding: 0.5rem;
-          background: #f3f4f6;
-          color: #374151;
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          font-size: 0.85rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          margin-bottom: 0.5rem;
-        }
-
-        .file-upload-btn:hover {
-          background: #e5e7eb;
-        }
-
-        /* Full Screen Image Viewer */
         .fullscreen-overlay {
           position: fixed;
           top: 0;
@@ -1190,7 +1217,6 @@ const saveAttachment = async () => {
           max-height: 75vh;
           object-fit: contain;
           border-radius: 8px;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
 
         .fullscreen-actions {
@@ -1206,31 +1232,14 @@ const saveAttachment = async () => {
           font-size: 0.85rem;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.2s ease;
           display: flex;
           align-items: center;
           gap: 0.5rem;
         }
 
-        .fullscreen-btn-close {
-          background: #ef4444;
-          color: white;
-        }
+        .fullscreen-btn-close { background: #ef4444; color: white; }
+        .fullscreen-btn-download { background: #3b82f6; color: white; }
 
-        .fullscreen-btn-close:hover {
-          background: #dc2626;
-        }
-
-        .fullscreen-btn-download {
-          background: #3b82f6;
-          color: white;
-        }
-
-        .fullscreen-btn-download:hover {
-          background: #2563eb;
-        }
-
-        /* Empty State */
         .empty-state {
           text-align: center;
           padding: 2rem;
@@ -1238,112 +1247,32 @@ const saveAttachment = async () => {
           border-radius: 12px;
           border: 1px solid #e5e7eb;
         }
-
-        .empty-state-icon {
-          font-size: 2.5rem;
-          color: #d1d5db;
-          margin-bottom: 0.75rem;
-        }
-
-        .empty-state-title {
-          font-size: 1rem;
-          font-weight: 600;
-          color: #6b7280;
-          margin-bottom: 0.5rem;
-        }
-
-        .empty-state-text {
-          color: #9ca3af;
-          font-size: 0.9rem;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-          .purchase-table {
-            font-size: 0.75rem;
-            min-width: 600px;
-          }
-
-          .purchase-table th,
-          .purchase-table td {
-            padding: 0.5rem 0.4rem;
-          }
-
-          .info-grid {
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .action-buttons {
-            flex-direction: column;
-            gap: 0.25rem;
-          }
-
-          .modal-actions {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .info-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        /* Price display styles */
-        .price-display {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          text-align: right;
-        }
-
-        .price-usd-display {
-          color: #2563eb;
-          font-weight: 600;
-        }
-
-        .price-iqd-display {
-          color: #854d0e;
-          font-weight: 600;
-        }
-
-        .purchase-price {
-          font-weight: 600;
-        }
-
-        .currency-badge {
-          display: inline-block;
-          padding: 2px 6px;
-          border-radius: 12px;
-          font-size: 9px;
-          font-weight: 600;
-          margin-left: 4px;
-        }
-
-        .currency-usd {
-          background: #dbeafe;
-          color: #1e40af;
-        }
-
-        .currency-iqd {
-          background: #fef3c7;
-          color: #92400e;
-        }
       `}</style>
 
       <div className="buying-list-wrapper">
         <Card title="Purchase History">
-          {/* Search Filters Section */}
+          {/* Top Filters Section */}
           <div className="filter-section">
             <div className="filter-header">
               <h3>Search Filters</h3>
-              <button
-                type="button"
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs py-1 px-2 rounded"
-                onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
-              >
-                {showAdvancedSearch ? "Hide Advanced Search" : "Advanced Search"}
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {Object.keys(columnFilters).length > 0 && (
+                  <button
+                    type="button"
+                    style={{ background: "#fee2e2", color: "#ef4444", fontSize: "0.75rem", padding: "0.25rem 0.5rem", borderRadius: "0.25rem", border: "1px solid #fca5a5", cursor: "pointer", fontWeight: "600" }}
+                    onClick={() => setColumnFilters({})}
+                  >
+                    Clear Header Filters
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs py-1 px-2 rounded"
+                  onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+                >
+                  {showAdvancedSearch ? "Hide Advanced Search" : "Advanced Search"}
+                </button>
+              </div>
             </div>
             <div className="filter-grid mb-4">
               <div className="relative">
@@ -1377,17 +1306,13 @@ const saveAttachment = async () => {
                   options={itemOptions}
                   onChange={(selected) => setItemFilters(selected.map(option => option.value))}
                   placeholder="Select specific items..."
-                  className="react-select-container"
-                  classNamePrefix="react-select"
                   styles={{
                     control: (base) => ({
                       ...base,
                       minHeight: '36px',
                       fontSize: '13px',
                       border: '1px solid #e5e7eb',
-                      '&:hover': {
-                        borderColor: '#3b82f6'
-                      }
+                      '&:hover': { borderColor: '#3b82f6' }
                     })
                   }}
                 />
@@ -1473,29 +1398,19 @@ const saveAttachment = async () => {
             )}
           </div>
 
-          {/* Bills Table - Scrollable */}
+          {/* Table Container */}
           <div className="table-container">
             <div className="table-scroll-wrapper">
               <table className="purchase-table">
                 <thead>
                   <tr>
-                    <th className="sortable" onClick={() => requestSort('billNumber')}>
-                      BILL #
-                    </th>
-                    <th className="sortable" onClick={() => requestSort('company')}>
-                      COMPANY
-                    </th>
-                    <th className="sortable" onClick={() => requestSort('date')}>
-                      DATE
-                    </th>
-                    <th className="sortable" onClick={() => requestSort('paymentStatus')}>
-                      STATUS
-                    </th>
-                    <th className="sortable" onClick={() => requestSort('consignment')}>
-                      CONSIGNMENT
-                    </th>
-                    <th>ATTACHMENT</th>
-                    <th>ACTIONS</th>
+                    <TableHeader title="BILL #" columnKey="billNumber" type="number" />
+                    <TableHeader title="COMPANY" columnKey="company" type="string" />
+                    <TableHeader title="DATE & TIME" columnKey="date" type="string" />
+                    <TableHeader title="STATUS" columnKey="paymentStatus" type="string" />
+                    <TableHeader title="CONSIGNMENT" columnKey="consignment" type="string" />
+                    <TableHeader title="ATTACHMENT" columnKey="hasAttachment" type="string" />
+                    <th style={{ padding: "0.75rem", borderBottom: "2px solid #cbd5e1", backgroundColor: "#f8fafc", fontWeight: "600" }}>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1509,17 +1424,11 @@ const saveAttachment = async () => {
                           <span className="font-medium text-blue-600">#{bill.billNumber}</span>
                         </td>
                         <td>
-                          <div className="font-medium">
-                            {companies.find(c => c.id === bill.companyId)?.name || 'Unknown Company'}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Code: {companies.find(c => c.id === bill.companyId)?.code || 'N/A'}
-                          </div>
+                          <div className="font-medium">{bill.companyName}</div>
+                          <div className="text-xs text-gray-500 mt-1">Code: {bill.companyCode}</div>
                         </td>
                         <td>
-                          <div className="text-sm text-gray-700">
-                            {formatDateToDDMMYYYY(bill.date)}
-                          </div>
+                          <div className="text-sm text-gray-700">{bill.formattedDate}</div>
                         </td>
                         <td>
                           <PaymentStatusBadge status={bill.paymentStatus || "Unpaid"} />
@@ -1578,7 +1487,6 @@ const saveAttachment = async () => {
                           <td colSpan="7" className="p-0">
                             <div className="details-panel">
                               <div className="details-content">
-                                {/* Bill Header */}
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
                                   <h4 className="font-bold text-blue-800 text-lg">
                                     📋 Bill #{bill.billNumber} - Complete Details
@@ -1588,18 +1496,14 @@ const saveAttachment = async () => {
                                   </div>
                                 </div>
 
-                                {/* Bill Information Grid */}
                                 <div className="info-grid">
                                   <div className="info-item">
                                     <span className="info-label">Company</span>
-                                    <span className="info-value company">
-                                      {companies.find(c => c.id === bill.companyId)?.name || 'Unknown'} 
-                                      ({companies.find(c => c.id === bill.companyId)?.code || 'N/A'})
-                                    </span>
+                                    <span className="info-value company">{bill.companyName} ({bill.companyCode})</span>
                                   </div>
                                   <div className="info-item">
-                                    <span className="info-label">Bill Date</span>
-                                    <span className="info-value">{formatDateToDDMMYYYY(bill.date)}</span>
+                                    <span className="info-label">Bill Date & Time</span>
+                                    <span className="info-value">{bill.formattedDate}</span>
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Company Bill #</span>
@@ -1623,30 +1527,14 @@ const saveAttachment = async () => {
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Transport Fee</span>
-                                    <div className="price-display">
-                                      {bill.currency === "USD" ? (
-                                        <div className="price-usd-display">
-                                          ${formatNumber(bill.totalTransportFeeUSD || 0)}
-                                        </div>
-                                      ) : (
-                                        <div className="price-iqd-display">
-                                          {formatNumber(bill.totalTransportFeeIQD || 0)} IQD
-                                        </div>
-                                      )}
+                                    <div>
+                                      {bill.currency === "USD" ? `$${formatNumber(bill.totalTransportFeeUSD || 0)}` : `${formatNumber(bill.totalTransportFeeIQD || 0)} IQD`}
                                     </div>
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Other Expenses</span>
-                                    <div className="price-display">
-                                      {bill.currency === "USD" ? (
-                                        <div className="price-usd-display">
-                                          ${formatNumber(bill.totalExternalExpenseUSD || 0)}
-                                        </div>
-                                      ) : (
-                                        <div className="price-iqd-display">
-                                          {formatNumber(bill.totalExternalExpenseIQD || 0)} IQD
-                                        </div>
-                                      )}
+                                    <div>
+                                      {bill.currency === "USD" ? `$${formatNumber(bill.totalExternalExpenseUSD || 0)}` : `${formatNumber(bill.totalExternalExpenseIQD || 0)} IQD`}
                                     </div>
                                   </div>
                                   <div className="info-item" style={{ gridColumn: '1/-1' }}>
@@ -1655,7 +1543,6 @@ const saveAttachment = async () => {
                                   </div>
                                 </div>
 
-                                {/* Items Table */}
                                 <div className="items-table-container">
                                   <h5 className="font-semibold text-gray-700 mb-3 text-sm px-4 pt-4">Items List</h5>
                                   <table className="items-table">
@@ -1682,85 +1569,17 @@ const saveAttachment = async () => {
 
                                         return (
                                           <tr key={index}>
-                                            <td>
-                                              <code className="barcode-cell">{item.barcode}</code>
-                                            </td>
+                                            <td><code className="barcode-cell">{item.barcode}</code></td>
                                             <td>{item.name}</td>
-                                            <td className="text-center">
-                                              <span className="quantity-badge">{quantity}</span>
-                                            </td>
-                                            <td className="text-right">
-                                              <div className="price-display">
-                                                <div className="purchase-price">
-                                                  {billCurrency === "USD" 
-                                                    ? `$${formatNumber(basePrice)}` 
-                                                    : `${formatNumber(basePrice)} IQD`}
-                                                  <span className={`currency-badge currency-${billCurrency.toLowerCase()}`}>
-                                                    {billCurrency}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            </td>
-                                            <td className="text-right">
-                                              <div className="price-display">
-                                                <div className="purchase-price" style={{ color: '#4f46e5', fontWeight: 'bold' }}>
-                                                  {billCurrency === "USD" 
-                                                    ? `$${formatNumber(netPrice)}` 
-                                                    : `${formatNumber(netPrice)} IQD`}
-                                                  <span className={`currency-badge currency-${billCurrency.toLowerCase()}`}>
-                                                    {billCurrency}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            </td>
-                                            <td className="text-right">
-                                              <div className="price-display">
-                                                <div className="purchase-price" style={{ color: '#059669', fontWeight: 'bold' }}>
-                                                  {billCurrency === "USD" 
-                                                    ? `$${formatNumber(outPrice)}` 
-                                                    : `${formatNumber(outPrice)} IQD`}
-                                                  <span className={`currency-badge currency-${billCurrency.toLowerCase()}`}>
-                                                    {billCurrency}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            </td>
-                                            <td className="text-center">
-                                              <span className={`expire-badge ${expireDate === 'N/A' ? 'expire-na' : 'expire-ok'}`}>
-                                                {expireDate}
-                                              </span>
-                                            </td>
+                                            <td className="text-center"><span className="quantity-badge">{quantity}</span></td>
+                                            <td className="text-right">{billCurrency === "USD" ? `$${formatNumber(basePrice)}` : `${formatNumber(basePrice)} IQD`}</td>
+                                            <td className="text-right" style={{ color: '#4f46e5', fontWeight: 'bold' }}>{billCurrency === "USD" ? `$${formatNumber(netPrice)}` : `${formatNumber(netPrice)} IQD`}</td>
+                                            <td className="text-right" style={{ color: '#059669', fontWeight: 'bold' }}>{billCurrency === "USD" ? `$${formatNumber(outPrice)}` : `${formatNumber(outPrice)} IQD`}</td>
+                                            <td className="text-center"><span className="expire-badge expire-ok">{expireDate}</span></td>
                                           </tr>
                                         );
                                       })}
                                     </tbody>
-                                    <tfoot>
-                                      <tr>
-                                        <td colSpan="3" className="text-right font-bold">Total:</td>
-                                        <td className="text-right font-bold">
-                                          <div className="price-display">
-                                            {bill.currency === "USD" 
-                                              ? `$${formatNumber(bill.items.reduce((total, item) => total + (getPurchasePrice(item, bill.currency) * item.quantity), 0))}`
-                                              : `${formatNumber(bill.items.reduce((total, item) => total + (getPurchasePrice(item, bill.currency) * item.quantity), 0))} IQD`}
-                                          </div>
-                                        </td>
-                                        <td className="text-right font-bold">
-                                          <div className="price-display" style={{ color: '#4f46e5' }}>
-                                            {bill.currency === "USD" 
-                                              ? `$${formatNumber(bill.items.reduce((total, item) => total + (getNetPrice(item, bill.currency) * item.quantity), 0))}`
-                                              : `${formatNumber(bill.items.reduce((total, item) => total + (getNetPrice(item, bill.currency) * item.quantity), 0))} IQD`}
-                                          </div>
-                                        </td>
-                                        <td className="text-right font-bold">
-                                          <div className="price-display" style={{ color: '#059669' }}>
-                                            {bill.currency === "USD" 
-                                              ? `$${formatNumber(bill.items.reduce((total, item) => total + (getOutPrice(item, bill.currency) * item.quantity), 0))}`
-                                              : `${formatNumber(bill.items.reduce((total, item) => total + (getOutPrice(item, bill.currency) * item.quantity), 0))} IQD`}
-                                          </div>
-                                        </td>
-                                        <td></td>
-                                      </tr>
-                                    </tfoot>
                                   </table>
                                 </div>
                               </div>
@@ -1775,7 +1594,6 @@ const saveAttachment = async () => {
             </div>
           </div>
 
-          {/* Empty State */}
           {sortedAndFilteredBills.length === 0 && (
             <div className="empty-state">
               <div className="empty-state-icon">📦</div>
@@ -1786,15 +1604,11 @@ const saveAttachment = async () => {
 
           {/* Attachment Modal */}
           {attachmentModal && (
-            <div className="modal-overlay" onClick={(e) => {
-              if (e.target === e.currentTarget) closeAttachmentModal();
-            }}>
+            <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeAttachmentModal(); }}>
               <div className="modal-content">
                 <div className="modal-header">
                   <h3>Bill #{attachmentModal.billNumber} - Attachment</h3>
-                  <button onClick={closeAttachmentModal} className="modal-close">
-                    <FiX size={20} />
-                  </button>
+                  <button onClick={closeAttachmentModal} className="modal-close"><FiX size={20} /></button>
                 </div>
                 <div className="modal-body">
                   {attachmentPreview ? (
@@ -1802,66 +1616,32 @@ const saveAttachment = async () => {
                       src={attachmentPreview}
                       alt="Bill Attachment"
                       className="attachment-preview"
-                      style={{ filter: 'grayscale(100%)' }}
                       onClick={() => openFullScreen(attachmentPreview)}
-                      title="Click to view full screen"
+                      title="Click to zoom in full screen"
                     />
                   ) : (
                     <div className="attachment-placeholder">
                       <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📎</div>
-                      <div>No attachment yet</div>
-                      <div style={{ fontSize: '0.7rem', marginTop: '0.25rem', color: '#d1d5db' }}>
-                        Upload an image or take a photo
-                      </div>
+                      <div>No attachment uploaded yet</div>
                     </div>
                   )}
 
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept="image/*"
-                    className="file-input"
-                  />
+                  <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="file-input" />
                   <button onClick={triggerFileInput} className="file-upload-btn">
-                    <FiImage style={{ display: 'inline', marginRight: '0.5rem' }} />
-                    Choose File from Device
+                    <FiImage style={{ display: 'inline', marginRight: '0.5rem' }} /> Choose Image File
                   </button>
 
                   <button onClick={handleCameraCapture} className="file-upload-btn" style={{ background: '#10b981', color: 'white', border: 'none' }}>
-                    <FiCamera style={{ display: 'inline', marginRight: '0.5rem' }} />
-                    Take Photo with Camera
+                    <FiCamera style={{ display: 'inline', marginRight: '0.5rem' }} /> Take Photo
                   </button>
-
-                  <input
-                    type="file"
-                    ref={cameraInputRef}
-                    onChange={handleFileUpload}
-                    accept="image/*"
-                    capture="environment"
-                    className="file-input"
-                  />
+                  <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="file-input" />
 
                   <div className="modal-actions">
-                    <button
-                      onClick={removeAttachment}
-                      className="modal-btn modal-btn-remove"
-                      disabled={!attachmentModal.attachment && !attachmentPreview}
-                    >
-                      <FiX size={14} />
-                      Remove
+                    <button onClick={removeAttachment} className="modal-btn modal-btn-remove" disabled={!attachmentModal.attachment && !attachmentPreview}>
+                      <FiX size={14} /> Remove
                     </button>
-                    <button
-                      onClick={closeAttachmentModal}
-                      className="modal-btn modal-btn-cancel"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={saveAttachment}
-                      className="modal-btn modal-btn-save"
-                      disabled={!attachmentPreview || attachmentPreview === attachmentModal.attachment}
-                    >
+                    <button onClick={closeAttachmentModal} className="modal-btn modal-btn-cancel">Cancel</button>
+                    <button onClick={saveAttachment} className="modal-btn modal-btn-save" disabled={!attachmentPreview || attachmentPreview === attachmentModal.attachment}>
                       Save
                     </button>
                   </div>
@@ -1870,31 +1650,17 @@ const saveAttachment = async () => {
             </div>
           )}
 
-          {/* Full Screen Image Viewer */}
+          {/* Full Screen Image Modal */}
           {fullScreenImage && (
-            <div className="fullscreen-overlay" onClick={(e) => {
-              if (e.target === e.currentTarget) closeFullScreen();
-            }}>
+            <div className="fullscreen-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeFullScreen(); }}>
               <div className="fullscreen-content">
-                <img
-                  src={fullScreenImage}
-                  alt="Full screen attachment"
-                  className="fullscreen-image"
-                />
+                <img src={fullScreenImage} alt="Full screen attachment" className="fullscreen-image" />
                 <div className="fullscreen-actions">
-                  <button
-                    onClick={closeFullScreen}
-                    className="fullscreen-btn fullscreen-btn-close"
-                  >
-                    <FiX size={18} />
-                    Close
+                  <button onClick={closeFullScreen} className="fullscreen-btn fullscreen-btn-close">
+                    <FiX size={18} /> Close
                   </button>
-                  <button
-                    onClick={() => downloadImage(fullScreenImage)}
-                    className="fullscreen-btn fullscreen-btn-download"
-                  >
-                    <FiDownload size={18} />
-                    Download
+                  <button onClick={() => downloadImage(fullScreenImage)} className="fullscreen-btn fullscreen-btn-download">
+                    <FiDownload size={18} /> Save to Gallery
                   </button>
                 </div>
               </div>
