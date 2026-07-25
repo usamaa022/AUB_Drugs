@@ -538,20 +538,19 @@ export default function ReturnHistory() {
 <body>
   <div class="print-container">
     <div class="print-content">
-      <div class="header" style="display: flex; align-items: center; gap: 15px; width: 100%; padding: 10px 0;">
-        <div class="logo-container" style="flex-shrink: 0;">
-          <img src="/Aranlogo.png" alt="Aran Med Store" class="logo" style="height: 50px; width: auto;" onerror="this.style.display='none'" />
-        </div>
-        <div class="company-info" style="flex-grow: 1;">
-          <h1 class="company-name" style="margin: 0; font-size: 1.5em;">ARAN MED STORE</h1>
-          <p class="tagline" style="margin: 5px 0 0 0; font-size: 0.9em;">Medicine Trading & Distribution | Quality Healthcare Solutions</p>
-        </div>
-        <div class="contact-info" style="flex-shrink: 0; text-align: right; font-size: 0.8em;">
-          <p style="margin: 2px 0;">📞 +964 772 533 5252 | +964 751 741 2241</p>
-          <p style="margin: 2px 0;">📍 سلێمانی بەرامبەر تاوەری تەندروستی سمارت</p>
-          <p style="margin: 2px 0;">✉️ info@aranmedstore.com</p>
-        </div>
-      </div>
+  <div class="header" style="display: flex; align-items: center; gap: 15px; width: 100%; padding: 10px 0;">
+  <div class="logo-container" style="flex-shrink: 0;">
+    <img src="/Aranlogo.png" alt="Aran Med Store" class="logo" style="height: 80px; width: auto;" onerror="this.style.display='none'" />
+  </div>
+  
+  <div class="contact-info" style="flex: 1; text-align: right; font-size: 0.8em;">
+    <div class="company-info" style="flex-grow: 1;">
+      <h1 class="company-name" style="margin: 0; font-size: 2.1em;">ARAN MED STORE</h1>
+      <p style="margin: 2px 0;">📞 +964 772 533 5252 | +964 751 741 2241</p>
+      <p style="margin: 2px 0;">📍 سلێمانی بەرامبەر تاوەری تەندروستی سمارت</p>
+    </div>
+  </div>
+</div>
 
 <div class="bill-banner" style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; gap: 20px; background: linear-gradient(135deg, #2c3e50 0%, #1a252f 100%); padding: 20px; border-radius: 10px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
   <div style="flex-grow: 1; color: black;">
@@ -695,57 +694,60 @@ export default function ReturnHistory() {
     }
   };
 
-  const initializeReturnItems = (bill) => {
-    if (!bill || !bill.items || !Array.isArray(bill.items)) {
-      setError("Invalid bill selected");
-      return;
+const initializeReturnItems = (bill) => {
+  if (!bill || !bill.items || !Array.isArray(bill.items)) {
+    setError("Invalid bill selected");
+    return;
+  }
+  try {
+    const newReturnBillNumber = generateReturnBillNumberLocal(returns);
+    setReturnBillNumber(newReturnBillNumber);
+
+    const billCurrency = getBillCurrency(bill);
+    const existingReturns = returns.filter(r =>
+      r.pharmacyId === selectedPharmacy?.id && r.billId === bill.id
+    );
+
+    const itemsWithReturnInfo = bill.items
+      .filter(item => item && item.barcode)
+      .map(item => {
+        const alreadyReturned = getAlreadyReturnedQuantity(
+          item.barcode, bill.id, selectedPharmacy?.id, existingReturns
+        );
+        const originalQty = item.originalQuantity || item.quantity || 0;
+        const availableQty = Math.max(0, originalQty - alreadyReturned);
+        const itemPrice = getItemPrice(item, billCurrency);
+        return {
+          id: item.id,
+          barcode: item.barcode,
+          name: item.name || 'Unknown Item',
+          billNumber: bill.billNumber,
+          billId: bill.id,
+          returnQuantity: 0,
+          returnPrice: itemPrice,
+          originalQuantity: originalQty,
+          alreadyReturned: alreadyReturned,
+          availableQuantity: availableQty,
+          currency: billCurrency,
+          expireDate: item.expireDate,
+          branch: item.branch || "Slemany",
+          boughtBillNumber: item.boughtBillNumber || null,
+          saleBatchAllocations: item.batchAllocations || [],
+        };
+      })
+      .filter(item => item.availableQuantity > 0);
+
+    if (itemsWithReturnInfo.length === 0) {
+      setError("No items available for return. All items have been fully returned.");
+      setReturnItems([]);
+    } else {
+      setReturnItems(itemsWithReturnInfo);
     }
-    try {
-      const newReturnBillNumber = generateReturnBillNumberLocal(returns);
-      setReturnBillNumber(newReturnBillNumber);
-
-      const billCurrency = getBillCurrency(bill);
-      const existingReturns = returns.filter(r =>
-        r.pharmacyId === selectedPharmacy?.id && r.billId === bill.id
-      );
-
-      const itemsWithReturnInfo = bill.items
-        .filter(item => item && item.barcode)
-        .map(item => {
-          const alreadyReturned = getAlreadyReturnedQuantity(
-            item.barcode, bill.id, selectedPharmacy?.id, existingReturns
-          );
-          const originalQty = item.originalQuantity || item.quantity || 0;
-          const availableQty = Math.max(0, originalQty - alreadyReturned);
-          const itemPrice = getItemPrice(item, billCurrency);
-          return {
-            id: item.id,
-            barcode: item.barcode,
-            name: item.name || 'Unknown Item',
-            billNumber: bill.billNumber,
-            billId: bill.id,
-            returnQuantity: 0,
-            returnPrice: itemPrice,
-            originalQuantity: originalQty,
-            alreadyReturned: alreadyReturned,
-            availableQuantity: availableQty,
-            currency: billCurrency,
-            expireDate: item.expireDate
-          };
-        })
-        .filter(item => item.availableQuantity > 0);
-
-      if (itemsWithReturnInfo.length === 0) {
-        setError("No items available for return. All items have been fully returned.");
-        setReturnItems([]);
-      } else {
-        setReturnItems(itemsWithReturnInfo);
-      }
-    } catch (error) {
-      console.error("Error initializing return items:", error);
-      setError(`Error initializing return items: ${error.message}`);
-    }
-  };
+  } catch (error) {
+    console.error("Error initializing return items:", error);
+    setError(`Error initializing return items: ${error.message}`);
+  }
+};
 
   const handleCancelBillSelection = () => {
     setSelectedBill(null);
@@ -785,84 +787,87 @@ export default function ReturnHistory() {
     }
   };
 
-  const handleSubmitReturn = async () => {
-    if (!selectedPharmacy?.id || !selectedBill) {
-      setError("Please select a pharmacy and bill");
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-    const itemsToReturn = returnItems.filter(item => item.returnQuantity > 0);
-    if (itemsToReturn.length === 0) {
-      setError("Please select at least one item to return");
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-    const invalidItems = itemsToReturn.filter(item => item.returnQuantity > item.availableQuantity);
-    if (invalidItems.length > 0) {
-      setError(`Cannot return more than available: ${invalidItems.map(i => i.name).join(", ")}`);
-      setTimeout(() => setError(null), 5000);
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      const totalReturnAmount = calculateReturnTotal(itemsToReturn);
-      const totalReturnQty = itemsToReturn.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
+const handleSubmitReturn = async () => {
+  if (!selectedPharmacy?.id || !selectedBill) {
+    setError("Please select a pharmacy and bill");
+    setTimeout(() => setError(null), 3000);
+    return;
+  }
+  const itemsToReturn = returnItems.filter(item => item.returnQuantity > 0);
+  if (itemsToReturn.length === 0) {
+    setError("Please select at least one item to return");
+    setTimeout(() => setError(null), 3000);
+    return;
+  }
+  const invalidItems = itemsToReturn.filter(item => item.returnQuantity > item.availableQuantity);
+  if (invalidItems.length > 0) {
+    setError(`Cannot return more than available: ${invalidItems.map(i => i.name).join(", ")}`);
+    setTimeout(() => setError(null), 5000);
+    return;
+  }
+  try {
+    setIsSubmitting(true);
+    const totalReturnAmount = calculateReturnTotal(itemsToReturn);
+    const totalReturnQty = itemsToReturn.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
 
-      const preparedItems = itemsToReturn.map(item => ({
-        barcode: item.barcode,
-        name: item.name,
-        billNumber: selectedBill.billNumber,
-        billId: selectedBill.id,
-        originalQuantity: item.originalQuantity,
-        returnQuantity: item.returnQuantity,
-        returnPrice: item.returnPrice,
-        originalPrice: item.returnPrice,
-        netPrice: item.returnPrice,
-        outPrice: item.returnPrice,
-        expireDate: item.expireDate || null,
-        pharmacyId: selectedPharmacy.id,
-        pharmacyName: selectedPharmacy.name,
-        pharmacyReturnBillNumber: pharmacyReturnBillNumber || "",
-        availableQuantity: item.availableQuantity,
-        alreadyReturned: item.alreadyReturned,
-        newRemainingQuantity: item.originalQuantity - (item.alreadyReturned + item.returnQuantity),
-        currency: item.currency,
-        returnBillNumber: returnBillNumber,
-        returnBillNote: returnNote
-      }));
+    const preparedItems = itemsToReturn.map(item => ({
+      barcode: item.barcode,
+      name: item.name,
+      billNumber: selectedBill.billNumber,
+      billId: selectedBill.id,
+      originalQuantity: item.originalQuantity,
+      returnQuantity: item.returnQuantity,
+      returnPrice: item.returnPrice,
+      originalPrice: item.returnPrice,
+      netPrice: item.returnPrice,
+      outPrice: item.returnPrice,
+      expireDate: item.expireDate || null,
+      pharmacyId: selectedPharmacy.id,
+      pharmacyName: selectedPharmacy.name,
+      pharmacyReturnBillNumber: pharmacyReturnBillNumber || "",
+      availableQuantity: item.availableQuantity,
+      alreadyReturned: item.alreadyReturned,
+      newRemainingQuantity: item.originalQuantity - (item.alreadyReturned + item.returnQuantity),
+      currency: item.currency,
+      returnBillNumber: returnBillNumber,
+      returnBillNote: returnNote,
+      branch: item.branch || "Slemany",
+      boughtBillNumber: item.boughtBillNumber || null,
+      saleBatchAllocations: item.saleBatchAllocations || [],
+    }));
 
-      const result = await returnItemsToStore(
-        selectedPharmacy.id,
-        preparedItems,
-        returnNote,
-        returnBillNumber,
-        totalReturnAmount,
-        totalReturnQty
-      );
+    const result = await returnItemsToStore(
+      selectedPharmacy.id,
+      preparedItems,
+      returnNote,
+      returnBillNumber,
+      totalReturnAmount,
+      totalReturnQty
+    );
 
-      setSuccessMessage(`Return processed successfully! Bill: ${result.returnBillNumber || returnBillNumber}`);
-      setSelectedBill(null);
-      setExpandedBillId(null);
-      setReturnItems([]);
-      setPharmacyReturnBillNumber("");
-      setReturnNote("");
-      setReturnBillNumber("");
+    setSuccessMessage(`Return processed successfully! Bill: ${result.returnBillNumber || returnBillNumber}`);
+    setSelectedBill(null);
+    setExpandedBillId(null);
+    setReturnItems([]);
+    setPharmacyReturnBillNumber("");
+    setReturnNote("");
+    setReturnBillNumber("");
 
-      const filteredReturnsData = await getFilteredReturns(
-        selectedPharmacy.id,
-        filters.note,
-        filters.pharmacyReturnBillNumber
-      );
-      setReturns(filteredReturnsData);
-      setTimeout(() => setSuccessMessage(null), 5000);
-    } catch (error) {
-      console.error("Error processing return:", error);
-      setError(`Failed to process return: ${error.message}`);
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    const filteredReturnsData = await getFilteredReturns(
+      selectedPharmacy.id,
+      filters.note,
+      filters.pharmacyReturnBillNumber
+    );
+    setReturns(filteredReturnsData);
+    setTimeout(() => setSuccessMessage(null), 5000);
+  } catch (error) {
+    console.error("Error processing return:", error);
+    setError(`Failed to process return: ${error.message}`);
+    setTimeout(() => setError(null), 5000);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleDeleteReturn = async (returnItem) => {
     if (!returnItem) { alert("Invalid return item"); return; }
@@ -887,134 +892,139 @@ export default function ReturnHistory() {
     }
   };
 
-  const handleEditReturn = async (returnItem) => {
-    if (!returnItem?.documentId && !returnItem?.id) {
-      alert("Invalid return item");
-      return;
-    }
+const handleEditReturn = async (returnItem) => {
+  if (!returnItem?.documentId && !returnItem?.id) {
+    alert("Invalid return item");
+    return;
+  }
 
-    if (returnItem.paymentStatus === "Processed") {
-      alert("⚠️ This return is Processed and cannot be edited. Change it to Unpaid first.");
-      return;
-    }
+  if (returnItem.paymentStatus === "Processed") {
+    alert("⚠️ This return is Processed and cannot be edited. Change it to Unpaid first.");
+    return;
+  }
 
-    if (returnItem.paymentStatus === "Paid" &&
-      !confirm("⚠️ This return is PAID. Continue editing?")) {
-      return;
-    }
+  if (returnItem.paymentStatus === "Paid" &&
+    !confirm("⚠️ This return is PAID. Continue editing?")) {
+    return;
+  }
 
-    try {
-      const editId = returnItem.documentId || returnItem.id;
-      const returnDetails = await getReturnById(editId);
-      if (!returnDetails?.items) throw new Error("Could not fetch return details");
+  try {
+    const editId = returnItem.documentId || returnItem.id;
+    const returnDetails = await getReturnById(editId);
+    if (!returnDetails?.items) throw new Error("Could not fetch return details");
 
-      setEditingReturn(returnDetails);
-      setSelectedPharmacy({ id: returnDetails.pharmacyId, name: returnDetails.pharmacyName });
-      setPharmacyReturnBillNumber(returnDetails.pharmacyReturnBillNumber || "");
-      setReturnBillNumber(returnDetails.returnBillNumber);
-      setReturnNote(returnDetails.returnBillNote || "");
+    setEditingReturn(returnDetails);
+    setSelectedPharmacy({ id: returnDetails.pharmacyId, name: returnDetails.pharmacyName });
+    setPharmacyReturnBillNumber(returnDetails.pharmacyReturnBillNumber || "");
+    setReturnBillNumber(returnDetails.returnBillNumber);
+    setReturnNote(returnDetails.returnBillNote || "");
 
-      const returnCurrency = returnDetails.currency || "IQD";
+    const returnCurrency = returnDetails.currency || "IQD";
 
-      const otherReturns = returns.filter(r =>
-        r.billId === returnDetails.items[0]?.billId &&
-        r.id !== returnDetails.id
+    const otherReturns = returns.filter(r =>
+      r.billId === returnDetails.items[0]?.billId &&
+      r.id !== returnDetails.id
+    );
+
+    const editableItems = returnDetails.items.map(item => {
+      const alreadyReturnedByOthers = getAlreadyReturnedQuantity(
+        item.barcode,
+        item.billId,
+        returnDetails.pharmacyId,
+        otherReturns,
+        returnDetails.id
       );
+      const originalQty = item.originalQuantity || 0;
+      const maxReturnable = originalQty;
 
-      const editableItems = returnDetails.items.map(item => {
-        const alreadyReturnedByOthers = getAlreadyReturnedQuantity(
-          item.barcode,
-          item.billId,
-          returnDetails.pharmacyId,
-          otherReturns,
-          returnDetails.id
-        );
-        const originalQty = item.originalQuantity || 0;
-        const maxReturnable = originalQty;
-        
-        return {
-          ...item,
-          returnQuantity: item.returnQuantity || 0,
-          returnPrice: item.returnPrice || 0,
-          originalQuantity: originalQty,
-          availableQuantity: maxReturnable - alreadyReturnedByOthers,
-          maxReturnable: maxReturnable,
-          alreadyReturnedByOthers: alreadyReturnedByOthers,
-          newRemainingQuantity: originalQty - (alreadyReturnedByOthers + (item.returnQuantity || 0)),
-          currency: returnCurrency
-        };
-      });
+      return {
+        ...item,
+        returnQuantity: item.returnQuantity || 0,
+        returnPrice: item.returnPrice || 0,
+        originalQuantity: originalQty,
+        availableQuantity: maxReturnable - alreadyReturnedByOthers,
+        maxReturnable: maxReturnable,
+        alreadyReturnedByOthers: alreadyReturnedByOthers,
+        newRemainingQuantity: originalQty - (alreadyReturnedByOthers + (item.returnQuantity || 0)),
+        currency: returnCurrency,
+        branch: item.branch || "Slemany",
+        boughtBillNumber: item.boughtBillNumber || null,
+        saleBatchAllocations: item.saleBatchAllocations || [],
+      };
+    });
 
-      setReturnItems(editableItems);
-      setSuccessMessage(`Editing ${returnDetails.returnBillNumber}`);
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (error) {
-      console.error("Error loading return:", error);
-      setError(`Failed to load return: ${error.message}`);
-      setTimeout(() => setError(null), 5000);
-    }
-  };
+    setReturnItems(editableItems);
+    setSuccessMessage(`Editing ${returnDetails.returnBillNumber}`);
+    setTimeout(() => setSuccessMessage(null), 3000);
+  } catch (error) {
+    console.error("Error loading return:", error);
+    setError(`Failed to load return: ${error.message}`);
+    setTimeout(() => setError(null), 5000);
+  }
+};
+const handleUpdateReturn = async () => {
+  if (!editingReturn?.returnBillNumber) {
+    setError("No return selected for editing");
+    return;
+  }
+  const itemsToReturn = returnItems.filter(item => item.returnQuantity > 0);
+  if (itemsToReturn.length === 0) {
+    setError("Please select at least one item");
+    return;
+  }
+  const invalidItems = itemsToReturn.filter(item => item.returnQuantity > (item.maxReturnable || item.originalQuantity));
+  if (invalidItems.length > 0) {
+    setError(`Cannot return more than original quantity for: ${invalidItems.map(i => i.name).join(", ")}`);
+    return;
+  }
+  try {
+    setIsSubmitting(true);
+    const preparedItems = itemsToReturn.map(item => ({
+      id: item.id,
+      barcode: item.barcode,
+      name: item.name,
+      billNumber: item.billNumber,
+      billId: item.billId,
+      originalQuantity: item.originalQuantity,
+      returnQuantity: item.returnQuantity,
+      returnPrice: item.returnPrice,
+      originalPrice: item.originalPrice || item.returnPrice,
+      netPrice: item.netPrice || item.returnPrice,
+      outPrice: item.returnPrice,
+      expireDate: item.expireDate,
+      pharmacyId: editingReturn.pharmacyId,
+      pharmacyReturnBillNumber: pharmacyReturnBillNumber,
+      newRemainingQuantity: item.originalQuantity - (item.alreadyReturnedByOthers + item.returnQuantity),
+      currency: item.currency,
+      branch: item.branch || "Slemany",
+      boughtBillNumber: item.boughtBillNumber || null,
+      saleBatchAllocations: item.saleBatchAllocations || [],
+    }));
 
-  const handleUpdateReturn = async () => {
-    if (!editingReturn?.returnBillNumber) {
-      setError("No return selected for editing");
-      return;
-    }
-    const itemsToReturn = returnItems.filter(item => item.returnQuantity > 0);
-    if (itemsToReturn.length === 0) {
-      setError("Please select at least one item");
-      return;
-    }
-    const invalidItems = itemsToReturn.filter(item => item.returnQuantity > (item.maxReturnable || item.originalQuantity));
-    if (invalidItems.length > 0) {
-      setError(`Cannot return more than original quantity for: ${invalidItems.map(i => i.name).join(", ")}`);
-      return;
-    }
-    try {
-      setIsSubmitting(true);
-      const preparedItems = itemsToReturn.map(item => ({
-        id: item.id,
-        barcode: item.barcode,
-        name: item.name,
-        billNumber: item.billNumber,
-        billId: item.billId,
-        originalQuantity: item.originalQuantity,
-        returnQuantity: item.returnQuantity,
-        returnPrice: item.returnPrice,
-        originalPrice: item.originalPrice || item.returnPrice,
-        netPrice: item.netPrice || item.returnPrice,
-        outPrice: item.returnPrice,
-        expireDate: item.expireDate,
-        pharmacyId: editingReturn.pharmacyId,
-        pharmacyReturnBillNumber: pharmacyReturnBillNumber,
-        newRemainingQuantity: item.originalQuantity - (item.alreadyReturnedByOthers + item.returnQuantity),
-        currency: item.currency
-      }));
+    const totalAmount = calculateReturnTotal(preparedItems);
+    const totalQty = preparedItems.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
 
-      const totalAmount = calculateReturnTotal(preparedItems);
-      const totalQty = preparedItems.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
+    await updateReturnItems(editingReturn.returnBillNumber, preparedItems, totalAmount, totalQty);
 
-      await updateReturnItems(editingReturn.returnBillNumber, preparedItems, totalAmount, totalQty);
+    setSuccessMessage("Return updated successfully!");
+    setEditingReturn(null);
+    setReturnItems([]);
+    setPharmacyReturnBillNumber("");
+    setReturnNote("");
 
-      setSuccessMessage("Return updated successfully!");
-      setEditingReturn(null);
-      setReturnItems([]);
-      setPharmacyReturnBillNumber("");
-      setReturnNote("");
-
-      const filteredReturnsData = await getFilteredReturns(
-        selectedPharmacy?.id, filters.note, filters.pharmacyReturnBillNumber
-      );
-      setReturns(filteredReturnsData);
-      setTimeout(() => setSuccessMessage(null), 5000);
-    } catch (error) {
-      console.error("Error updating return:", error);
-      setError(`Failed to update: ${error.message}`);
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    const filteredReturnsData = await getFilteredReturns(
+      selectedPharmacy?.id, filters.note, filters.pharmacyReturnBillNumber
+    );
+    setReturns(filteredReturnsData);
+    setTimeout(() => setSuccessMessage(null), 5000);
+  } catch (error) {
+    console.error("Error updating return:", error);
+    setError(`Failed to update: ${error.message}`);
+    setTimeout(() => setError(null), 5000);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleCancelEdit = () => {
     setEditingReturn(null);

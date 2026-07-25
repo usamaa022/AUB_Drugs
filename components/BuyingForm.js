@@ -462,7 +462,7 @@ const styles = {
     border: '1.5px solid #cbd5e1',
     borderRadius: '10px',
     fontSize: '15px',
-    backgroundColor: 'white',
+    backgroundColor:' #fff4b4',
     boxSizing: 'border-box',
   },
   tableWrapper: {
@@ -587,7 +587,7 @@ export default function BuyingForm({ onBillCreated }) {
     loadCompanies();
   }, []);
 
-  // Company search with debounce - shows all companies on focus
+  // Company search - shows all companies on focus, filters on type
   useEffect(() => {
     const timer = setTimeout(() => {
       if (companySearch.trim() === '') {
@@ -685,14 +685,20 @@ export default function BuyingForm({ onBillCreated }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Item search
+  // Item search - FIXED: Uses includes for partial matching
   useEffect(() => {
     const fetchItems = async () => {
       if (searchQuery.length > 0) {
         try {
           const results = await searchInitializedItems(searchQuery, "both");
-          setSuggestions(results);
-          setShowSuggestions(results.length > 0);
+          // Filter results to ensure they actually match the search query
+          const searchLower = searchQuery.toLowerCase().trim();
+          const filteredResults = results.filter(item => 
+            item.name?.toLowerCase().includes(searchLower) || 
+            item.barcode?.toLowerCase().includes(searchLower)
+          );
+          setSuggestions(filteredResults);
+          setShowSuggestions(filteredResults.length > 0);
         } catch (error) {
           console.error("Error fetching items:", error);
         }
@@ -1023,6 +1029,27 @@ export default function BuyingForm({ onBillCreated }) {
         .bf-submit-btn:hover:not(:disabled) { filter: brightness(1.05); box-shadow: 0 10px 24px rgba(16,185,129,0.4) !important; }
         .bf-cancel-btn:hover { filter: brightness(1.05); }
 
+        /* Fix z-index issues for company suggestions */
+        .bf-company-suggestions {
+          position: absolute !important;
+          top: calc(100% + 4px) !important;
+          left: 0 !important;
+          right: 0 !important;
+          background: white !important;
+          border: 1px solid #e2e8f0 !important;
+          border-radius: 12px !important;
+          max-height: 260px !important;
+          overflow-y: auto !important;
+          z-index: 99999 !important;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+          padding: 4px 0 !important;
+        }
+
+        .bf-company-wrapper {
+          position: relative !important;
+          z-index: 9999 !important;
+        }
+
         /* Prevent iOS Safari from auto-zooming when focusing inputs */
         @media (max-width: 767px) {
           .bf-root input,
@@ -1139,7 +1166,7 @@ export default function BuyingForm({ onBillCreated }) {
                 Company Information
               </h2>
               <div style={styles.formRow} className="bf-form-row">
-                <div style={{ ...styles.formGroup, ...styles.relative }}>
+                <div style={{ ...styles.formGroup, ...styles.relative }} className="bf-company-wrapper">
                   <label style={styles.label}>Company Search</label>
                   <div style={styles.relative}>
                     <input
@@ -1158,7 +1185,7 @@ export default function BuyingForm({ onBillCreated }) {
                       required
                     />
                     {showCompanySuggestions && companySuggestions.length > 0 && (
-                      <div style={styles.suggestionBox}>
+                      <div className="bf-company-suggestions">
                         {companySuggestions.map((company) => (
                           <div
                             key={company.id}

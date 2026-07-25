@@ -464,59 +464,62 @@ export default function BuyingList({ refreshTrigger }) {
     }
   };
 
-  const saveAttachment = async () => {
-    if (!attachmentPreview || !attachmentModal) return;
+const saveAttachment = async () => {
+  if (!attachmentPreview || !attachmentModal) return;
+  try {
+    // Pass attachment data as a separate update - don't require items
+    await updateBoughtBill(attachmentModal.billNumber, {
+      attachment: attachmentPreview,
+      attachmentDate: new Date().toISOString()
+    });
+
+    // Update local state
+    setBills(bills.map(bill =>
+      bill.billNumber === attachmentModal.billNumber ?
+        { ...bill, attachment: attachmentPreview } : bill
+    ));
+
+    setAttachmentModal(prev => ({
+      ...prev,
+      attachment: attachmentPreview
+    }));
+
+    alert('Attachment saved successfully!');
+  } catch (error) {
+    console.error('Error saving attachment:', error);
+    alert('Failed to save attachment. Please try again.');
+  }
+};
+
+ const removeAttachment = async () => {
+  if (!attachmentModal) return;
+
+  if (confirm("Are you sure you want to remove this attachment?")) {
     try {
+      // Pass attachment: null to remove it
       await updateBoughtBill(attachmentModal.billNumber, {
-        attachment: attachmentPreview,
-        attachmentDate: new Date().toISOString()
+        attachment: null,
+        attachmentDate: null
       });
 
       setBills(bills.map(bill =>
         bill.billNumber === attachmentModal.billNumber ?
-          { ...bill, attachment: attachmentPreview } : bill
+          { ...bill, attachment: null } : bill
       ));
 
       setAttachmentModal(prev => ({
         ...prev,
-        attachment: attachmentPreview
+        attachment: null
       }));
+      setAttachmentPreview(null);
 
-      alert('Attachment saved successfully!');
+      alert('Attachment removed successfully!');
     } catch (error) {
-      console.error('Error saving attachment:', error);
-      alert('Failed to save attachment. Please try again.');
+      console.error('Error removing attachment:', error);
+      alert('Failed to remove attachment. Please try again.');
     }
-  };
-
-  const removeAttachment = async () => {
-    if (!attachmentModal) return;
-
-    if (confirm("Are you sure you want to remove this attachment?")) {
-      try {
-        await updateBoughtBill(attachmentModal.billNumber, {
-          attachment: null,
-          attachmentDate: null
-        });
-
-        setBills(bills.map(bill =>
-          bill.billNumber === attachmentModal.billNumber ?
-            { ...bill, attachment: null } : bill
-        ));
-
-        setAttachmentModal(prev => ({
-          ...prev,
-          attachment: null
-        }));
-        setAttachmentPreview(null);
-
-        alert('Attachment removed successfully!');
-      } catch (error) {
-        console.error('Error removing attachment:', error);
-        alert('Failed to remove attachment. Please try again.');
-      }
-    }
-  };
+  }
+};
 
   const triggerFileInput = () => {
     fileInputRef.current?.click();

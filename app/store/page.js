@@ -92,7 +92,7 @@ const formatIQD = (amount) => {
 const getBranchStyle = (branch) => {
   const styles = {
     Slemany: { bg: '#dcfce7', text: '#166534' },
-    Erbil: { bg: '#dbeafe', text: '#1e40af' },
+    Erbil: { bg: '#ffe69c', text: '#9f5103' },
     default: { bg: '#f3f4f6', text: '#4b5563' }
   };
   return {

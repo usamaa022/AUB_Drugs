@@ -2515,7 +2515,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                       <td style="text-align:center;font-weight:600">${idx + 1}</td>
                       <td>
                         <div style="font-weight:600;font-family:'NRT-Bd',sans-serif;font-size:13px;">${item.name}</div>
-                        <div style="font-size:12px;color:#7f8c8d">Exp: ${formatExpireDate(item.expireDate)}</div>
+                       
                       </td>
                       <td style="text-align:center;font-family:monospace;font-size:13px;">${item.barcode}</td>
                       <td style="text-align:center;font-weight:600">${item.quantity}</td>
