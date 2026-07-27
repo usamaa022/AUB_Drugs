@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import React from 'react';
 import { getBoughtBills, getCompanies, deleteBoughtBill, updateBoughtBill } from "@/lib/data";
 import Card from "./Card";
@@ -220,29 +220,33 @@ export default function BuyingList({ refreshTrigger }) {
   const [companies, setCompanies] = useState([]);
   const [attachmentModal, setAttachmentModal] = useState(null);
   const [attachmentPreview, setAttachmentPreview] = useState(null);
-  const [displayCurrency, setDisplayCurrency] = useState("USD");
   const [sortConfig, setSortConfig] = useState({ key: 'billNumber', direction: 'desc' });
   const [fullScreenImage, setFullScreenImage] = useState(null);
   const [columnFilters, setColumnFilters] = useState({});
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+  const [internalRefresh, setInternalRefresh] = useState(0);
 
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const router = useRouter();
 
+  // Instant automatic data fetching on edit, delete, or trigger
+  const fetchData = useCallback(async () => {
+    try {
+      const [billsData, companiesData] = await Promise.all([
+        getBoughtBills(),
+        getCompanies()
+      ]);
+      setBills(billsData);
+      setCompanies(companiesData);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+  }, []);
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const billsData = await getBoughtBills();
-        setBills(billsData);
-        const companiesData = await getCompanies();
-        setCompanies(companiesData);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
-    };
     fetchData();
-  }, [refreshTrigger]);
+  }, [fetchData, refreshTrigger, internalRefresh]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -277,7 +281,6 @@ export default function BuyingList({ refreshTrigger }) {
     }
   }, [filters.companySearch, companies]);
 
-  // Prepared normalized records for column-level filtering
   const processedBills = useMemo(() => {
     return bills.map(bill => {
       const companyObj = companies.find(c => c.id === bill.companyId);
@@ -492,8 +495,7 @@ export default function BuyingList({ refreshTrigger }) {
     if (confirm("Are you sure you want to delete this bill?")) {
       try {
         await deleteBoughtBill(billNumber);
-        const updatedBills = await getBoughtBills();
-        setBills(updatedBills);
+        setInternalRefresh(prev => prev + 1); // Trigger non-reloading instant update
         setSelectedBill(null);
       } catch (error) {
         console.error("Error deleting bill:", error);
@@ -578,10 +580,7 @@ export default function BuyingList({ refreshTrigger }) {
         attachmentDate: new Date().toISOString()
       });
 
-      setBills(bills.map(bill =>
-        bill.billNumber === attachmentModal.billNumber ?
-          { ...bill, attachment: attachmentPreview } : bill
-      ));
+      setInternalRefresh(prev => prev + 1); // Trigger automatic update
 
       setAttachmentModal(prev => ({
         ...prev,
@@ -605,10 +604,7 @@ export default function BuyingList({ refreshTrigger }) {
           attachmentDate: null
         });
 
-        setBills(bills.map(bill =>
-          bill.billNumber === attachmentModal.billNumber ?
-            { ...bill, attachment: null } : bill
-        ));
+        setInternalRefresh(prev => prev + 1); // Trigger automatic update
 
         setAttachmentModal(prev => ({
           ...prev,
@@ -657,7 +653,6 @@ export default function BuyingList({ refreshTrigger }) {
     );
   };
 
-  // Excel Filter Dropdown Component
   const ExcelFilterDropdown = ({ columnKey, title, type = "string" }) => {
     const [search, setSearch] = useState("");
     const isOpen = activeFilterDropdown === columnKey;
@@ -700,7 +695,7 @@ export default function BuyingList({ refreshTrigger }) {
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
-            justify: "center",
+            justifyContent: "center",
             padding: "0.25rem",
             borderRadius: "0.375rem",
             background: isActive ? "#dbeafe" : "transparent",
@@ -721,8 +716,8 @@ export default function BuyingList({ refreshTrigger }) {
               background: "white",
               border: "1px solid #cbd5e1",
               borderRadius: "0.5rem",
-              boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
-              zIndex: 100,
+              boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.1)",
+              zIndex: 9999,
               width: "260px",
               display: "flex",
               flexDirection: "column",
@@ -831,18 +826,19 @@ export default function BuyingList({ refreshTrigger }) {
           background: white;
           border-radius: 12px;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-          overflow: hidden;
+          overflow: visible;
           margin-top: 1rem;
           width: 100%;
-          padding-bottom: 8rem;
         }
 
         .table-scroll-wrapper {
           overflow-x: auto;
-          overflow-y: auto;
-          max-height: 600px;
+          overflow-y: visible;
+          min-height: 450px;
+          max-height: 75vh;
           -webkit-overflow-scrolling: touch;
           width: 100%;
+          padding-bottom: 6rem;
         }
 
         .purchase-table {
@@ -912,29 +908,10 @@ export default function BuyingList({ refreshTrigger }) {
           gap: 0.25rem;
         }
 
-        .btn-edit {
-          background: #dbeafe;
-          color: #1e40af;
-          border-color: #93c5fd;
-        }
-
-        .btn-delete {
-          background: #fee2e2;
-          color: #991b1b;
-          border-color: #fca5a5;
-        }
-
-        .btn-attach {
-          background: #f3f4f6;
-          color: #374151;
-          border-color: #d1d5db;
-        }
-
-        .btn-view {
-          background: #dcfce7;
-          color: #166534;
-          border-color: #bbf7d0;
-        }
+        .btn-edit { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+        .btn-delete { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .btn-attach { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+        .btn-view { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
 
         .details-panel {
           background: #f9fafb;
@@ -942,9 +919,7 @@ export default function BuyingList({ refreshTrigger }) {
           border-bottom: 1px solid #e5e7eb;
         }
 
-        .details-content {
-          padding: 1rem;
-        }
+        .details-content { padding: 1rem; }
 
         .info-grid {
           display: grid;
@@ -1065,15 +1040,11 @@ export default function BuyingList({ refreshTrigger }) {
         }
 
         @media (min-width: 640px) {
-          .filter-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
+          .filter-grid { grid-template-columns: repeat(2, 1fr); }
         }
 
         @media (min-width: 1024px) {
-          .filter-grid {
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          }
+          .filter-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
         }
 
         .filter-input {
@@ -1094,94 +1065,59 @@ export default function BuyingList({ refreshTrigger }) {
 
         .modal-overlay {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 1rem;
-          z-index: 50;
+          display: flex; alignItems: center; justify-content: center;
+          padding: 1rem; z-index: 10000;
           backdrop-filter: blur(4px);
         }
 
         .modal-content {
           background: white;
           border-radius: 16px;
-          width: 100%;
-          max-width: 500px;
-          max-height: 90vh;
+          width: 100%; max-width: 500px; max-height: 90vh;
           overflow-y: auto;
           box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         .modal-header {
-          position: sticky;
-          top: 0;
-          background: white;
-          border-bottom: 1px solid #e5e7eb;
+          position: sticky; top: 0;
+          background: white; border-bottom: 1px solid #e5e7eb;
           padding: 0.75rem 1rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+          display: flex; justify-content: space-between; align-items: center;
           z-index: 10;
         }
 
         .modal-header h3 {
-          font-size: 1rem;
-          font-weight: 600;
-          color: #111827;
-          margin: 0;
+          font-size: 1rem; font-weight: 600; color: #111827; margin: 0;
         }
 
-        .modal-close {
-          color: #9ca3af;
-          cursor: pointer;
-        }
-
-        .modal-body {
-          padding: 1rem;
-        }
+        .modal-close { color: #9ca3af; cursor: pointer; }
+        .modal-body { padding: 1rem; }
 
         .attachment-preview {
-          width: 100%;
-          height: 200px;
-          object-fit: contain;
-          border: 2px solid #e5e7eb;
-          border-radius: 8px;
-          margin-bottom: 0.75rem;
-          background: #f9fafb;
-          cursor: zoom-in;
+          width: 100%; height: 200px;
+          object-fit: contain; border: 2px solid #e5e7eb;
+          border-radius: 8px; margin-bottom: 0.75rem;
+          background: #f9fafb; cursor: zoom-in;
         }
 
         .attachment-placeholder {
-          text-align: center;
-          padding: 1.5rem;
-          border: 2px dashed #e5e7eb;
-          border-radius: 8px;
-          color: #9ca3af;
-          margin-bottom: 0.75rem;
+          text-align: center; padding: 1.5rem;
+          border: 2px dashed #e5e7eb; border-radius: 8px;
+          color: #9ca3af; margin-bottom: 0.75rem;
         }
 
         .modal-actions {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 0.5rem;
-          margin-top: 0.75rem;
+          display: grid; grid-template-columns: repeat(3, 1fr);
+          gap: 0.5rem; margin-top: 0.75rem;
         }
 
         .modal-btn {
-          padding: 0.5rem;
-          border-radius: 8px;
-          font-weight: 500;
-          font-size: 0.85rem;
-          border: none;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          padding: 0.5rem; border-radius: 8px;
+          font-weight: 500; font-size: 0.85rem;
+          border: none; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
           gap: 0.5rem;
         }
 
@@ -1191,60 +1127,38 @@ export default function BuyingList({ refreshTrigger }) {
 
         .fullscreen-overlay {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(0, 0, 0, 0.95);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
-          padding: 1rem;
+          display: flex; align-items: center; justify-content: center;
+          z-index: 10001; padding: 1rem;
         }
 
         .fullscreen-content {
-          position: relative;
-          max-width: 90vw;
-          max-height: 90vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
+          position: relative; max-width: 90vw; max-height: 90vh;
+          display: flex; flex-direction: column; align-items: center;
         }
 
         .fullscreen-image {
-          max-width: 90vw;
-          max-height: 75vh;
-          object-fit: contain;
-          border-radius: 8px;
+          max-width: 90vw; max-height: 75vh;
+          object-fit: contain; border-radius: 8px;
         }
 
         .fullscreen-actions {
-          display: flex;
-          gap: 0.75rem;
-          margin-top: 1rem;
+          display: flex; gap: 0.75rem; margin-top: 1rem;
         }
 
         .fullscreen-btn {
-          padding: 0.5rem 1rem;
-          border: none;
-          border-radius: 8px;
-          font-size: 0.85rem;
-          font-weight: 600;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
+          padding: 0.5rem 1rem; border: none; border-radius: 8px;
+          font-size: 0.85rem; font-weight: 600; cursor: pointer;
+          display: flex; align-items: center; gap: 0.5rem;
         }
 
         .fullscreen-btn-close { background: #ef4444; color: white; }
         .fullscreen-btn-download { background: #3b82f6; color: white; }
 
         .empty-state {
-          text-align: center;
-          padding: 2rem;
-          background: white;
-          border-radius: 12px;
+          text-align: center; padding: 2rem;
+          background: white; border-radius: 12px;
           border: 1px solid #e5e7eb;
         }
       `}</style>
@@ -1285,7 +1199,7 @@ export default function BuyingList({ refreshTrigger }) {
                   onFocus={() => setShowCompanySuggestions(true)}
                 />
                 {showCompanySuggestions && (
-                  <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto">
+                  <div className="absolute z-[999] w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto">
                     {companySuggestions.map(company => (
                       <div
                         key={company.id}
@@ -1306,7 +1220,9 @@ export default function BuyingList({ refreshTrigger }) {
                   options={itemOptions}
                   onChange={(selected) => setItemFilters(selected.map(option => option.value))}
                   placeholder="Select specific items..."
+                  menuPortalTarget={typeof document !== "undefined" ? document.body : null}
                   styles={{
+                    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
                     control: (base) => ({
                       ...base,
                       minHeight: '36px',

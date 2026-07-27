@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getCompanies, searchInitializedItems, createBoughtBill, updateBoughtBill } from "@/lib/data";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -6,14 +7,13 @@ import {
   FiPlus, FiTrash2, FiSearch, FiPercent, FiDollarSign, FiFileText,
   FiPackage, FiUser, FiCalendar, FiCreditCard, FiTruck,
   FiAlertTriangle, FiX, FiRefreshCw, FiShoppingCart, FiCheckCircle,
-  FiArrowRight
+  FiArrowRight, FiInfo, FiTag, FiCornerDownLeft
 } from "react-icons/fi";
 
 // ============================================================
-// Helpers
+// Date Formatting & Parsing Helpers (dd/mm/yyyy)
 // ============================================================
 
-// Format number with commas (e.g., 3,000 or 3,000.50)
 const formatNumber = (number) => {
   if (!number && number !== 0) return '0';
   const num = typeof number === 'string' ? parseFloat(number.replace(/,/g, '')) : number;
@@ -25,13 +25,11 @@ const formatNumber = (number) => {
   }).format(num);
 };
 
-// Parse formatted number back to number
 const parseFormattedNumber = (formattedValue) => {
   if (!formattedValue) return '';
   return formattedValue.toString().replace(/,/g, '');
 };
 
-// Handle input with comma formatting
 const handleNumberInput = (value, setter) => {
   const rawValue = value.replace(/,/g, '');
   if (rawValue === '' || isNaN(parseFloat(rawValue))) {
@@ -41,54 +39,73 @@ const handleNumberInput = (value, setter) => {
   }
 };
 
+// Formats ANY date representation to dd/mm/yyyy
 const formatDateToDDMMYYYY = (date) => {
   if (!date) return '';
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
+  let d = null;
+
+  if (date?.toDate && typeof date.toDate === 'function') {
+    d = date.toDate();
+  } else if (date?.seconds) {
+    d = new Date(date.seconds * 1000);
+  } else if (date instanceof Date) {
+    d = date;
+  } else if (typeof date === 'string') {
+    if (date === 'N/A' || !date.trim()) return '';
+    if (date.includes('/')) {
+      const [day, month, year] = date.split('/');
+      d = new Date(year, month - 1, day);
+    } else if (date.includes('-')) {
+      const [year, month, day] = date.split('-');
+      d = new Date(year, month - 1, day);
+    } else {
+      d = new Date(date);
+    }
+  }
+
+  if (!d || isNaN(d.getTime())) return '';
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
 };
 
-const parseDDMMYYYYToInput = (dateString) => {
-  if (!dateString) return '';
-  if (dateString.includes('/')) {
-    const [day, month, year] = dateString.split('/');
-    return `${year}-${month}-${day}`;
-  }
-  return dateString;
-};
+// Parses a dd/mm/yyyy or yyyy-mm-dd string into a JavaScript Date object
+// Parses a dd/mm/yyyy string into a Date object preserving the current real time
+const parseDateString = (dateStr) => {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const str = dateStr.trim();
+  if (!str || str === 'N/A') return null;
 
-// Robustly converts ANY date-ish value into an <input type="date"> compatible string
-const formatDateForInput = (date) => {
-  if (!date) return '';
-  let dateObj;
-  if (date?.toDate && typeof date.toDate === 'function') {
-    dateObj = date.toDate();
-  } else if (date?.seconds) {
-    dateObj = new Date(date.seconds * 1000);
-  } else if (date instanceof Date) {
-    dateObj = date;
-  } else if (typeof date === 'string') {
-    if (date === 'N/A') return '';
-    if (date.includes('/')) {
-      const [day, month, year] = date.split('/');
-      dateObj = new Date(year, month - 1, day);
-    } else {
-      dateObj = new Date(date);
+  const now = new Date(); // Preserves real-time hours, minutes & seconds
+
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      
+      // Use local Date constructor with current exact time
+      const parsed = new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds());
+      if (!isNaN(parsed.getTime())) return parsed;
     }
-  } else {
-    return '';
+  } else if (str.includes('-')) {
+    const parts = str.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      
+      const parsed = new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds());
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
   }
-  if (isNaN(dateObj.getTime())) return '';
-  const year = dateObj.getFullYear();
-  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const day = String(dateObj.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  
+  const fallback = new Date(str);
+  return isNaN(fallback.getTime()) ? null : fallback;
 };
 
-// Select all text in an input when it receives focus
 const selectOnFocus = (e) => {
   const target = e.target;
   requestAnimationFrame(() => {
@@ -96,428 +113,12 @@ const selectOnFocus = (e) => {
   });
 };
 
-// ============================================================
-// Styles
-// ============================================================
-
-const styles = {
-  container: {
-    minHeight: '100vh',
-    padding: '0px',
-    width: '100%',
-    maxWidth: '100%',
-    overflowX: 'hidden',
-  },
-  mainCard: {
-    maxWidth: '100%',
-    margin: '0 auto',
-    backgroundColor: 'white',
-    borderRadius: '18px',
-    boxShadow: '0 20px 60px rgba(15,23,42,0.18)',
-    overflow: 'hidden',
-    width: '100%',
-  },
-  header: {
-    background: 'linear-gradient(135deg, #4338ca 0%, #1e293b 100%)',
-    padding: '18px 20px',
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    flexWrap: 'wrap',
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  headerIconWrap: {
-    width: '38px',
-    height: '38px',
-    borderRadius: '10px',
-    background: 'rgba(255,255,255,0.15)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  headerTitle: {
-    fontSize: '19px',
-    fontWeight: '700',
-    margin: 0,
-    letterSpacing: '-0.01em',
-  },
-  headerSubtitle: {
-    fontSize: '12px',
-    opacity: 0.75,
-    marginTop: '2px',
-    marginBottom: 0,
-  },
-  content: {
-    padding: '14px',
-  },
-  section: {
-    backgroundColor: '#f8fafc',
-    borderRadius: '14px',
-    padding: '14px',
-    marginBottom: '14px',
-    border: '1px solid #e2e8f0',
-    overflow: 'hidden',
-  },
-  sectionTitle: {
-    fontSize: '14px',
-    fontWeight: '700',
-    marginBottom: '12px',
-    color: '#1e293b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingBottom: '10px',
-    borderBottom: '2px solid #e2e8f0',
-    textTransform: 'uppercase',
-    letterSpacing: '0.02em',
-  },
-  sectionTitleBadge: {
-    marginLeft: 'auto',
-    fontSize: '11px',
-    fontWeight: '700',
-    color: '#4338ca',
-    background: '#e0e7ff',
-    borderRadius: '999px',
-    padding: '2px 10px',
-    textTransform: 'none',
-    letterSpacing: 0,
-  },
-  formRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr',
-    gap: '12px',
-    marginBottom: '12px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  label: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: '5px',
-  },
-  input: {
-    padding: '10px 12px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '10px',
-    fontSize: '15px',
-    transition: 'border-color 0.15s, box-shadow 0.15s',
-    outline: 'none',
-    backgroundColor: 'white',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  select: {
-    padding: '10px 12px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '10px',
-    fontSize: '15px',
-    backgroundColor: 'white',
-    cursor: 'pointer',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  currencyButtons: {
-    display: 'flex',
-    flexDirection: 'row',
-    gap: '10px',
-    marginBottom: '4px',
-  },
-  currencyBtn: {
-    padding: '12px 16px',
-    borderRadius: '12px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    border: '2px solid transparent',
-    fontSize: '14px',
-    flex: 1,
-  },
-  currencyBtnActiveUSD: {
-    background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-    color: 'white',
-    boxShadow: '0 6px 16px rgba(59,130,246,0.35)',
-    transform: 'translateY(-1px)',
-  },
-  currencyBtnActiveIQD: {
-    background: 'linear-gradient(135deg, #10b981, #059669)',
-    color: 'white',
-    boxShadow: '0 6px 16px rgba(16,185,129,0.35)',
-    transform: 'translateY(-1px)',
-  },
-  currencyBtnInactive: {
-    backgroundColor: 'white',
-    color: '#475569',
-    border: '2px solid #e2e8f0',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'separate',
-    borderSpacing: 0,
-    marginTop: '12px',
-    minWidth: '680px',
-  },
-  th: {
-    padding: '10px 8px',
-    textAlign: 'left',
-    backgroundColor: '#eef2ff',
-    fontSize: '11px',
-    fontWeight: '700',
-    color: '#4338ca',
-    borderBottom: '2px solid #e0e7ff',
-    whiteSpace: 'nowrap',
-    position: 'sticky',
-    top: 0,
-    textTransform: 'uppercase',
-    letterSpacing: '0.02em',
-  },
-  td: {
-    padding: '6px',
-    borderBottom: '1px solid #eef2f7',
-    fontSize: '13px',
-  },
-  addButton: {
-    background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-    color: 'white',
-    border: 'none',
-    padding: '10px 16px',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '600',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginBottom: '12px',
-    width: '100%',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    background: '#fef2f2',
-    border: 'none',
-    color: '#ef4444',
-    cursor: 'pointer',
-    padding: '8px',
-    borderRadius: '8px',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButton: {
-    background: 'linear-gradient(135deg, #10b981, #059669)',
-    color: 'white',
-    border: 'none',
-    padding: '14px 20px',
-    borderRadius: '12px',
-    fontSize: '15px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    width: '100%',
-    justifyContent: 'center',
-    boxShadow: '0 8px 20px rgba(16,185,129,0.3)',
-  },
-  resetButton: {
-    background: 'white',
-    color: '#64748b',
-    border: '1.5px solid #cbd5e1',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    width: '100%',
-    justifyContent: 'center',
-  },
-  cancelButton: {
-    background: '#ef4444',
-    color: 'white',
-    border: 'none',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '6px',
-    width: '100%',
-    justifyContent: 'center',
-  },
-  errorBox: {
-    backgroundColor: '#fef2f2',
-    border: '1px solid #fecaca',
-    borderRadius: '12px',
-    padding: '12px 14px',
-    marginBottom: '16px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    color: '#dc2626',
-    fontSize: '13px',
-    fontWeight: 500,
-  },
-  successBox: {
-    backgroundColor: '#f0fdf4',
-    border: '1px solid #bbf7d0',
-    borderRadius: '12px',
-    padding: '12px 14px',
-    marginBottom: '16px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    color: '#16a34a',
-    fontSize: '13px',
-    fontWeight: 500,
-  },
-  totalBox: {
-    background: 'linear-gradient(135deg, #eef2ff, #e0e7ff)',
-    borderRadius: '12px',
-    padding: '14px 16px',
-    marginTop: '12px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  totalLabel: {
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#4338ca',
-  },
-  totalValue: {
-    fontSize: '20px',
-    fontWeight: '800',
-    color: '#4338ca',
-  },
-  suggestionBox: {
-    position: 'absolute',
-    top: 'calc(100% + 4px)',
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    maxHeight: '260px',
-    overflowY: 'auto',
-    zIndex: 9999,
-    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-    padding: '4px 0',
-  },
-  suggestionItem: {
-    padding: '10px 14px',
-    cursor: 'pointer',
-    borderBottom: '1px solid #f1f5f9',
-    fontSize: '13px',
-    transition: 'background 0.15s ease',
-  },
-  relative: {
-    position: 'relative',
-    width: '100%',
-  },
-  buttonGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    marginTop: '16px',
-    paddingTop: '16px',
-    borderTop: '1px solid #e2e8f0',
-  },
-  rightGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    width: '100%',
-  },
-  searchWrapper: {
-    position: 'relative',
-    marginBottom: '16px',
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: '12px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    color: '#94a3b8',
-    pointerEvents: 'none',
-  },
-  searchInput: {
-    width: '100%',
-    padding: '12px 12px 12px 36px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '10px',
-    fontSize: '15px',
-    backgroundColor:' #fff4b4',
-    boxSizing: 'border-box',
-  },
-  tableWrapper: {
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-    borderRadius: '10px',
-    border: '1px solid #eef2f7',
-  },
-  smallInput: {
-    width: '64px',
-    padding: '8px 6px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '8px',
-    fontSize: '14px',
-    textAlign: 'center',
-    boxSizing: 'border-box',
-  },
-  priceInput: {
-    width: '100%',
-    minWidth: '90px',
-    padding: '8px 6px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '8px',
-    fontSize: '14px',
-    textAlign: 'right',
-    boxSizing: 'border-box',
-  },
-  outPriceInput: {
-    width: '100%',
-    minWidth: '90px',
-    padding: '8px 6px',
-    border: '1.5px solid #fbbf24',
-    borderRadius: '8px',
-    fontSize: '14px',
-    textAlign: 'right',
-    backgroundColor: '#fffbeb',
-    boxSizing: 'border-box',
-  },
-  textInput: {
-    width: '100%',
-    minWidth: '90px',
-    padding: '8px 6px',
-    border: '1.5px solid #cbd5e1',
-    borderRadius: '8px',
-    fontSize: '14px',
-    boxSizing: 'border-box',
-  },
-};
-
 export default function BuyingForm({ onBillCreated }) {
   const [companyId, setCompanyId] = useState("");
   const [companySearch, setCompanySearch] = useState("");
   const [companyCode, setCompanyCode] = useState("");
   const [companyBillNumber, setCompanyBillNumber] = useState("");
-  const [billDate, setBillDate] = useState(formatDateForInput(new Date()));
+  const [billDate, setBillDate] = useState(formatDateToDDMMYYYY(new Date()));
   const [branch, setBranch] = useState("Slemany");
   const [paymentStatus, setPaymentStatus] = useState("Unpaid");
   const [isConsignment, setIsConsignment] = useState(false);
@@ -574,7 +175,6 @@ export default function BuyingForm({ onBillCreated }) {
     return parseFloat(netPrice.toFixed(2));
   };
 
-  // Load all companies on mount for suggestions
   useEffect(() => {
     const loadCompanies = async () => {
       try {
@@ -587,7 +187,6 @@ export default function BuyingForm({ onBillCreated }) {
     loadCompanies();
   }, []);
 
-  // Company search - shows all companies on focus, filters on type
   useEffect(() => {
     const timer = setTimeout(() => {
       if (companySearch.trim() === '') {
@@ -600,18 +199,16 @@ export default function BuyingForm({ onBillCreated }) {
         );
         setCompanySuggestions(filtered);
       }
-    }, 300);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [companySearch, allCompanies]);
 
-  // Handle company focus - show all companies
   const handleCompanyFocus = () => {
     setShowCompanySuggestions(true);
     setCompanySuggestions(allCompanies);
   };
 
-  // Handle company blur - hide suggestions after delay
   const handleCompanyBlur = () => {
     setTimeout(() => {
       setShowCompanySuggestions(false);
@@ -623,7 +220,7 @@ export default function BuyingForm({ onBillCreated }) {
     setCompanySearch(billData.companyName || billData.companySearch || "");
     setCompanyCode(billData.companyCode || "");
     setCompanyBillNumber(billData.companyBillNumber || "");
-    setBillDate(billData.billDate || formatDateForInput(new Date(billData.date)));
+    setBillDate(formatDateToDDMMYYYY(billData.billDate || billData.date));
     setBranch(billData.branch || "Slemany");
     setPaymentStatus(billData.paymentStatus || "Unpaid");
     setIsConsignment(billData.isConsignment || false);
@@ -635,8 +232,6 @@ export default function BuyingForm({ onBillCreated }) {
 
     if (billData.items && billData.items.length > 0) {
       const initializedItems = billData.items.map(item => {
-        const expireDate = formatDateForInput(item.expireDate);
-
         let price = 0;
         let outPrice = 0;
         if (billData.currency === "USD") {
@@ -653,7 +248,7 @@ export default function BuyingForm({ onBillCreated }) {
           quantity: String(item.quantity || 1),
           price: formatNumber(price),
           outPrice: formatNumber(outPrice),
-          expireDate: expireDate,
+          expireDate: formatDateToDDMMYYYY(item.expireDate),
           netPrice: item.netPrice || 0
         };
       });
@@ -661,7 +256,6 @@ export default function BuyingForm({ onBillCreated }) {
     }
   };
 
-  // Check if we're in edit mode
   useEffect(() => {
     const editParam = searchParams.get('edit');
     if (editParam === 'true') {
@@ -682,16 +276,13 @@ export default function BuyingForm({ onBillCreated }) {
         setBillItems([createEmptyItem()]);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Item search - FIXED: Uses includes for partial matching
   useEffect(() => {
     const fetchItems = async () => {
       if (searchQuery.length > 0) {
         try {
           const results = await searchInitializedItems(searchQuery, "both");
-          // Filter results to ensure they actually match the search query
           const searchLower = searchQuery.toLowerCase().trim();
           const filteredResults = results.filter(item => 
             item.name?.toLowerCase().includes(searchLower) || 
@@ -707,7 +298,7 @@ export default function BuyingForm({ onBillCreated }) {
         setShowSuggestions(false);
       }
     };
-    const timer = setTimeout(fetchItems, 300);
+    const timer = setTimeout(fetchItems, 250);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -725,7 +316,7 @@ export default function BuyingForm({ onBillCreated }) {
       barcode: item.barcode,
       name: item.name,
       outPrice: item.outPrice ? formatNumber(item.outPrice) : "",
-      expireDate: formatDateForInput(item.expireDate),
+      expireDate: formatDateToDDMMYYYY(item.expireDate),
     };
 
     setBillItems(prev => {
@@ -746,11 +337,6 @@ export default function BuyingForm({ onBillCreated }) {
 
     setShowSuggestions(false);
     setSearchQuery("");
-    setTimeout(() => {
-      if (searchInputRef.current) {
-        searchInputRef.current.blur();
-      }
-    }, 80);
   }, []);
 
   const handleItemChange = useCallback((index, field, value) => {
@@ -766,7 +352,7 @@ export default function BuyingForm({ onBillCreated }) {
     setCompanySearch("");
     setCompanyCode("");
     setCompanyBillNumber("");
-    setBillDate(formatDateForInput(new Date()));
+    setBillDate(formatDateToDDMMYYYY(new Date()));
     setBranch("Slemany");
     setPaymentStatus("Unpaid");
     setIsConsignment(false);
@@ -788,7 +374,6 @@ export default function BuyingForm({ onBillCreated }) {
     router.push('/buying');
   };
 
-  // Keyboard navigation handler
   const handleKeyDown = (e, index, field) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -878,19 +463,7 @@ export default function BuyingForm({ onBillCreated }) {
       const expensePercentageValue = parseFloat(parseFormattedNumber(expensePercentage)) || 0;
 
       const itemsWithNetPrices = validItems.map(item => {
-        let expireDateValue = null;
-        if (item.expireDate) {
-          try {
-            if (typeof item.expireDate === 'string' && item.expireDate.includes('-')) {
-              const [year, month, day] = item.expireDate.split('-');
-              if (year && month && day) {
-                expireDateValue = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0));
-              }
-            }
-          } catch (dateError) {
-            console.error("Error parsing expire date:", dateError);
-          }
-        }
+        const expireDateValue = parseDateString(item.expireDate);
 
         const netPrice = calculateNetPrice(
           item, totalQuantity, transportFeeValue, externalExpenseValue, expensePercentageValue
@@ -932,6 +505,8 @@ export default function BuyingForm({ onBillCreated }) {
         return itemData;
       });
 
+      const parsedBillDate = parseDateString(billDate) || new Date();
+
       const additionalData = {
         expensePercentage: expensePercentageValue,
         billNote: billNote || "",
@@ -942,7 +517,7 @@ export default function BuyingForm({ onBillCreated }) {
         totalTransportFeeIQD: currency === "IQD" ? transportFeeValue : 0,
         totalExternalExpenseUSD: currency === "USD" ? externalExpenseValue : 0,
         totalExternalExpenseIQD: currency === "IQD" ? externalExpenseValue : 0,
-        billDate: billDate,
+        billDate: parsedBillDate,
         exchangeRate: 1,
       };
 
@@ -950,7 +525,7 @@ export default function BuyingForm({ onBillCreated }) {
         await updateBoughtBill(editingBill.billNumber, {
           companyId,
           companyBillNumber,
-          date: billDate,
+          date: parsedBillDate,
           paymentStatus,
           isConsignment,
           items: itemsWithNetPrices,
@@ -1009,201 +584,407 @@ export default function BuyingForm({ onBillCreated }) {
   const validItemsCount = billItems.filter(item => item.barcode || item.name).length;
 
   return (
-    <div style={styles.container} className="bf-root">
-      <style>{`
-        .bf-root * { box-sizing: border-box; }
-        .bf-root input:focus,
-        .bf-root select:focus,
-        .bf-root textarea:focus {
-          border-color: #6366f1 !important;
-          box-shadow: 0 0 0 3px rgba(99,102,241,0.15) !important;
-        }
-        .bf-root button {
-          transition: transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease, background 0.15s ease;
-        }
-        .bf-root button:active:not(:disabled) { transform: scale(0.97); }
-        .bf-row-hover:hover { background: #f8fafc; }
-        .bf-suggestion:hover { background: #eef2ff !important; }
-        .bf-delete-btn:hover { background: #fee2e2 !important; }
-        .bf-reset-btn:hover { background: #f1f5f9 !important; border-color: #94a3b8 !important; }
-        .bf-submit-btn:hover:not(:disabled) { filter: brightness(1.05); box-shadow: 0 10px 24px rgba(16,185,129,0.4) !important; }
-        .bf-cancel-btn:hover { filter: brightness(1.05); }
-
-        /* Fix z-index issues for company suggestions */
-        .bf-company-suggestions {
-          position: absolute !important;
-          top: calc(100% + 4px) !important;
-          left: 0 !important;
-          right: 0 !important;
-          background: white !important;
-          border: 1px solid #e2e8f0 !important;
-          border-radius: 12px !important;
-          max-height: 260px !important;
-          overflow-y: auto !important;
-          z-index: 99999 !important;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
-          padding: 4px 0 !important;
+    <div className="bf-root style-reset">
+      <style jsx global>{`
+        .style-reset * {
+          box-sizing: border-box;
         }
 
-        .bf-company-wrapper {
-          position: relative !important;
-          z-index: 9999 !important;
+        .bf-root {
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          background: #f1f5f9;
+          min-height: 100vh;
+          padding: 1.5rem;
+          color: #0f172a;
         }
 
-        /* Prevent iOS Safari from auto-zooming when focusing inputs */
-        @media (max-width: 767px) {
-          .bf-root input,
-          .bf-root select,
-          .bf-root textarea {
-            font-size: 16px !important;
-          }
-          .bf-root .bf-header-title { font-size: 17px !important; }
-          .bf-root .bf-content { padding: 10px !important; }
-          .bf-root .bf-section { padding: 12px !important; border-radius: 12px !important; }
-          .bf-root .bf-currency-btn { padding: 12px 10px !important; font-size: 13px !important; }
+        .bf-card {
+          max-width: 1400px;
+          margin: 0 auto;
+          background: #ffffff;
+          border-radius: 16px;
+          box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+          overflow: visible;
+          border: 1px solid #e2e8f0;
         }
 
-        /* Wider screens: allow multi-column form rows and side-by-side buttons */
-        @media (min-width: 768px) {
-          .bf-root .bf-form-row {
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
-          }
-          .bf-root .bf-currency-buttons { max-width: 420px; }
-          .bf-root .bf-button-group {
-            flex-direction: row !important;
-            justify-content: space-between !important;
-            align-items: center !important;
-          }
-          .bf-root .bf-reset-btn { width: auto !important; min-width: 160px; }
-          .bf-root .bf-right-group {
-            flex-direction: row !important;
-            width: auto !important;
-          }
-          .bf-root .bf-right-group button { width: auto !important; min-width: 160px; }
+        .bf-header {
+          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+          padding: 1.5rem 2rem;
+          color: #ffffff;
+          border-top-left-radius: 16px;
+          border-top-right-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid #334155;
         }
 
-        .bf-root ::-webkit-scrollbar { height: 8px; width: 8px; }
-        .bf-root ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
-        .bf-root ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .bf-header-badge {
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          padding: 0.25rem 0.75rem;
+          border-radius: 9999px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #38bdf8;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+        }
+
+        .bf-section {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 1.25rem;
+          margin-bottom: 1.25rem;
+          box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+          position: relative;
+        }
+
+        .bf-section-company {
+          z-index: 50;
+        }
+
+        .bf-section-items {
+          z-index: 40;
+        }
+
+        .bf-section-title {
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: #334155;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+          padding-bottom: 0.5rem;
+          border-bottom: 1px solid #f1f5f9;
+        }
+
+        .bf-grid-3 {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 1rem;
+        }
+
+        .bf-form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.375rem;
+          position: relative;
+        }
+
+        .bf-label {
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: #475569;
+        }
+
+        .bf-input, .bf-select, .bf-textarea {
+          width: 100%;
+          padding: 0.625rem 0.875rem;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          color: #0f172a;
+          background: #ffffff;
+          transition: all 0.2s ease;
+          outline: none;
+        }
+
+        .bf-input:focus, .bf-select:focus, .bf-textarea:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .bf-dropdown {
+          position: absolute;
+          top: calc(100% + 4px);
+          left: 0;
+          right: 0;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          max-height: 240px;
+          overflow-y: auto;
+          z-index: 1000;
+          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+        }
+
+        .bf-dropdown-item {
+          padding: 0.625rem 0.875rem;
+          cursor: pointer;
+          border-bottom: 1px solid #f1f5f9;
+          font-size: 0.8125rem;
+          transition: background 0.15s ease;
+        }
+
+        .bf-dropdown-item:hover {
+          background: #eff6ff;
+        }
+
+        .bf-currency-toggle {
+          display: inline-flex;
+          background: #f1f5f9;
+          padding: 0.25rem;
+          border-radius: 10px;
+          border: 1px solid #e2e8f0;
+          gap: 0.25rem;
+        }
+
+        .bf-currency-btn {
+          padding: 0.5rem 1.25rem;
+          border-radius: 8px;
+          font-size: 0.8125rem;
+          font-weight: 700;
+          cursor: pointer;
+          border: none;
+          transition: all 0.2s ease;
+          color: #64748b;
+          background: transparent;
+        }
+
+        .bf-currency-btn.active-usd {
+          background: #2563eb;
+          color: #ffffff;
+          box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+
+        .bf-currency-btn.active-iqd {
+          background: #059669;
+          color: #ffffff;
+          box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+        }
+
+        .bf-table-container {
+          overflow-x: auto;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .bf-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.8125rem;
+          text-align: left;
+        }
+
+        .bf-table th {
+          background: #f8fafc;
+          padding: 0.75rem 0.625rem;
+          font-weight: 700;
+          color: #475569;
+          border-bottom: 2px solid #e2e8f0;
+          text-transform: uppercase;
+          font-size: 0.75rem;
+          white-space: nowrap;
+        }
+
+        .bf-table td {
+          padding: 0.5rem 0.625rem;
+          border-bottom: 1px solid #f1f5f9;
+          vertical-align: middle;
+        }
+
+        .bf-table tr:hover {
+          background: #f8fafc;
+        }
+
+        .bf-table-input {
+          padding: 0.375rem 0.5rem;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          font-size: 0.8125rem;
+          width: 100%;
+          outline: none;
+        }
+
+        .bf-table-input:focus {
+          border-color: #2563eb;
+          box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+
+        .bf-summary-bar {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 1rem 1.25rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+
+        .bf-summary-item {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .bf-summary-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #64748b;
+          text-transform: uppercase;
+        }
+
+        .bf-summary-value {
+          font-size: 1.25rem;
+          font-weight: 800;
+          color: #0f172a;
+        }
+
+        .bf-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 0.75rem;
+          margin-top: 1.5rem;
+          padding-top: 1rem;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .bf-btn {
+          padding: 0.625rem 1.25rem;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          border: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          transition: all 0.15s ease;
+        }
+
+        .bf-btn-primary {
+          background: #10b981;
+          color: #ffffff;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+        }
+
+        .bf-btn-primary:hover:not(:disabled) {
+          background: #059669;
+          transform: translateY(-1px);
+        }
+
+        .bf-btn-secondary {
+          background: #ffffff;
+          color: #475569;
+          border: 1px solid #cbd5e1;
+        }
+
+        .bf-btn-secondary:hover {
+          background: #f1f5f9;
+        }
+
+        .bf-btn-danger {
+          background: #ef4444;
+          color: #ffffff;
+        }
+
+        .bf-btn-danger:hover {
+          background: #dc2626;
+        }
       `}</style>
 
-      <div style={styles.mainCard}>
+      <div className="bf-card">
         {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.headerLeft}>
-            <div style={styles.headerIconWrap}>
-              <FiShoppingCart size={18} />
+        <div className="bf-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div style={{ background: "rgba(255,255,255,0.1)", padding: "0.5rem", borderRadius: "8px", display: "flex" }}>
+              <FiShoppingCart size={22} color="#ffffff" />
             </div>
             <div>
-              <h1 style={styles.headerTitle} className="bf-header-title">
-                {isEditing ? `Edit Bill #${editingBill?.billNumber}` : "Create Purchase Bill"}
+              <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700 }}>
+                {isEditing ? `Edit Purchase Bill #${editingBill?.billNumber}` : "New Purchase Entry"}
               </h1>
-              <p style={styles.headerSubtitle}>
-                {isEditing ? "Changes sync to store stock automatically" : "Add items, set costs, and save"}
-              </p>
+              <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
+                {isEditing ? "Modifying existing document records" : "Record inventory acquisition & supplier costs"}
+              </span>
             </div>
+          </div>
+          <div className="bf-header-badge">
+            <FiInfo size={13} />
+            <span>{isEditing ? "EDIT MODE" : "NEW DRAFT"}</span>
           </div>
         </div>
 
-        {/* Content */}
-        <div style={styles.content} className="bf-content">
-          {/* Success Message */}
+        <div style={{ padding: "1.5rem" }}>
+          {/* Notifications */}
           {successMessage && (
-            <div style={styles.successBox}>
-              <FiCheckCircle size={16} />
+            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "0.875rem 1rem", borderRadius: "10px", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", fontWeight: 500 }}>
+              <FiCheckCircle size={18} />
               <span>{successMessage}</span>
             </div>
           )}
 
-          {/* Error Message */}
           {error && (
-            <div style={styles.errorBox}>
-              <FiAlertTriangle size={16} />
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "0.875rem 1rem", borderRadius: "10px", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", fontWeight: 500 }}>
+              <FiAlertTriangle size={18} />
               <span>{error}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
-            {/* Currency Selection */}
-            <div style={styles.section} className="bf-section">
-              <h2 style={styles.sectionTitle}>
-                <FiDollarSign size={16} />
-                Currency Selection
-              </h2>
-              <div style={styles.currencyButtons} className="bf-currency-buttons">
-                <button
-                  type="button"
-                  onClick={() => setCurrency("USD")}
-                  className="bf-currency-btn"
-                  style={{
-                    ...styles.currencyBtn,
-                    ...(currency === "USD" ? styles.currencyBtnActiveUSD : styles.currencyBtnInactive)
-                  }}
-                >
-                  🇺🇸 USD
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrency("IQD")}
-                  className="bf-currency-btn"
-                  style={{
-                    ...styles.currencyBtn,
-                    ...(currency === "IQD" ? styles.currencyBtnActiveIQD : styles.currencyBtnInactive)
-                  }}
-                >
-                  🇮🇶 IQD
-                </button>
-              </div>
-              <p style={{ fontSize: '11px', color: '#94a3b8', margin: '8px 0 0' }}>
-                USD and IQD are independent — prices are not converted between them.
-              </p>
-            </div>
-
-            {/* Company Information */}
-            <div style={styles.section} className="bf-section">
-              <h2 style={styles.sectionTitle}>
+            {/* Section 1: Currency & Supplier Information */}
+            <div className="bf-section bf-section-company">
+              <div className="bf-section-title">
                 <FiUser size={16} />
-                Company Information
-              </h2>
-              <div style={styles.formRow} className="bf-form-row">
-                <div style={{ ...styles.formGroup, ...styles.relative }} className="bf-company-wrapper">
-                  <label style={styles.label}>Company Search</label>
-                  <div style={styles.relative}>
+                <span>1. Supplier & Currency Setup</span>
+              </div>
+
+              <div className="bf-grid-3" style={{ marginBottom: "1rem" }}>
+                <div className="bf-form-group">
+                  <label className="bf-label">Operating Currency</label>
+                  <div className="bf-currency-toggle">
+                    <button
+                      type="button"
+                      onClick={() => setCurrency("USD")}
+                      className={`bf-currency-btn ${currency === "USD" ? "active-usd" : ""}`}
+                    >
+                      USD ($)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrency("IQD")}
+                      className={`bf-currency-btn ${currency === "IQD" ? "active-iqd" : ""}`}
+                    >
+                      IQD (د.ع)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bf-form-group" style={{ gridColumn: "span 2" }}>
+                  <label className="bf-label">Supplier Company *</label>
+                  <div style={{ position: "relative" }}>
                     <input
                       ref={companySearchRef}
                       type="text"
-                      style={{
-                        ...styles.input,
-                        borderColor: showCompanySuggestions ? '#3b82f6' : '#cbd5e1',
-                        boxShadow: showCompanySuggestions ? '0 0 0 3px rgba(59, 130, 246, 0.2)' : 'none',
-                      }}
+                      className="bf-input"
                       value={companySearch}
                       onChange={(e) => setCompanySearch(e.target.value)}
                       onFocus={handleCompanyFocus}
                       onBlur={handleCompanyBlur}
-                      placeholder="Search by code or name..."
+                      placeholder="Search company by code or name..."
                       required
                     />
                     {showCompanySuggestions && companySuggestions.length > 0 && (
-                      <div className="bf-company-suggestions">
+                      <div className="bf-dropdown">
                         {companySuggestions.map((company) => (
                           <div
                             key={company.id}
-                            className="bf-suggestion"
-                            style={styles.suggestionItem}
+                            className="bf-dropdown-item"
                             onClick={() => handleCompanySelect(company)}
                             onMouseDown={(e) => e.preventDefault()}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = '#eef2ff';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                            }}
                           >
-                            <div style={{ fontWeight: 600, color: '#1e293b' }}>{company.name}</div>
-                            <div style={{ fontSize: 11, color: '#64748b' }}>
-                              Code: {company.code}
-                              {company.currency && ` • Currency: ${company.currency}`}
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{company.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                              Code: {company.code} {company.currency && `• Default Currency: ${company.currency}`}
                             </div>
                           </div>
                         ))}
@@ -1211,118 +992,126 @@ export default function BuyingForm({ onBillCreated }) {
                     )}
                   </div>
                 </div>
+              </div>
 
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Bill Date</label>
+              <div className="bf-grid-3">
+                <div className="bf-form-group">
+                  <label className="bf-label">Bill Date (dd/mm/yyyy) *</label>
                   <input
-                    type="date"
-                    style={styles.input}
+                    type="text"
+                    className="bf-input"
                     value={billDate}
                     onChange={(e) => setBillDate(e.target.value)}
+                    placeholder="dd/mm/yyyy"
                     required
                   />
                 </div>
 
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Company Bill Number</label>
+                <div className="bf-form-group">
+                  <label className="bf-label">Supplier Reference / Invoice #</label>
                   <input
                     type="text"
-                    style={styles.input}
+                    className="bf-input"
                     value={companyBillNumber}
                     onChange={(e) => setCompanyBillNumber(e.target.value)}
                     onFocus={selectOnFocus}
-                    placeholder="Enter company bill #"
+                    placeholder="e.g. INV-2026-001"
                   />
                 </div>
 
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Payment Method</label>
+                <div className="bf-form-group">
+                  <label className="bf-label">Payment Terms</label>
                   <select
-                    style={styles.select}
+                    className="bf-select"
                     value={paymentStatus}
                     onChange={(e) => setPaymentStatus(e.target.value)}
-                    required
                   >
-                    <option value="Unpaid">Unpaid</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Paid">Paid</option>
+                    <option value="Unpaid">Unpaid (Credit / Debt)</option>
+                    <option value="Cash">Cash On Delivery</option>
+                    <option value="Paid">Fully Paid</option>
                   </select>
                 </div>
 
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Branch</label>
+                <div className="bf-form-group">
+                  <label className="bf-label">Destination Branch</label>
                   <select
-                    style={styles.select}
+                    className="bf-select"
                     value={branch}
                     onChange={(e) => setBranch(e.target.value)}
-                    required
                   >
-                    <option value="Slemany">Slemany</option>
-                    <option value="Erbil">Erbil</option>
+                    <option value="Slemany">Slemany Branch</option>
+                    <option value="Erbil">Erbil Branch</option>
                   </select>
+                </div>
+
+                <div className="bf-form-group" style={{ justifyContent: "center" }}>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", marginTop: "1.25rem", userSelect: "none" }}>
+                    <input
+                      type="checkbox"
+                      checked={isConsignment}
+                      onChange={(e) => setIsConsignment(e.target.checked)}
+                      style={{ width: "1.125rem", height: "1.125rem", accentColor: "#2563eb", cursor: "pointer" }}
+                    />
+                    <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#1e293b" }}>Consignment Item (تحت صرف)</span>
+                  </label>
                 </div>
               </div>
             </div>
 
-            {/* Items Section */}
-            <div style={styles.section} className="bf-section">
-              <h2 style={styles.sectionTitle}>
+            {/* Section 2: Items Search & Table Entry */}
+            <div className="bf-section bf-section-items">
+              <div className="bf-section-title">
                 <FiPackage size={16} />
-                Bill Items
-                <span style={styles.sectionTitleBadge}>{validItemsCount}</span>
-              </h2>
-
-              {/* Search Items */}
-              <div style={styles.searchWrapper}>
-                <FiSearch style={styles.searchIcon} size={15} />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  style={styles.searchInput}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search items by barcode or name..."
-                />
-                {showSuggestions && suggestions.length > 0 && (
-                  <div style={styles.suggestionBox}>
-                    {suggestions.map((item) => (
-                      <div
-                        key={item.id}
-                        className="bf-suggestion"
-                        style={styles.suggestionItem}
-                        onClick={() => handleItemSelect(item)}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#eef2ff';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                        }}
-                      >
-                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{item.name}</div>
-                        <div style={{ fontSize: 11, color: '#64748b' }}>
-                          Barcode: {item.barcode}
-                          {item.expireDate && item.expireDate !== 'N/A' && ` | Expires: ${formatDateToDDMMYYYY(item.expireDate)}`}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <span>2. Line Items ({validItemsCount})</span>
               </div>
 
-              {/* Items Table */}
-              <div style={styles.tableWrapper}>
-                <table style={styles.table}>
+              {/* Master Search Input */}
+              <div className="bf-form-group" style={{ marginBottom: "1rem" }}>
+                <label className="bf-label">Quick Search Catalog & Add Item</label>
+                <div style={{ position: "relative" }}>
+                  <FiSearch style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} size={16} />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    className="bf-input"
+                    style={{ paddingLeft: "2.25rem", background: "#fffbeb", borderColor: "#fde68a" }}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Type barcode or product name to auto-fill..."
+                  />
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div className="bf-dropdown">
+                      {suggestions.map((item) => (
+                        <div
+                          key={item.id}
+                          className="bf-dropdown-item"
+                          onClick={() => handleItemSelect(item)}
+                          onMouseDown={(e) => e.preventDefault()}
+                        >
+                          <div style={{ fontWeight: 600, color: "#0f172a" }}>{item.name}</div>
+                          <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                            Barcode: {item.barcode} {item.expireDate && item.expireDate !== 'N/A' && `| Expires: ${formatDateToDDMMYYYY(item.expireDate)}`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Item Table Grid */}
+              <div className="bf-table-container">
+                <table className="bf-table">
                   <thead>
                     <tr>
-                      <th style={styles.th}>Barcode</th>
-                      <th style={styles.th}>Item Name</th>
-                      <th style={{ ...styles.th, textAlign: 'center' }}>Qty</th>
-                      <th style={{ ...styles.th, textAlign: 'right' }}>Buy Price ({currency})</th>
-                      <th style={{ ...styles.th, textAlign: 'right' }}>Out Price ({currency})</th>
-                      <th style={{ ...styles.th, textAlign: 'right' }}>Net Price ({currency})</th>
-                      <th style={styles.th}>Expire Date</th>
-                      <th style={{ ...styles.th, textAlign: 'center' }}>Actions</th>
+                      <th style={{ width: "15%" }}>Barcode</th>
+                      <th style={{ width: "25%" }}>Product Description</th>
+                      <th style={{ width: "8%", textAlign: "center" }}>Qty</th>
+                      <th style={{ width: "13%", textAlign: "right" }}>Buy Price ({currency})</th>
+                      <th style={{ width: "13%", textAlign: "right" }}>Selling Price ({currency})</th>
+                      <th style={{ width: "13%", textAlign: "right" }}>Net Cost ({currency})</th>
+                      <th style={{ width: "10%" }}>Expire Date</th>
+                      <th style={{ width: "3%", textAlign: "center" }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1334,12 +1123,14 @@ export default function BuyingForm({ onBillCreated }) {
                         parseFloat(parseFormattedNumber(externalExpense)) || 0,
                         parseFloat(parseFormattedNumber(expensePercentage)) || 0
                       );
+
                       return (
-                        <tr key={index} className="bf-row-hover">
-                          <td style={styles.td}>
+                        <tr key={index}>
+                          <td>
                             <input
                               ref={(el) => itemInputRefs.current[`${index}-barcode`] = el}
-                              style={styles.textInput}
+                              type="text"
+                              className="bf-table-input"
                               value={item.barcode || ''}
                               onChange={(e) => handleItemChange(index, "barcode", e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 'barcode')}
@@ -1347,36 +1138,39 @@ export default function BuyingForm({ onBillCreated }) {
                               placeholder="Barcode"
                             />
                           </td>
-                          <td style={styles.td}>
+                          <td>
                             <input
                               ref={(el) => itemInputRefs.current[`${index}-name`] = el}
-                              style={styles.textInput}
+                              type="text"
+                              className="bf-table-input"
                               value={item.name || ''}
                               onChange={(e) => handleItemChange(index, "name", e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 'name')}
                               onFocus={selectOnFocus}
-                              placeholder="Item name"
+                              placeholder="Product name"
                             />
                           </td>
-                          <td style={{ ...styles.td, textAlign: 'center' }}>
+                          <td style={{ textAlign: "center" }}>
                             <input
                               ref={(el) => itemInputRefs.current[`${index}-quantity`] = el}
                               type="number"
                               min="1"
                               step="1"
-                              style={styles.smallInput}
+                              className="bf-table-input"
+                              style={{ textAlign: "center", fontWeight: 600 }}
                               value={item.quantity || 1}
                               onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 'quantity')}
                               onFocus={selectOnFocus}
                             />
                           </td>
-                          <td style={{ ...styles.td, textAlign: 'right' }}>
+                          <td>
                             <input
                               ref={(el) => itemInputRefs.current[`${index}-price`] = el}
                               type="text"
                               inputMode="decimal"
-                              style={styles.priceInput}
+                              className="bf-table-input"
+                              style={{ textAlign: "right" }}
                               value={item.price}
                               onChange={(e) => {
                                 const formatted = formatNumber(e.target.value);
@@ -1392,12 +1186,13 @@ export default function BuyingForm({ onBillCreated }) {
                               placeholder="0.00"
                             />
                           </td>
-                          <td style={{ ...styles.td, textAlign: 'right' }}>
+                          <td>
                             <input
                               ref={(el) => itemInputRefs.current[`${index}-outPrice`] = el}
                               type="text"
                               inputMode="decimal"
-                              style={styles.outPriceInput}
+                              className="bf-table-input"
+                              style={{ textAlign: "right", background: "#fffbeb", borderColor: "#fde68a" }}
                               value={item.outPrice || ''}
                               onChange={(e) => {
                                 const formatted = formatNumber(e.target.value);
@@ -1405,31 +1200,30 @@ export default function BuyingForm({ onBillCreated }) {
                               }}
                               onKeyDown={(e) => handleKeyDown(e, index, 'outPrice')}
                               onFocus={selectOnFocus}
-                              placeholder="Selling price"
+                              placeholder="0.00"
                             />
                           </td>
-                          <td style={{ ...styles.td, textAlign: 'right', fontWeight: '700', color: '#4f46e5' }}>
+                          <td style={{ textAlign: "right", fontWeight: 700, color: "#2563eb" }}>
                             {formatNumber(netPrice)}
                           </td>
-                          <td style={styles.td}>
+                          <td>
                             <input
                               ref={(el) => itemInputRefs.current[`${index}-expireDate`] = el}
-                              type="date"
-                              style={styles.textInput}
+                              type="text"
+                              className="bf-table-input"
+                              placeholder="dd/mm/yyyy"
                               value={item.expireDate || ''}
                               onChange={(e) => handleItemChange(index, "expireDate", e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 'expireDate')}
                             />
                           </td>
-                          <td style={{ ...styles.td, textAlign: 'center' }}>
+                          <td style={{ textAlign: "center" }}>
                             <button
                               type="button"
                               onClick={() => removeItem(index)}
-                              className="bf-delete-btn"
-                              style={styles.deleteButton}
-                              aria-label="Remove item"
+                              style={{ background: "#fef2f2", border: "none", color: "#ef4444", padding: "0.375rem", borderRadius: "6px", cursor: "pointer", display: "inline-flex" }}
                             >
-                              <FiTrash2 size={15} />
+                              <FiTrash2 size={14} />
                             </button>
                           </td>
                         </tr>
@@ -1439,143 +1233,124 @@ export default function BuyingForm({ onBillCreated }) {
                 </table>
               </div>
 
-              {/* Add Item Button */}
-              {/* <button
+              <button
                 type="button"
                 onClick={addItem}
-                style={styles.addButton}
-                className="bf-add-btn"
+                className="bf-btn bf-btn-secondary"
+                style={{ marginTop: "0.75rem", width: "100%", justifyContent: "center" }}
               >
-                <FiPlus size={16} /> Add Itemmm
-              </button> */}
-
-              {/* Total Base Price */}
-              <div style={styles.totalBox}>
-                <span style={styles.totalLabel}>Total Base Price:</span>
-                <span style={styles.totalValue}>{formatNumber(totalBasePrice)} {currency}</span>
-              </div>
+                <FiPlus size={16} /> Add Empty Line Row
+              </button>
             </div>
 
-            {/* Expenses Section */}
-            <div style={styles.section} className="bf-section">
-              <h2 style={styles.sectionTitle}>
+            {/* Section 3: Overhead & Notes */}
+            <div className="bf-section">
+              <div className="bf-section-title">
                 <FiTruck size={16} />
-                Additional Costs
-              </h2>
-              <div style={styles.formRow} className="bf-form-row">
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Transport Fee ({currency})</label>
+                <span>3. Additional Expenses & Notes</span>
+              </div>
+
+              <div className="bf-grid-3" style={{ marginBottom: "1rem" }}>
+                <div className="bf-form-group">
+                  <label className="bf-label">Transport Costs ({currency})</label>
                   <input
                     ref={transportFeeRef}
                     type="text"
                     inputMode="decimal"
+                    className="bf-input"
                     value={transportFee}
                     onChange={(e) => handleNumberInput(e.target.value, setTransportFee)}
                     onKeyDown={(e) => handleKeyDown(e, null, 'transportFee')}
                     onFocus={selectOnFocus}
-                    style={styles.input}
                     placeholder="0.00"
                   />
                 </div>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Other Expenses ({currency})</label>
+
+                <div className="bf-form-group">
+                  <label className="bf-label">Other Overhead / Customs ({currency})</label>
                   <input
                     ref={externalExpenseRef}
                     type="text"
                     inputMode="decimal"
+                    className="bf-input"
                     value={externalExpense}
                     onChange={(e) => handleNumberInput(e.target.value, setExternalExpense)}
                     onKeyDown={(e) => handleKeyDown(e, null, 'externalExpense')}
                     onFocus={selectOnFocus}
-                    style={styles.input}
                     placeholder="0.00"
                   />
                 </div>
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>Expense Percentage (%)</label>
+
+                <div className="bf-form-group">
+                  <label className="bf-label">Expense Margin (%)</label>
                   <input
                     ref={expensePercentageRef}
                     type="text"
                     inputMode="decimal"
+                    className="bf-input"
                     value={expensePercentage}
                     onChange={(e) => handleNumberInput(e.target.value, setExpensePercentage)}
                     onKeyDown={(e) => handleKeyDown(e, null, 'expensePercentage')}
                     onFocus={selectOnFocus}
-                    style={styles.input}
                     placeholder="7"
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Bill Notes */}
-            <div style={styles.section} className="bf-section">
-              <h2 style={styles.sectionTitle}>
-                <FiFileText size={16} />
-                Bill Notes
-              </h2>
-              <textarea
-                ref={billNoteRef}
-                style={{ ...styles.input, width: '100%', minHeight: '64px', resize: 'vertical' }}
-                value={billNote}
-                onChange={(e) => setBillNote(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (submitButtonRef.current) {
-                      submitButtonRef.current.focus();
-                      submitButtonRef.current.click();
-                    }
-                  }
-                }}
-                placeholder="Add any notes for this bill... (Press Enter to submit)"
-              />
-            </div>
-
-            {/* Consignment Option */}
-            <div style={styles.section} className="bf-section">
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={isConsignment}
-                  onChange={(e) => setIsConsignment(e.target.checked)}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              <div className="bf-form-group">
+                <label className="bf-label">Internal Notes / Memo</label>
+                <textarea
+                  ref={billNoteRef}
+                  className="bf-textarea"
+                  style={{ minHeight: "70px", resize: "vertical" }}
+                  value={billNote}
+                  onChange={(e) => setBillNote(e.target.value)}
+                  placeholder="Enter invoice notes or purchase remarks..."
                 />
-                <span style={{ fontWeight: 600, fontSize: '13px' }}>Consignment (تحت صرف)</span>
-              </label>
+              </div>
             </div>
 
-            {/* Actions */}
-            <div style={styles.buttonGroup} className="bf-button-group">
-              <button type="button" onClick={resetForm} className="bf-reset-btn" style={styles.resetButton}>
-                <FiRefreshCw size={14} /> Reset Form
-              </button>
-              <div style={styles.rightGroup} className="bf-right-group">
-                {isEditing && (
-                  <button type="button" onClick={handleCancel} className="bf-cancel-btn" style={styles.cancelButton}>
-                    <FiX size={14} /> Cancel
-                  </button>
-                )}
-                <button
-                  ref={submitButtonRef}
-                  type="submit"
-                  disabled={isLoading}
-                  className="bf-submit-btn"
-                  style={{
-                    ...styles.submitButton,
-                    opacity: isLoading ? 0.6 : 1,
-                    cursor: isLoading ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {isLoading ? (
-                    <>Processing...</>
-                  ) : isEditing ? (
-                    <>Update Bill</>
-                  ) : (
-                    <>Create Bill</>
-                  )}
-                </button>
+            {/* Summary Footer */}
+            <div className="bf-summary-bar">
+              <div className="bf-summary-item">
+                <span className="bf-summary-label">Total Units</span>
+                <span className="bf-summary-value">{totalQuantity}</span>
               </div>
+              <div className="bf-summary-item">
+                <span className="bf-summary-label">Total Base Subtotal</span>
+                <span className="bf-summary-value" style={{ color: "#2563eb" }}>
+                  {formatNumber(totalBasePrice)} {currency}
+                </span>
+              </div>
+            </div>
+
+            {/* Actions Bar */}
+            <div className="bf-actions">
+              <button type="button" onClick={resetForm} className="bf-btn bf-btn-secondary">
+                <FiRefreshCw size={14} /> Clear Form
+              </button>
+
+              {isEditing && (
+                <button type="button" onClick={handleCancel} className="bf-btn bf-btn-danger">
+                  <FiX size={14} /> Cancel Edit
+                </button>
+              )}
+
+              <button
+                ref={submitButtonRef}
+                type="submit"
+                disabled={isLoading}
+                className="bf-btn bf-btn-primary"
+              >
+                {isLoading ? (
+                  <span>Processing...</span>
+                ) : (
+                  <>
+                    <FiCheckCircle size={16} />
+                    <span>{isEditing ? "Save & Update Bill" : "Finalize & Save Bill"}</span>
+                  </>
+                )}
+              </button>
             </div>
           </form>
         </div>

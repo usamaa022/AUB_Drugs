@@ -14,8 +14,7 @@ import {
   Timestamp,
   setDoc,
 } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { db, storage, secondaryAuth } from "./firebase";
+import { db, storage } from "./firebase";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 // Collections
@@ -36,38 +35,6 @@ const EMPLOYEES_COLLECTION = "employees";
 const EMPLOYEE_ACCOUNTS_COLLECTION = "employeeAccounts";
 const SHIPMENTS_COLLECTION = "shipments";
 const EMPLOYEE_PURCHASES_COLLECTION = "employeePurchases";
-const CATALOG_COLLECTION = "catalogItems";
-
-// ============================================================
-// NEW: User Account Creation for Firebase Auth + Firestore Sync
-// ============================================================
-
-export async function createNewUserAccount({ email, password, displayName, role, branch }) {
-  try {
-    const cleanEmail = email.trim().toLowerCase();
-    
-    // 1. Create User in Firebase Auth using Secondary Instance (prevents logging out the active admin)
-    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, password);
-    const authUser = userCredential.user;
-
-    // 2. Save document to Firestore using the exact generated UID as Document ID
-    await setDoc(doc(db, "users", authUser.uid), {
-      uid: authUser.uid,
-      email: cleanEmail,
-      displayName: displayName || "",
-      password: password,
-      role: role || "user",
-      branch: branch || "Slemany",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-
-    return { uid: authUser.uid, email: cleanEmail };
-  } catch (error) {
-    console.error("Error creating user account:", error);
-    throw error;
-  }
-}
 
 // Helper function to convert any date to Firestore Timestamp with UTC normalization
 export function toFirestoreTimestamp(date) {
@@ -266,13 +233,18 @@ export async function addPharmacy(pharmacy) {
   }
 }
 
+// lib/data.js - Fix this function
+
 export async function updatePharmacy(updatedPharmacy) {
   try {
+    // Make sure we have an id
     if (!updatedPharmacy || !updatedPharmacy.id) {
       throw new Error("Pharmacy ID is required for update");
     }
     
     const pharmacyRef = doc(db, PHARMACIES_COLLECTION, updatedPharmacy.id);
+    
+    // Remove id from the update data to avoid issues
     const { id, ...updateData } = updatedPharmacy;
     
     await updateDoc(pharmacyRef, updateData);
@@ -297,16 +269,19 @@ export async function searchPharmacies(searchQuery) {
   try {
     const pharmaciesRef = collection(db, PHARMACIES_COLLECTION);
     
+    // If search query is empty or just whitespace, return all pharmacies
     if (!searchQuery || searchQuery.trim() === "") {
       const snapshot = await getDocs(pharmaciesRef);
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     }
     
+    // Get all pharmacies and filter client-side for case-insensitive search
     const snapshot = await getDocs(pharmaciesRef);
     const allPharmacies = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     
     const searchLower = searchQuery.toLowerCase().trim();
     
+    // Filter pharmacies by name or code (case-insensitive)
     return allPharmacies.filter((pharmacy) => {
       const nameMatch = pharmacy.name?.toLowerCase().includes(searchLower);
       const codeMatch = pharmacy.code?.toString().toLowerCase().includes(searchLower);
@@ -314,6 +289,7 @@ export async function searchPharmacies(searchQuery) {
     });
   } catch (error) {
     console.error("Error searching pharmacies:", error);
+    // Fallback: try to get all pharmacies
     try {
       const snapshot = await getDocs(collection(db, PHARMACIES_COLLECTION));
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -398,22 +374,30 @@ export async function deleteInitializedItem(itemId) {
   }
 }
 
+// ============================================================
+// REPLACE THE ENTIRE searchInitializedItems FUNCTION IN data.js
+// ============================================================
+
 export async function searchInitializedItems(searchQuery, searchType = "both") {
   if (!searchQuery || searchQuery.length === 0) return [];
   
   try {
-    const storeItems = await getStoreItems(true);
+    // 🔥 CRITICAL FIX: Force refresh store items to get real-time stock
+    const storeItems = await getStoreItems(true); // true = force refresh
     
     const searchLower = searchQuery.trim().toLowerCase();
     const searchTerms = searchLower.split(/\s+/).filter(term => term.length > 0);
     
+    // Filter store items that have stock
     let results = storeItems.filter((item) => {
+      // Skip items with zero or negative quantity
       if (item.quantity <= 0) return false;
       
       const nameLower = item.name.toLowerCase();
       const barcodeLower = item.barcode.toLowerCase();
       
       if (searchType === "both" || searchType === "name") {
+        // Check if all search terms appear in the name
         const allTermsMatch = searchTerms.every(term => nameLower.includes(term));
         if (allTermsMatch) return true;
       }
@@ -425,6 +409,7 @@ export async function searchInitializedItems(searchQuery, searchType = "both") {
       return false;
     });
     
+    // If no results in store items, fall back to master items (but mark them as out of stock)
     if (results.length === 0) {
       const itemsRef = collection(db, ITEMS_COLLECTION);
       const snapshot = await getDocs(itemsRef);
@@ -447,7 +432,7 @@ export async function searchInitializedItems(searchQuery, searchType = "both") {
           outPriceUSD: data.outPriceUSD || (data.outPrice ? data.outPrice / 1500 : 0),
           expireDate: expireDate,
           currency: data.currency || "USD",
-          quantity: 0,
+          quantity: 0, // No stock in store
           inStock: false,
           ...data,
         };
@@ -470,6 +455,7 @@ export async function searchInitializedItems(searchQuery, searchType = "both") {
       });
     }
     
+    // Return results with stock information
     return results.map(item => ({
       ...item,
       inStock: (item.quantity || 0) > 0,
@@ -482,13 +468,18 @@ export async function searchInitializedItems(searchQuery, searchType = "both") {
   }
 }
 
+// ============================================================
+// UPDATE getStoreItems FUNCTION IN data.js
+// ============================================================
+
 let storeItemsCache = null;
 let lastFetchTime = 0;
-const CACHE_DURATION = 1000;
+const CACHE_DURATION = 1000; // 1 second cache for real-time updates
 
 export async function getStoreItems(forceRefresh = false) {
   try {
     const now = Date.now();
+    // Force refresh or cache expired
     if (!forceRefresh && storeItemsCache && now - lastFetchTime < CACHE_DURATION) {
       return JSON.parse(JSON.stringify(storeItemsCache));
     }
@@ -502,6 +493,8 @@ export async function getStoreItems(forceRefresh = false) {
       const data = doc.data();
       if (!data) continue;
       
+      // 🔥 CRITICAL: Only include items with quantity > 0
+      // Items with 0 quantity should not appear in store
       if (data.quantity === 0 || data.quantity === null || data.quantity === undefined) {
         continue;
       }
@@ -587,6 +580,9 @@ export async function getStoreItems(forceRefresh = false) {
     return [];
   }
 }
+    
+
+
 
 // Company Management Functions
 export async function getCompanies() {
@@ -664,6 +660,9 @@ export async function getBoughtBills() {
   }
 }
 
+// ===================== COMPLETE createBoughtBill FUNCTION =====================
+// Replace your existing createBoughtBill function with this one
+
 export async function createBoughtBill(
   companyId,
   billItems,
@@ -686,98 +685,100 @@ export async function createBoughtBill(
     const currency = additionalData.currency || "USD";
     const exchangeRate = additionalData.exchangeRate || 1500;
 
-    let parsedBillDate = null;
-    if (additionalData.billDate || additionalData.date) {
-      const rawDate = additionalData.billDate || additionalData.date;
-      if (rawDate instanceof Date) {
-        parsedBillDate = Timestamp.fromDate(rawDate);
-      } else if (rawDate?.toDate) {
-        parsedBillDate = rawDate;
-      } else if (typeof rawDate === "string") {
-        const now = new Date();
-        if (rawDate.includes("/")) {
-          const [day, month, year] = rawDate.split("/");
-          parsedBillDate = Timestamp.fromDate(
-            new Date(parseInt(year), parseInt(month) - 1, parseInt(day), now.getHours(), now.getMinutes(), now.getSeconds())
-          );
-        } else if (rawDate.includes("-")) {
-          const [year, month, day] = rawDate.split("-");
-          parsedBillDate = Timestamp.fromDate(
-            new Date(parseInt(year), parseInt(month) - 1, parseInt(day), now.getHours(), now.getMinutes(), now.getSeconds())
-          );
-        }
-      }
-    }
-
+    // ==================== PROCESS ITEMS ====================
     const itemsWithExpireDate = [];
-
+    
     for (const item of billItems) {
       if (!item.barcode) throw new Error("Item barcode is required.");
 
+      // Parse expire date
       let expireDateTimestamp = null;
       if (item.expireDate) {
         if (typeof item.expireDate === "string") {
-          if (item.expireDate.includes("/")) {
-            const [day, month, year] = item.expireDate.split("/");
-            if (day && month && year) {
-              expireDateTimestamp = Timestamp.fromDate(new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0)));
-            }
-          } else if (item.expireDate.includes("-")) {
-            const [year, month, day] = item.expireDate.split("-");
-            if (year && month && day) {
-              expireDateTimestamp = Timestamp.fromDate(new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0)));
-            }
+          const [year, month, day] = item.expireDate.split("-");
+          if (year && month && day) {
+            const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0));
+            if (!isNaN(date.getTime())) expireDateTimestamp = Timestamp.fromDate(date);
           }
         } else if (item.expireDate instanceof Date) {
-          expireDateTimestamp = Timestamp.fromDate(new Date(Date.UTC(item.expireDate.getFullYear(), item.expireDate.getMonth(), item.expireDate.getDate(), 12, 0, 0)));
+          const date = new Date(Date.UTC(
+            item.expireDate.getFullYear(),
+            item.expireDate.getMonth(),
+            item.expireDate.getDate(),
+            12, 0, 0
+          ));
+          expireDateTimestamp = Timestamp.fromDate(date);
         } else if (item.expireDate?.seconds) {
           expireDateTimestamp = new Timestamp(item.expireDate.seconds, item.expireDate.nanoseconds);
         }
       }
 
+      // Ensure price is set correctly
       let priceValue = parseFloat(item.price);
       if (isNaN(priceValue) || priceValue <= 0) {
         throw new Error(`Invalid price for item ${item.name}. Price must be greater than 0.`);
       }
 
-      let basePriceUSD = 0, basePriceIQD = 0;
-      let netPriceUSD = 0, netPriceIQD = 0;
-      let outPriceUSD = 0, outPriceIQD = 0;
+      let basePriceUSD = 0;
+      let basePriceIQD = 0;
+      let netPriceUSD = 0;
+      let netPriceIQD = 0;
+      let outPriceUSD = 0;
+      let outPriceIQD = 0;
 
+      // Set values based on currency
       if (currency === "USD") {
         basePriceUSD = priceValue;
+        basePriceIQD = 0;
         netPriceUSD = item.netPriceUSD || basePriceUSD;
+        netPriceIQD = 0;
         outPriceUSD = item.outPriceUSD || basePriceUSD * 1.5;
+        outPriceIQD = 0;
       } else {
+        // IQD currency
         basePriceIQD = priceValue;
+        basePriceUSD = 0;
         netPriceIQD = item.netPriceIQD || basePriceIQD;
+        netPriceUSD = 0;
         outPriceIQD = item.outPriceIQD || basePriceIQD * 1.5;
+        outPriceUSD = 0;
       }
 
+      // ==================== CATALOG INTEGRATION ====================
+      // Auto-create catalog item if it doesn't exist
       let catalogId = item.catalogId || null;
+      
       if (!catalogId) {
         try {
+          // Check if catalog item exists by name
           const existingCatalog = await getCatalogItemByName(item.name);
+          
           if (existingCatalog) {
+            // Use existing catalog ID
             catalogId = existingCatalog.id;
+            console.log(`✅ Found existing catalog item: "${item.name}" (${catalogId})`);
           } else {
+            // Create new catalog item (invisible by default)
             const newCatalogItem = await createCatalogItem({
               name: item.name,
               description: item.description || "",
               image: item.image || "",
               category: item.category || "Uncategorized",
               basePrice: priceValue,
-              isVisible: false,
+              isVisible: false, // IMPORTANT: Invisible by default
               unit: item.unit || "piece",
               barcode: item.barcode || "",
             });
             catalogId = newCatalogItem.id;
+            console.log(`🆕 Created new catalog item: "${item.name}" (${catalogId}) - INVISIBLE`);
           }
         } catch (catalogError) {
           console.error(`⚠️ Failed to sync item "${item.name}" to catalog:`, catalogError);
+          // Continue anyway - don't block the bill creation
         }
       }
 
+      // Build the store item with catalog reference
       const storeItem = {
         barcode: item.barcode,
         name: item.name,
@@ -799,6 +800,7 @@ export async function createBoughtBill(
         price: priceValue,
         currency: currency,
         priceType: currency,
+        // Catalog reference
         catalogId: catalogId,
         catalogSyncedAt: catalogId ? new Date() : null,
       };
@@ -806,11 +808,13 @@ export async function createBoughtBill(
       itemsWithExpireDate.push(storeItem);
     }
 
+    // ==================== CALCULATE TOTALS ====================
     const totalTransportFeeUSD = currency === "USD" ? additionalData.transportFee || 0 : 0;
     const totalTransportFeeIQD = currency === "IQD" ? additionalData.transportFee || 0 : 0;
     const totalExternalExpenseUSD = currency === "USD" ? additionalData.externalExpense || 0 : 0;
     const totalExternalExpenseIQD = currency === "IQD" ? additionalData.externalExpense || 0 : 0;
 
+    // ==================== PREPARE BILL DATA ====================
     const bill = {
       billNumber,
       companyBillNumber: companyBillNumber || "",
@@ -833,15 +837,9 @@ export async function createBoughtBill(
       updatedAt: serverTimestamp(),
     };
 
-    if (parsedBillDate) {
-      bill.date = parsedBillDate;
-    }
+    if (!isUpdating) bill.createdAt = serverTimestamp();
 
-    if (!isUpdating) {
-      bill.createdAt = serverTimestamp();
-      if (!bill.date) bill.date = serverTimestamp();
-    }
-
+    // ==================== UPDATE EXISTING BILL ====================
     if (isUpdating) {
       const billsQuery = query(collection(db, BOUGHT_BILLS_COLLECTION), where("billNumber", "==", billNumber));
       const billsSnapshot = await getDocs(billsQuery);
@@ -849,18 +847,18 @@ export async function createBoughtBill(
 
       const billDoc = billsSnapshot.docs[0];
       const billRef = doc(db, BOUGHT_BILLS_COLLECTION, billDoc.id);
-
-      if (!bill.date) {
-        bill.date = billDoc.data().date;
-      }
-
       await updateDoc(billRef, bill);
+
+      // Update store items
+      const storeItemsQuery = query(collection(db, STORE_ITEMS_COLLECTION), where("boughtBillNumber", "==", billNumber));
+      const storeItemsSnapshot = await getDocs(storeItemsQuery);
 
       for (const item of bill.items) {
         const existingStoreItemQuery = query(
           collection(db, STORE_ITEMS_COLLECTION),
           where("boughtBillNumber", "==", billNumber),
-          where("barcode", "==", item.barcode)
+          where("barcode", "==", item.barcode),
+          where("expireDate", "==", item.expireDate)
         );
 
         const existingStoreItemSnapshot = await getDocs(existingStoreItemQuery);
@@ -908,11 +906,32 @@ export async function createBoughtBill(
       };
     }
 
-    for (const item of bill.items) {
-      let existingQuery = currency === "USD" 
-        ? query(collection(db, STORE_ITEMS_COLLECTION), where("barcode", "==", item.barcode), where("expireDate", "==", item.expireDate), where("priceType", "==", "USD"), where("netPriceUSD", "==", item.netPriceUSD || 0))
-        : query(collection(db, STORE_ITEMS_COLLECTION), where("barcode", "==", item.barcode), where("expireDate", "==", item.expireDate), where("priceType", "==", "IQD"), where("netPriceIQD", "==", item.netPriceIQD || 0));
+    // ==================== CREATE NEW BILL ====================
+    // Auto-create catalog items BEFORE adding to store
+    // (This is already done in the items processing loop above)
 
+    // Add items to store
+    for (const item of bill.items) {
+      // Query for existing store items with the same barcode, expire date, and currency
+      let existingQuery;
+      if (currency === "USD") {
+        existingQuery = query(
+          collection(db, STORE_ITEMS_COLLECTION),
+          where("barcode", "==", item.barcode),
+          where("expireDate", "==", item.expireDate),
+          where("priceType", "==", "USD"),
+          where("netPriceUSD", "==", item.netPriceUSD || 0)
+        );
+      } else {
+        existingQuery = query(
+          collection(db, STORE_ITEMS_COLLECTION),
+          where("barcode", "==", item.barcode),
+          where("expireDate", "==", item.expireDate),
+          where("priceType", "==", "IQD"),
+          where("netPriceIQD", "==", item.netPriceIQD || 0)
+        );
+      }
+      
       const existing = await getDocs(existingQuery);
 
       if (!existing.empty) {
@@ -944,8 +963,9 @@ export async function createBoughtBill(
       }
     }
 
+    // Create the bill
     const billRef = await addDoc(collection(db, BOUGHT_BILLS_COLLECTION), bill);
-
+    
     return {
       id: billRef.id,
       ...bill,
@@ -981,6 +1001,8 @@ export async function createSoldBill(billData) {
     const finalCreatedBy = createdBy && createdBy !== "unknown" ? createdBy : "system";
     const finalCreatedByName = createdByName && createdByName !== "Unknown User" ? createdByName : "System User";
 
+    // ── STEP 1: DEDUCT STOCK IMMEDIATELY ──────────────────────────────
+    // This is the CRITICAL fix - deduct before creating the bill
     const allocationsByItem = [];
 
     for (const item of preparedItems) {
@@ -990,6 +1012,7 @@ export async function createSoldBill(billData) {
       let remainingQty = quantityNeeded;
       const allocations = [];
 
+      // If a specific batch was selected, try to use it first
       if (item.batchId) {
         try {
           const exactRef = doc(db, STORE_ITEMS_COLLECTION, item.batchId);
@@ -1017,6 +1040,7 @@ export async function createSoldBill(billData) {
         }
       }
 
+      // If still need more, find other batches (FIFO by expiry date)
       if (remainingQty > 0) {
         const storeItemsRef = collection(db, STORE_ITEMS_COLLECTION);
         const spillQuery = query(
@@ -1024,10 +1048,11 @@ export async function createSoldBill(billData) {
           where("barcode", "==", item.barcode),
           where("originalCurrency", "==", originalCurrency),
           where("branch", "==", branch),
-          where("quantity", ">", 0)
+          where("quantity", ">", 0) // Only get items with stock
         );
         const spillSnapshot = await getDocs(spillQuery);
         
+        // Sort by expiry date (FIFO)
         const candidates = spillSnapshot.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((d) => d.quantity > 0 && !allocations.some(a => a.storeItemId === d.id))
@@ -1057,6 +1082,7 @@ export async function createSoldBill(billData) {
       }
 
       if (remainingQty > 0) {
+        // Rollback all deductions for this item
         for (const alloc of allocations) {
           try {
             const rollbackRef = doc(db, STORE_ITEMS_COLLECTION, alloc.storeItemId);
@@ -1077,6 +1103,7 @@ export async function createSoldBill(billData) {
       allocationsByItem.push(allocations);
     }
 
+    // ── STEP 2: Build the bill's item records ──────────────────────────
     const processedItems = preparedItems.map((item, idx) => {
       const netPriceUSD = item.netPriceUSD || 0;
       const netPriceIQD = item.netPriceIQD || 0;
@@ -1095,6 +1122,15 @@ export async function createSoldBill(billData) {
           const date = new Date(item.expireDate);
           if (!isNaN(date.getTime())) expireDateTimestamp = Timestamp.fromDate(date);
         }
+      }
+
+      // Get the actual store item details for the batch used
+      let selectedBatch = null;
+      const allocations = allocationsByItem[idx] || [];
+      if (allocations.length > 0) {
+        // Use the first allocation's batch info
+        const firstAlloc = allocations[0];
+        // We already have the batch info from the deduction
       }
 
       return {
@@ -1125,6 +1161,7 @@ export async function createSoldBill(billData) {
         expireDate_original: item.expireDate || null,
         isConsignment_original: item.isConsignment || false,
         consignmentOwnerId_original: item.consignmentOwnerId || null,
+        // Store the EXACT allocations for this bill
         batchAllocations: allocationsByItem[idx],
       };
     });
@@ -1156,6 +1193,10 @@ export async function createSoldBill(billData) {
 
     const billRef = await addDoc(collection(db, SOLD_BILLS_COLLECTION), bill);
 
+    console.log(`✅ Sold bill #${billNumber} created successfully with ID: ${billRef.id}`);
+    console.log(`📊 Stock deductions: ${allocationsByItem.flat().length} batches affected`);
+    
+    // Clear the store items cache
     storeItemsCache = null;
     lastFetchTime = 0;
 
@@ -1174,6 +1215,7 @@ export async function createSoldBill(billData) {
   }
 }
 
+// Add this helper function to sync bought returns with updated bill
 export async function syncBoughtReturnsWithBill(billNumber, updatedItems) {
   try {
     const returnsRef = collection(db, "boughtReturns");
@@ -1205,23 +1247,28 @@ export async function syncBoughtReturnsWithBill(billNumber, updatedItems) {
   }
 }
 
+
 export async function updateBoughtBill(billNumber, updates) {
   try {
+    // Don't throw error if updating attachment only - allow updating without items
+    // Check if this is an attachment-only update
     const isAttachmentOnly = updates.attachment !== undefined && !updates.items;
     
+    // Only require items if this is a full bill update
     if (!isAttachmentOnly && (!updates.items || !Array.isArray(updates.items) || updates.items.length === 0)) {
       throw new Error("At least one item is required to update a bought bill.");
     }
-
+ 
     const billsRef = collection(db, BOUGHT_BILLS_COLLECTION);
     const q = query(billsRef, where("billNumber", "==", billNumber));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) throw new Error(`Bill #${billNumber} not found.`);
-
+ 
     const billDoc = querySnapshot.docs[0];
     const billRef = doc(db, BOUGHT_BILLS_COLLECTION, billDoc.id);
     const currentBillData = billDoc.data();
-
+ 
+    // If this is attachment-only update, just update attachment fields
     if (isAttachmentOnly) {
       const updateData = {
         attachment: updates.attachment || null,
@@ -1229,6 +1276,7 @@ export async function updateBoughtBill(billNumber, updates) {
         updatedAt: serverTimestamp(),
       };
       
+      // Remove undefined fields
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) delete updateData[key];
       });
@@ -1236,10 +1284,13 @@ export async function updateBoughtBill(billNumber, updates) {
       await updateDoc(billRef, updateData);
       return true;
     }
-
+ 
+    // Continue with full bill update...
+    // Preserve original currency/exchange rate unless explicitly changed
     const currency = updates.currency || currentBillData.currency || "USD";
     const exchangeRate = updates.exchangeRate || currentBillData.exchangeRate || 1500;
-
+ 
+    // ---------- Build the normalized "new" items list ----------
     const processedItems = updates.items.map((item) => {
       let expireDateTimestamp = null;
       if (item.expireDate) {
@@ -1261,16 +1312,16 @@ export async function updateBoughtBill(billNumber, updates) {
           if (!isNaN(d.getTime())) expireDateTimestamp = Timestamp.fromDate(d);
         }
       }
-
+ 
       const priceValue = parseFloat(item.price);
       if (isNaN(priceValue) || priceValue <= 0) {
         throw new Error(`Invalid price for item "${item.name}". Price must be greater than 0.`);
       }
-
+ 
       let basePriceUSD = 0, basePriceIQD = 0;
       let netPriceUSD = 0, netPriceIQD = 0;
       let outPriceUSD = 0, outPriceIQD = 0;
-
+ 
       if (currency === "USD") {
         basePriceUSD = priceValue;
         netPriceUSD = item.netPrice || basePriceUSD;
@@ -1280,7 +1331,7 @@ export async function updateBoughtBill(billNumber, updates) {
         netPriceIQD = item.netPrice || basePriceIQD;
         outPriceIQD = item.outPrice || basePriceIQD * 1.5;
       }
-
+ 
       return {
         barcode: String(item.barcode),
         name: item.name,
@@ -1308,7 +1359,8 @@ export async function updateBoughtBill(billNumber, updates) {
         catalogId: item.catalogId || null,
       };
     });
-
+ 
+    // ---------- Diff against existing store item batches for this bill ----------
     const oldStoreItemsSnap = await getDocs(
       query(collection(db, STORE_ITEMS_COLLECTION), where("boughtBillNumber", "==", billNumber))
     );
@@ -1317,15 +1369,16 @@ export async function updateBoughtBill(billNumber, updates) {
       const data = d.data();
       oldByBarcode.set(String(data.barcode), { id: d.id, ...data });
     });
-
+ 
     const seenBarcodes = new Set();
-
+ 
     for (const newItem of processedItems) {
       const barcode = String(newItem.barcode);
       seenBarcodes.add(barcode);
       const existing = oldByBarcode.get(barcode);
-
+ 
       if (!existing) {
+        // New line item added during this edit -> brand new batch
         await addDoc(collection(db, STORE_ITEMS_COLLECTION), {
           ...newItem,
           quantity: newItem.quantity,
@@ -1335,20 +1388,21 @@ export async function updateBoughtBill(billNumber, updates) {
         });
         continue;
       }
-
+ 
+      // Existing batch -> preserve however much has already been sold
       const originalQty = Number(existing.originalQuantity ?? existing.quantity) || 0;
       const currentQty = Number(existing.quantity) || 0;
       const soldFromBatch = Math.max(0, originalQty - currentQty);
-
+ 
       if (newItem.quantity < soldFromBatch) {
         throw new Error(
           `Cannot reduce "${newItem.name}" to ${newItem.quantity} units — ${soldFromBatch} unit(s) from ` +
           `this batch have already been sold. Minimum allowed is ${soldFromBatch}.`
         );
       }
-
+ 
       const newRemainingQty = newItem.quantity - soldFromBatch;
-
+ 
       await updateDoc(doc(db, STORE_ITEMS_COLLECTION, existing.id), {
         barcode: newItem.barcode,
         name: newItem.name,
@@ -1373,24 +1427,27 @@ export async function updateBoughtBill(billNumber, updates) {
         updatedAt: serverTimestamp(),
       });
     }
-
+ 
+    // Items that were REMOVED from the bill during this edit
     for (const [barcode, existing] of oldByBarcode.entries()) {
       if (seenBarcodes.has(barcode)) continue;
-
+ 
       const originalQty = Number(existing.originalQuantity ?? existing.quantity) || 0;
       const currentQty = Number(existing.quantity) || 0;
       const soldFromBatch = Math.max(0, originalQty - currentQty);
-
+ 
       if (soldFromBatch > 0) {
         throw new Error(
           `Cannot remove "${existing.name}" from this bill — ${soldFromBatch} unit(s) from this batch ` +
           `have already been sold. Reduce the quantity instead, or handle it as a return.`
         );
       }
-
+ 
       await deleteDoc(doc(db, STORE_ITEMS_COLLECTION, existing.id));
     }
-
+ 
+    // ---------- Update the bill document itself ----------
+    // Build updateData properly
     const updateData = {
       companyId: updates.companyId || currentBillData.companyId,
       companyBillNumber: updates.companyBillNumber || currentBillData.companyBillNumber || "",
@@ -1411,10 +1468,12 @@ export async function updateBoughtBill(billNumber, updates) {
       updatedAt: serverTimestamp(),
     };
 
+    // Remove undefined fields
     Object.keys(updateData).forEach(key => {
       if (updateData[key] === undefined) delete updateData[key];
     });
 
+    // Handle attachment separately if provided
     if (updates.attachment !== undefined) {
       updateData.attachment = updates.attachment;
     }
@@ -1423,11 +1482,13 @@ export async function updateBoughtBill(billNumber, updates) {
     }
 
     await updateDoc(billRef, updateData);
+ 
     await syncBoughtReturnsWithBill(billNumber, processedItems);
-
+ 
+    // Clear the in-memory store items cache so the UI reflects changes immediately
     storeItemsCache = null;
     lastFetchTime = 0;
-
+ 
     return true;
   } catch (error) {
     console.error("Error updating bought bill:", error);
@@ -1453,15 +1514,18 @@ export async function getSoldBills() {
         else dateValue = new Date();
       } else dateValue = new Date();
       
+      // CRITICAL: Calculate totals from items if not already stored
       let totalAmountUSD = data.totalAmountUSD || 0;
       let totalAmountIQD = data.totalAmountIQD || 0;
       
+      // If totals are zero but we have items, calculate from items
       if ((totalAmountUSD === 0 && totalAmountIQD === 0) && data.items && data.items.length > 0) {
         for (const item of data.items) {
           const quantity = parseInt(item.quantity) || 0;
           totalAmountUSD += (parseFloat(item.outPriceUSD) || 0) * quantity;
           totalAmountIQD += (parseFloat(item.outPriceIQD) || 0) * quantity;
           
+          // Also try alternative field names
           if (totalAmountUSD === 0 && parseFloat(item.price) > 0 && item.currency === "USD") {
             totalAmountUSD += parseFloat(item.price) * quantity;
           }
@@ -1469,6 +1533,7 @@ export async function getSoldBills() {
             totalAmountIQD += parseFloat(item.price) * quantity;
           }
         }
+        console.log(`Calculated totals for bill ${data.billNumber}: USD=${totalAmountUSD}, IQD=${totalAmountIQD}`);
       }
       
       const createdBy = data.createdBy || "unknown";
@@ -1514,6 +1579,10 @@ export async function getSoldBills() {
   }
 }
 
+/**
+ * Generate a sequential bill number starting with 66 followed by 5 digits
+ * Format: 6600001, 6600002, 6600003, etc.
+ */
 export async function generateBillNumber() {
   try {
     const billsRef = collection(db, BOUGHT_BILLS_COLLECTION);
@@ -1533,7 +1602,6 @@ export async function generateBillNumber() {
     return 660000 + (lastDigits % 1000) + 1;
   }
 }
-
 export async function updateSoldBill(billNumber, updates) {
   try {
     const billsRef = collection(db, SOLD_BILLS_COLLECTION);
@@ -1550,9 +1618,12 @@ export async function updateSoldBill(billNumber, updates) {
       throw new Error("Items array is required for update");
     }
 
+    // ─── STEP 1: RESTORE ORIGINAL QUANTITIES ───────────────────────────
+    // Restore exactly what was deducted when the bill was created
     for (const originalItem of originalData.items || []) {
       const allocations = originalItem.batchAllocations || [];
       
+      // Only restore if the item still exists in the updated items
       const stillExists = updates.items.some(item => 
         item.barcode === originalItem.barcode && 
         item.originalCurrency === originalItem.originalCurrency &&
@@ -1560,6 +1631,7 @@ export async function updateSoldBill(billNumber, updates) {
       );
 
       if (!stillExists) {
+        // Item was removed, restore ALL quantity
         for (const alloc of allocations) {
           try {
             const storeRef = doc(db, STORE_ITEMS_COLLECTION, alloc.storeItemId);
@@ -1578,6 +1650,7 @@ export async function updateSoldBill(billNumber, updates) {
         continue;
       }
 
+      // Item still exists - check if quantity changed
       const updatedItem = updates.items.find(item => 
         item.barcode === originalItem.barcode && 
         item.originalCurrency === originalItem.originalCurrency &&
@@ -1589,6 +1662,7 @@ export async function updateSoldBill(billNumber, updates) {
       const diff = originalQty - newQty;
 
       if (diff > 0) {
+        // Quantity decreased - restore the difference
         let remainingToRestore = diff;
         for (const alloc of allocations) {
           if (remainingToRestore <= 0) break;
@@ -1609,6 +1683,7 @@ export async function updateSoldBill(billNumber, updates) {
           }
         }
 
+        // If there's still more to restore, find other batches
         if (remainingToRestore > 0) {
           const storeItemsRef = collection(db, STORE_ITEMS_COLLECTION);
           const findQuery = query(
@@ -1622,6 +1697,7 @@ export async function updateSoldBill(billNumber, updates) {
           for (const docSnap of findSnapshot.docs) {
             if (remainingToRestore <= 0) break;
             const data = docSnap.data();
+            // Don't restore to a batch that already has allocations from this bill
             const alreadyAllocated = allocations.some(a => a.storeItemId === docSnap.id);
             if (alreadyAllocated) continue;
             
@@ -1636,9 +1712,11 @@ export async function updateSoldBill(billNumber, updates) {
           }
         }
       } else if (diff < 0) {
+        // Quantity increased - deduct the difference
         const additionalQty = Math.abs(diff);
         let remainingToDeduct = additionalQty;
         
+        // First try to use the original batches
         for (const alloc of allocations) {
           if (remainingToDeduct <= 0) break;
           try {
@@ -1661,6 +1739,7 @@ export async function updateSoldBill(billNumber, updates) {
           }
         }
 
+        // If still need more, find other batches
         if (remainingToDeduct > 0) {
           const storeItemsRef = collection(db, STORE_ITEMS_COLLECTION);
           const findQuery = query(
@@ -1682,6 +1761,7 @@ export async function updateSoldBill(billNumber, updates) {
           
           for (const candidate of candidates) {
             if (remainingToDeduct <= 0) break;
+            // Skip batches already allocated
             const alreadyAllocated = allocations.some(a => a.storeItemId === candidate.id);
             if (alreadyAllocated) continue;
             
@@ -1700,6 +1780,7 @@ export async function updateSoldBill(billNumber, updates) {
       }
     }
 
+    // ─── STEP 2: PREPARE NEW ALLOCATIONS FOR UPDATED ITEMS ─────────────
     const newAllocationsByItem = [];
     for (const newItem of updates.items) {
       const quantityNeeded = parseInt(newItem.quantity) || 1;
@@ -1711,6 +1792,7 @@ export async function updateSoldBill(billNumber, updates) {
       const originalCurrency = newItem.originalCurrency || "USD";
       const branch = newItem.branch || "Slemany";
       
+      // Find available batches
       const storeItemsRef = collection(db, STORE_ITEMS_COLLECTION);
       const findQuery = query(
         storeItemsRef,
@@ -1750,6 +1832,7 @@ export async function updateSoldBill(billNumber, updates) {
       newAllocationsByItem.push(allocations);
     }
 
+    // ─── STEP 3: UPDATE THE BILL ────────────────────────────────────────
     const { date: _ignoredDate, ...safeUpdates } = updates;
     if (safeUpdates.items && Array.isArray(safeUpdates.items)) {
       safeUpdates.items = safeUpdates.items.map((item, idx) => ({
@@ -1765,6 +1848,7 @@ export async function updateSoldBill(billNumber, updates) {
       updatedAt: serverTimestamp(),
     });
 
+    // Clear cache
     storeItemsCache = null;
     lastFetchTime = 0;
 
@@ -1858,13 +1942,31 @@ export async function deleteSoldBill(billNumber) {
   }
 }
 
+// Updated getItemAttachments with debugging
 export async function getItemAttachments(billNumber) {
   try {
     if (!billNumber || billNumber === 'N/A' || billNumber === 'N/A') {
       console.log('❌ No valid bill number provided');
       return [];
     }
+    console.log(`🔍 Searching attachments for bill:`, {
+      originalValue: billNumber,
+      type: typeof billNumber,
+      asString: String(billNumber)
+    });
     const attachmentsRef = collection(db, BILL_ATTACHMENTS_COLLECTION);
+    const allAttachments = await getDocs(attachmentsRef);
+    console.log(`📊 Total attachments in DB: ${allAttachments.docs.length}`);
+    allAttachments.docs.forEach(doc => {
+      const data = doc.data();
+      console.log(`📎 Attachment in DB:`, {
+        id: doc.id,
+        billNumber: data.billNumber,
+        type: typeof data.billNumber,
+        billNumber_str: data.billNumber_str,
+        fileName: data.fileName
+      });
+    });
     const queries = [
       query(attachmentsRef, where("billNumber", "==", billNumber)),
       query(attachmentsRef, where("billNumber", "==", String(billNumber))),
@@ -1873,6 +1975,7 @@ export async function getItemAttachments(billNumber) {
     let allResults = [];
     for (let i = 0; i < queries.length; i++) {
       const snapshot = await getDocs(queries[i]);
+      console.log(`Query ${i + 1} found: ${snapshot.docs.length} attachments`);
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         allResults.push({
@@ -1884,6 +1987,7 @@ export async function getItemAttachments(billNumber) {
       });
     }
     const uniqueResults = Array.from(new Map(allResults.map(item => [item.id, item])).values());
+    console.log(`✅ Found ${uniqueResults.length} unique attachments for bill ${billNumber}`);
     return uniqueResults;
   } catch (error) {
     console.error("❌ Error getting bill attachments:", error);
@@ -1945,6 +2049,14 @@ export async function deleteReturnBill(returnId) {
   }
 }
 
+
+
+
+
+
+
+
+// ── getAllReturns ──────────────────────────────────────────────────────────────
 export async function getAllReturns() {
   try {
     const returnsRef = collection(db, RETURNS_COLLECTION);
@@ -1962,6 +2074,7 @@ export async function getAllReturns() {
       const data = docSnap.data();
       const returnBillNumber = data.returnBillNumber || `RET-${docSnap.id.slice(-6).toUpperCase()}`;
 
+      // Initialize the bill group if needed
       if (!returnsByBillNumber[returnBillNumber]) {
         returnsByBillNumber[returnBillNumber] = {
           id: returnBillNumber,
@@ -1982,8 +2095,10 @@ export async function getAllReturns() {
         };
       }
 
+      // ─── CRITICAL FIX: Handle both old and new formats ──────────────────────
       let itemsToAdd = [];
 
+      // New format: items array
       if (data.items && Array.isArray(data.items) && data.items.length > 0) {
         itemsToAdd = data.items.map(item => ({
           barcode: item.barcode || "",
@@ -2004,6 +2119,7 @@ export async function getAllReturns() {
           quantity: item.returnQuantity || item.quantity || 0,
         }));
       } 
+      // Old format: flat fields (single item)
       else if (data.barcode) {
         itemsToAdd = [{
           barcode: data.barcode || "",
@@ -2025,15 +2141,19 @@ export async function getAllReturns() {
         }];
       }
 
+      // Add items to the bill group
       itemsToAdd.forEach(item => {
+        // Ensure the item has the pharmacyId
         item.pharmacyId = data.pharmacyId;
         item.pharmacyName = pharmacyMap[data.pharmacyId] || data.pharmacyName || "Unknown Pharmacy";
         returnsByBillNumber[returnBillNumber].items.push(item);
       });
 
+      // Update totals
       const bill = returnsByBillNumber[returnBillNumber];
       bill.totalReturnQty = bill.items.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
       
+      // Calculate total amount by currency
       let totalUSD = 0;
       let totalIQD = 0;
       bill.items.forEach(item => {
@@ -2050,12 +2170,16 @@ export async function getAllReturns() {
         }
       });
       
+      // Store both totals
       bill.totalReturnAmountUSD = totalUSD;
       bill.totalReturnAmountIQD = totalIQD;
-      bill.totalReturnAmount = totalUSD + (totalIQD / 1500);
+      bill.totalReturnAmount = totalUSD + (totalIQD / 1500); // For backward compatibility
+      
+      console.log(`Return bill ${returnBillNumber}: USD=${totalUSD}, IQD=${totalIQD}`);
     });
 
     const processedReturns = Object.values(returnsByBillNumber);
+    console.log("Total processed returns:", processedReturns.length);
     return processedReturns;
   } catch (error) {
     console.error("Error getting all returns:", error);
@@ -2063,6 +2187,7 @@ export async function getAllReturns() {
   }
 }
 
+// ── getFilteredReturns ─────────────────────────────────────────────────────────
 export async function getFilteredReturns(pharmacyId = null, searchNote = "") {
   try {
     const returnsRef = collection(db, RETURNS_COLLECTION);
@@ -2082,6 +2207,7 @@ export async function getFilteredReturns(pharmacyId = null, searchNote = "") {
     snapshot.docs.forEach(docSnap => {
       const data = docSnap.data();
 
+      // Note filter
       if (searchNote && data.returnBillNote) {
         if (!data.returnBillNote.toLowerCase().includes(searchNote.toLowerCase())) return;
       }
@@ -2090,19 +2216,19 @@ export async function getFilteredReturns(pharmacyId = null, searchNote = "") {
 
       if (!returnsByBillNumber[returnBillNumber]) {
         returnsByBillNumber[returnBillNumber] = {
-          id: returnBillNumber,
-          documentId: docSnap.id,
-          returnBillNumber: returnBillNumber,
-          returnBillNote: data.returnBillNote || "",
+          id:                      returnBillNumber,
+          documentId:              docSnap.id,
+          returnBillNumber:        returnBillNumber,
+          returnBillNote:          data.returnBillNote  || "",
           pharmacyReturnBillNumber: data.pharmacyReturnBillNumber || "",
-          pharmacyId: data.pharmacyId,
+          pharmacyId:   data.pharmacyId,
           pharmacyName: pharmacyMap[data.pharmacyId] || data.pharmacyName || "Unknown Pharmacy",
-          billNumber: data.billNumber || "",
-          billId: data.billId || "",
-          currency: data.currency || "IQD",
+          billNumber:   data.billNumber || "",
+          billId:       data.billId     || "",
+          currency:     data.currency   || "IQD",
           paymentStatus: data.paymentStatus || "Unpaid",
-          returnDate: data.returnDate ? data.returnDate.toDate() : new Date(),
-          totalReturnQty: data.totalReturnQty || 0,
+          returnDate:   data.returnDate ? data.returnDate.toDate() : new Date(),
+          totalReturnQty:    data.totalReturnQty    || 0,
           totalReturnAmount: data.totalReturnAmount || 0,
           items: [],
         };
@@ -2113,7 +2239,7 @@ export async function getFilteredReturns(pharmacyId = null, searchNote = "") {
     });
 
     const processedReturns = Object.values(returnsByBillNumber).map(bill => {
-      bill.totalReturnQty = bill.items.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
+      bill.totalReturnQty    = bill.items.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
       bill.totalReturnAmount = bill.items.reduce((sum, i) => sum + ((i.returnPrice || 0) * (i.returnQuantity || 0)), 0);
       return bill;
     });
@@ -2134,19 +2260,19 @@ export async function getReturnById(returnId) {
 
     try {
       const returnDocRef = doc(db, RETURNS_COLLECTION, returnId);
-      const returnSnap = await getDoc(returnDocRef);
+      const returnSnap   = await getDoc(returnDocRef);
       if (returnSnap.exists()) {
-        returnData = returnSnap.data();
+        returnData    = returnSnap.data();
         actualReturnId = returnId;
       }
-    } catch (_) {}
+    } catch (_) { /* not a valid doc id, fall through */ }
 
     if (!returnData) {
-      const q = query(collection(db, RETURNS_COLLECTION), where("returnBillNumber", "==", returnId), limit(1));
+      const q        = query(collection(db, RETURNS_COLLECTION), where("returnBillNumber", "==", returnId), limit(1));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        const docSnap = snapshot.docs[0];
-        returnData = docSnap.data();
+        const docSnap  = snapshot.docs[0];
+        returnData     = docSnap.data();
         actualReturnId = docSnap.id;
       } else {
         throw new Error("Return not found");
@@ -2156,8 +2282,8 @@ export async function getReturnById(returnId) {
     const returnBillNumber = returnData.returnBillNumber;
     if (!returnBillNumber) throw new Error("Return bill number not found");
 
-    const q2 = query(collection(db, RETURNS_COLLECTION), where("returnBillNumber", "==", returnBillNumber));
-    const allSnap = await getDocs(q2);
+    const q2       = query(collection(db, RETURNS_COLLECTION), where("returnBillNumber", "==", returnBillNumber));
+    const allSnap  = await getDocs(q2);
 
     let pharmacyMap = {};
     try {
@@ -2167,28 +2293,28 @@ export async function getReturnById(returnId) {
 
     const items = [];
     for (const docSnap of allSnap.docs) {
-      const data = docSnap.data();
+      const data      = docSnap.data();
       const flatItems = extractItemsFromReturnDoc(docSnap.id, data, pharmacyMap);
       flatItems.forEach(item => {
         items.push({
-          id: docSnap.id,
-          barcode: item.barcode,
-          name: item.name,
-          billNumber: item.billNumber,
-          billId: item.billId,
-          quantity: item.originalQuantity || 0,
+          id:              docSnap.id,
+          barcode:         item.barcode,
+          name:            item.name,
+          billNumber:      item.billNumber,
+          billId:          item.billId,
+          quantity:        item.originalQuantity || 0,
           originalQuantity: item.originalQuantity || 0,
-          returnQuantity: item.returnQuantity,
-          returnPrice: item.returnPrice,
-          originalPrice: item.returnPrice,
-          netPrice: item.returnPrice,
-          outPrice: item.returnPrice,
-          expireDate: item.expireDate,
-          currency: item.currency || returnData.currency || "IQD",
+          returnQuantity:  item.returnQuantity,
+          returnPrice:     item.returnPrice,
+          originalPrice:   item.returnPrice,
+          netPrice:        item.returnPrice,
+          outPrice:        item.returnPrice,
+          expireDate:      item.expireDate,
+          currency:        item.currency || returnData.currency || "IQD",
           alreadyReturnedByOthers: 0,
           availableQuantity: item.originalQuantity || 0,
           saleBatchAllocations: item.saleBatchAllocations || [],
-          restoreAllocations: item.restoreAllocations || [],
+          restoreAllocations:   item.restoreAllocations   || [],
           branch: item.branch || "Slemany",
           boughtBillNumber: item.boughtBillNumber || null,
         });
@@ -2198,29 +2324,34 @@ export async function getReturnById(returnId) {
     let pharmacyName = pharmacyMap[returnData.pharmacyId] || returnData.pharmacyName || "Unknown Pharmacy";
 
     const totalReturnAmount = items.reduce((sum, i) => sum + ((i.returnPrice || 0) * (i.returnQuantity || 0)), 0);
-    const totalReturnQty = items.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
+    const totalReturnQty    = items.reduce((sum, i) => sum + (i.returnQuantity || 0), 0);
 
     return {
-      id: actualReturnId,
-      returnBillNumber: returnBillNumber,
-      returnBillNote: returnData.returnBillNote || "",
+      id:                      actualReturnId,
+      returnBillNumber:        returnBillNumber,
+      returnBillNote:          returnData.returnBillNote  || "",
       pharmacyReturnBillNumber: returnData.pharmacyReturnBillNumber || "",
-      pharmacyId: returnData.pharmacyId,
+      pharmacyId:   returnData.pharmacyId,
       pharmacyName: pharmacyName,
-      billNumber: returnData.billNumber,
-      billId: returnData.billId,
-      items: items,
-      totalReturnQty: totalReturnQty,
+      billNumber:   returnData.billNumber,
+      billId:       returnData.billId,
+      items:        items,
+      totalReturnQty:    totalReturnQty,
       totalReturnAmount: totalReturnAmount,
       paymentStatus: returnData.paymentStatus || "Unpaid",
-      returnDate: returnData.returnDate ? returnData.returnDate.toDate() : new Date(),
-      currency: returnData.currency || items[0]?.currency || "IQD",
+      returnDate:   returnData.returnDate ? returnData.returnDate.toDate() : new Date(),
+      currency:     returnData.currency || items[0]?.currency || "IQD",
     };
   } catch (error) {
     console.error("Error getting return by ID:", error);
     throw error;
   }
 }
+
+
+
+
+
 
 export async function updateReturnBill(returnId, updatedReturn) {
   try {
@@ -2271,6 +2402,9 @@ export async function updateReturnBill(returnId, updatedReturn) {
   }
 }
 
+
+
+// Update the generateUniqueReturnBillNumber function for shorter bill numbers
 async function generateUniqueReturnBillNumber() {
   try {
     const returnsRef = collection(db, RETURNS_COLLECTION);
@@ -2296,19 +2430,23 @@ async function generateUniqueReturnBillNumber() {
     
     return newNumber;
   } catch (error) {
+    console.error("Error generating return number:", error);
     const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
     return `R-${random}`;
   }
 }
 
+// Generate unique return bill number in format: RET-2026_06_001 (incremental)
 const generateReturnBillNumberLocal = () => {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   
+  // Get existing returns to find the next sequence number
   const existingReturns = returns || [];
   const prefix = `RET-${year}_${month}`;
   
+  // Find the highest sequence number for this month
   let maxSeq = 0;
   existingReturns.forEach(returnItem => {
     if (returnItem.returnBillNumber && returnItem.returnBillNumber.startsWith(prefix)) {
@@ -2321,15 +2459,32 @@ const generateReturnBillNumberLocal = () => {
     }
   });
   
+  // Generate next sequence number
   const nextSeq = maxSeq + 1;
   const paddedSeq = nextSeq.toString().padStart(3, '0');
+  
   return `${prefix}_${paddedSeq}`;
 };
 
-// ============================================================
-// TRANSPORT MANAGEMENT
-// ============================================================
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Transport Management Functions
 export async function sendTransport(fromBranch, toBranch, items, senderId, sendDate, notes) {
   try {
     if (fromBranch === toBranch) throw new Error("Cannot send items to the same branch");
@@ -2457,8 +2612,10 @@ export async function receiveTransport(transportId, receiverId, status, notes, r
           Number(tItem.netPrice) === Number(item.netPrice) &&
           Number(tItem.outPrice) === Number(item.outPrice)
         );
-        if (!transportItem) continue;
-        
+        if (!transportItem) {
+          console.warn(`Item not found in transport: ${item.barcode}`);
+          continue;
+        }
         const adjustedQuantity = item.adjustedQuantity || transportItem.quantity;
         const normalizedExpireDate = toFirestoreTimestamp(item.expireDate);
         const normalizedNetPrice = Number(item.netPrice);
@@ -2557,6 +2714,39 @@ export async function getTransports(branch, role) {
     return transports;
   } catch (error) {
     console.error("Error getting transports:", error);
+    if (error.code === 'failed-precondition') {
+      try {
+        const snapshot = await getDocs(collection(db, TRANSPORTS_COLLECTION));
+        let transports = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            sentAt: data.sentAt ? data.sentAt.toDate() : null,
+            receivedAt: data.receivedAt ? data.receivedAt.toDate() : null,
+            items: (data.items || []).map(item => ({
+              ...item,
+              quantity: data.status === "received" && item.adjustedQuantity !== undefined ? item.adjustedQuantity : item.quantity,
+              sentQuantity: item.sentQuantity || item.quantity,
+              adjustedQuantity: item.adjustedQuantity || item.quantity,
+              originalQuantity: item.originalQuantity || item.quantity,
+            }))
+          };
+        });
+        if (role !== "superAdmin" && branch !== "all") {
+          transports = transports.filter(transport => transport.toBranch === branch || transport.fromBranch === branch);
+        }
+        transports.sort((a, b) => {
+          const dateA = a.sentAt || new Date(0);
+          const dateB = b.sentAt || new Date(0);
+          return dateB - dateA;
+        });
+        return transports;
+      } catch (fallbackError) {
+        console.error("Fallback query failed:", fallbackError);
+        throw new Error("Unable to load transports");
+      }
+    }
     throw error;
   }
 }
@@ -2583,14 +2773,14 @@ export async function getUsers() {
   }
 }
 
-// ============================================================
-// PAYMENTS MANAGEMENT
-// ============================================================
-
 export async function createBoughtPayment(paymentData) {
   try {
+    console.log("Creating bought payment with data:", paymentData);
+
+    // Use the payment number generated in the component
     const paymentNumber = paymentData.paymentNumber || await generateSequentialPaymentNumber();
 
+    // Prepare the payment data
     const paymentDoc = {
       companyId: paymentData.companyId,
       companyName: paymentData.companyName || 'Unknown Company',
@@ -2616,7 +2806,9 @@ export async function createBoughtPayment(paymentData) {
     };
 
     const docRef = await addDoc(collection(db, BOUGHT_PAYMENTS_COLLECTION), paymentDoc);
+    console.log("Bought payment created with ID:", docRef.id, "Number:", paymentNumber);
 
+    // Update the status of selected bought bills to "Paid"
     if (paymentData.selectedBoughtBills && paymentData.selectedBoughtBills.length > 0) {
       for (const billId of paymentData.selectedBoughtBills) {
         try {
@@ -2627,7 +2819,7 @@ export async function createBoughtPayment(paymentData) {
               paymentStatus: "Paid",
               paidDate: serverTimestamp(),
               lastUpdated: serverTimestamp(),
-              paymentNumber: paymentNumber,
+              paymentNumber: paymentNumber, // Link to payment
             });
           }
         } catch (error) {
@@ -2636,6 +2828,7 @@ export async function createBoughtPayment(paymentData) {
       }
     }
 
+    // Update the status of selected bought returns
     if (paymentData.selectedBoughtReturns && paymentData.selectedBoughtReturns.length > 0) {
       for (const returnId of paymentData.selectedBoughtReturns) {
         try {
@@ -2646,7 +2839,7 @@ export async function createBoughtPayment(paymentData) {
               paymentStatus: "Processed",
               processedDate: serverTimestamp(),
               lastUpdated: serverTimestamp(),
-              paymentNumber: paymentNumber,
+              paymentNumber: paymentNumber, // Link to payment
             });
           }
         } catch (error) {
@@ -2666,15 +2859,20 @@ export async function createBoughtPayment(paymentData) {
   }
 }
 
+// Generate sequential payment number: BPAY-currentYear-sequentialNumber (starts from 1 per year)
 const generateSequentialPaymentNumber = async () => {
   const currentYear = new Date().getFullYear();
+  
+  // Get all payments for the current year
   const allPayments = await getBoughtPayments();
   
+  // Filter payments from current year
   const currentYearPayments = allPayments.filter(payment => {
     const paymentNumber = payment.paymentNumber || '';
     return paymentNumber.startsWith(`BPAY-${currentYear}-`);
   });
   
+  // Find the highest sequential number for this year
   let maxNumber = 0;
   currentYearPayments.forEach(payment => {
     const match = payment.paymentNumber?.match(new RegExp(`BPAY-${currentYear}-(\\d+)`));
@@ -2684,9 +2882,11 @@ const generateSequentialPaymentNumber = async () => {
     }
   });
   
+  // Generate new sequential number (start from 1)
   const newNumber = maxNumber + 1;
   return `BPAY-${currentYear}-${newNumber}`;
 };
+
 
 export async function getBoughtPayments() {
   try {
@@ -2730,10 +2930,12 @@ export async function getBoughtPaymentDetails(paymentId) {
   }
 }
 
+// In your lib/data.js file
 export const updateBoughtPayment = async (paymentId, paymentData) => {
   try {
     const paymentRef = doc(db, "boughtPayments", paymentId);
     
+    // Prepare update data
     const updateData = {
       companyId: paymentData.companyId,
       companyName: paymentData.companyName,
@@ -2751,26 +2953,35 @@ export const updateBoughtPayment = async (paymentId, paymentData) => {
       updatedAt: serverTimestamp(),
     };
     
+    // CRITICAL FIX: Handle image data properly
     if (paymentData.billImageBase64 !== undefined) {
       if (paymentData.billImageBase64 === null) {
+        // Image was removed
         updateData.billImageBase64 = null;
         updateData.billImageUrl = null;
+        console.log("🗑️ Removing image from payment");
       } else if (paymentData.billImageBase64 && typeof paymentData.billImageBase64 === 'string') {
+        // New image provided
         updateData.billImageBase64 = paymentData.billImageBase64;
         updateData.billImageUrl = paymentData.billImageBase64;
+        console.log("📷 Updating image in payment");
       }
     }
     
     await updateDoc(paymentRef, updateData);
+    console.log("✅ Payment updated successfully with image:", updateData.billImageBase64 ? "Yes" : "No");
+    
     return { id: paymentId, ...updateData };
   } catch (error) {
     console.error("Error updating bought payment:", error);
     throw error;
   }
 };
-
+// Sold Payment Functions
+// Sold Payment Functions
 export async function createSoldPayment(paymentData) {
   try {
+    console.log("createSoldPayment called with:", paymentData);
     if (!paymentData.pharmacyId) throw new Error("Pharmacy ID is required");
     if (!paymentData.hardcopyBillNumber) throw new Error("Hardcopy bill number is required");
     
@@ -2783,6 +2994,7 @@ export async function createSoldPayment(paymentData) {
       pharmacyName: String(paymentData.pharmacyName || 'Unknown Pharmacy'),
       selectedSoldBills: Array.isArray(paymentData.selectedSoldBills) ? paymentData.selectedSoldBills : [],
       selectedReturns: Array.isArray(paymentData.selectedReturns) ? paymentData.selectedReturns : [],
+      // FIX: Use the proper USD/IQD fields
       soldTotalUSD: Number(paymentData.soldTotalUSD) || 0,
       soldTotalIQD: Number(paymentData.soldTotalIQD) || 0,
       returnTotalUSD: Number(paymentData.returnTotalUSD) || 0,
@@ -2802,9 +3014,13 @@ export async function createSoldPayment(paymentData) {
       billImageUrl: paymentData.billImageBase64 || null,
     };
     
+    console.log("Cleaned payment data:", cleanedData);
     const docRef = await addDoc(collection(db, SOLD_PAYMENTS_COLLECTION), cleanedData);
+    console.log("Payment document created with ID:", docRef.id);
     
+    // Update selected sold bills to Paid
     if (cleanedData.selectedSoldBills.length > 0) {
+      console.log(`Updating ${cleanedData.selectedSoldBills.length} sold bills to Paid...`);
       const updatePromises = cleanedData.selectedSoldBills.map(async (billId) => {
         if (billId) {
           try {
@@ -2815,6 +3031,7 @@ export async function createSoldPayment(paymentData) {
               lastUpdated: serverTimestamp(),
               paymentNumber: paymentNumber
             });
+            console.log(`Updated bill ${billId} to Paid`);
           } catch (err) {
             console.error(`Error updating bill ${billId}:`, err);
           }
@@ -2823,7 +3040,9 @@ export async function createSoldPayment(paymentData) {
       await Promise.all(updatePromises);
     }
     
+    // Update selected returns to Processed
     if (cleanedData.selectedReturns.length > 0) {
+      console.log(`Updating ${cleanedData.selectedReturns.length} returns to Processed...`);
       const returnUpdatePromises = cleanedData.selectedReturns.map(async (returnId) => {
         if (returnId) {
           try {
@@ -2834,6 +3053,7 @@ export async function createSoldPayment(paymentData) {
               lastUpdated: serverTimestamp(),
               paymentNumber: paymentNumber
             });
+            console.log(`Updated return ${returnId} to Processed`);
           } catch (err) {
             console.error(`Error updating return ${returnId}:`, err);
           }
@@ -2842,6 +3062,7 @@ export async function createSoldPayment(paymentData) {
       await Promise.all(returnUpdatePromises);
     }
     
+    console.log("Payment created successfully!");
     return {
       id: docRef.id,
       paymentNumber,
@@ -2890,6 +3111,7 @@ export async function getSoldPaymentDetails(paymentId) {
       ...paymentData,
       paymentDate: paymentDate,
       createdAt: paymentData.createdAt ? paymentData.createdAt.toDate() : new Date(),
+      // Ensure these fields exist with defaults
       soldTotalUSD: paymentData.soldTotalUSD || 0,
       soldTotalIQD: paymentData.soldTotalIQD || 0,
       returnTotalUSD: paymentData.returnTotalUSD || 0,
@@ -2919,6 +3141,7 @@ export async function updateSoldPayment(paymentId, paymentData) {
     const newlySelectedReturns = paymentData.selectedReturns || [];
     const returnsToReset = previouslySelectedReturns.filter(returnId => !newlySelectedReturns.includes(returnId));
     
+    // Reset bills that were removed
     for (const billId of billsToReset) {
       if (billId) {
         const billRef = doc(db, SOLD_BILLS_COLLECTION, billId);
@@ -2930,6 +3153,7 @@ export async function updateSoldPayment(paymentId, paymentData) {
       }
     }
     
+    // Reset returns that were removed
     for (const returnId of returnsToReset) {
       if (returnId) {
         const returnRef = doc(db, RETURNS_COLLECTION, returnId);
@@ -2941,6 +3165,7 @@ export async function updateSoldPayment(paymentId, paymentData) {
       }
     }
     
+    // Prepare update data with proper USD/IQD fields
     const updateData = {
       pharmacyId: paymentData.pharmacyId,
       pharmacyName: paymentData.pharmacyName,
@@ -2958,6 +3183,7 @@ export async function updateSoldPayment(paymentId, paymentData) {
       lastUpdated: serverTimestamp()
     };
     
+    // Handle image - never send undefined
     if (paymentData.billImageBase64 !== undefined) {
       updateData.billImageBase64 = paymentData.billImageBase64 || null;
       updateData.billImageUrl = paymentData.billImageBase64 || null;
@@ -2965,6 +3191,7 @@ export async function updateSoldPayment(paymentId, paymentData) {
     
     await updateDoc(paymentRef, updateData);
     
+    // Mark newly added bills as Paid
     const billsToMarkPaid = newlySelectedBills.filter(billId => !previouslySelectedBills.includes(billId));
     for (const billId of billsToMarkPaid) {
       if (billId) {
@@ -2978,6 +3205,7 @@ export async function updateSoldPayment(paymentId, paymentData) {
       }
     }
     
+    // Mark newly added returns as Processed
     const returnsToMarkProcessed = newlySelectedReturns.filter(returnId => !previouslySelectedReturns.includes(returnId));
     for (const returnId of returnsToMarkProcessed) {
       if (returnId) {
@@ -3024,17 +3252,21 @@ export async function getCompanyBoughtBills(companyId, includeBillIds = []) {
       let itemsTotalUSD = 0;
       let itemsTotalIQD = 0;
 
+      // Process items with proper dual currency handling
       (data.items || []).forEach(item => {
         const itemQuantity = parseInt(item.quantity) || 0;
         const itemCurrency = item.currency || item.originalCurrency || billCurrency;
         
+        // Use the correct price field based on currency
         let itemPriceUSD = 0;
         let itemPriceIQD = 0;
         
         if (itemCurrency === "USD") {
+          // For USD items, use basePriceUSD or calculate from basePrice
           itemPriceUSD = parseFloat(item.basePriceUSD) || parseFloat(item.basePrice) || parseFloat(item.price) || 0;
           itemPriceIQD = itemPriceUSD * exchangeRate;
         } else {
+          // For IQD items, use basePriceIQD or calculate from basePrice
           itemPriceIQD = parseFloat(item.basePriceIQD) || parseFloat(item.basePrice) || parseFloat(item.price) || 0;
           itemPriceUSD = itemPriceIQD / exchangeRate;
         }
@@ -3046,8 +3278,11 @@ export async function getCompanyBoughtBills(companyId, includeBillIds = []) {
         itemsTotalIQD += itemTotalIQD;
       });
 
+      // Round the totals
       const totalAmountUSD = Math.round(itemsTotalUSD * 100) / 100;
       const totalAmountIQD = Math.round(itemsTotalIQD);
+      
+      // Calculate combined total (for backwards compatibility)
       const totalAmount = totalAmountUSD + (totalAmountIQD / exchangeRate);
 
       return {
@@ -3072,8 +3307,8 @@ export async function getCompanyBoughtBills(companyId, includeBillIds = []) {
           return {
             ...item,
             currency: itemCurrency,
-            itemTotal: itemPrice * itemQuantity,
-            displayPrice: itemPrice,
+            itemTotal: itemPrice * itemQuantity, // Add calculated item total
+            displayPrice: itemPrice, // Add display price for the item
           };
         }),
         isConsignment: data.isConsignment || false,
@@ -3108,12 +3343,17 @@ export async function getReturnsForCompany(companyId, includeReturnIds = []) {
 
     snapshot.docs.forEach(doc => {
       const data = doc.data();
+      
+      // Check if this return belongs to the company
       if (data.companyId !== companyId) return;
 
+      // Handle both formats: items array or single item
       let items = [];
       if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+        // New format: items stored as array
         items = data.items;
       } else if (data.barcode) {
+        // Old format: single item per document
         items = [{
           barcode: data.barcode,
           name: data.name,
@@ -3133,6 +3373,7 @@ export async function getReturnsForCompany(companyId, includeReturnIds = []) {
         }];
       }
 
+      // Process each item
       items.forEach(item => {
         const itemCurrency = item.currency || data.currency || "USD";
         
@@ -3142,7 +3383,7 @@ export async function getReturnsForCompany(companyId, includeReturnIds = []) {
           returnDate: data.returnDate || data.date || new Date(),
           returnNote: data.returnNote || item.returnNote || "",
           companyId: data.companyId,
-          companyName: data.companyName,
+          companyName: data.companyName, // This will be added by the page component
           billNumber: item.billNumber || data.billNumber,
           barcode: item.barcode,
           name: item.name,
@@ -3164,6 +3405,7 @@ export async function getReturnsForCompany(companyId, includeReturnIds = []) {
       });
     });
 
+    console.log(`Found ${allReturns.length} return items for company ${companyId}`);
     return allReturns;
   } catch (error) {
     console.error("Error getting bought returns:", error);
@@ -3171,10 +3413,97 @@ export async function getReturnsForCompany(companyId, includeReturnIds = []) {
   }
 }
 
-// ============================================================
-// BOUGHT RETURN DOCUMENT HELPERS
-// ============================================================
-
+const handleBillSelect = (bill) => {
+  if (selectedBill?.id === bill.id) {
+    setSelectedBill(null);
+    setReturnItems([]);
+    setReturnNote("");
+  } else {
+    if (!bill || !bill.items || !Array.isArray(bill.items)) {
+      setError("Invalid bill selected");
+      return;
+    }
+    
+    setSelectedBill(bill);
+    setReturnNote("");
+    
+    // Get all returns for this bill
+    const existingReturns = allReturns.filter(item => 
+      item && String(item.billNumber) === String(bill.billNumber)
+    );
+    
+    // Get current store stock for each item from this specific bill
+    const fetchStoreStock = async () => {
+      try {
+        setIsLoading(true);
+        const storeItems = await getStoreItems(true);
+        
+        const validReturnItems = bill.items
+          .filter(item => item && item.barcode)
+          .map((item) => {
+            // Calculate previously returned
+            const previouslyReturned = existingReturns
+              .filter(returnItem => returnItem && String(returnItem.barcode) === String(item.barcode))
+              .reduce((sum, returnItem) => sum + (returnItem.returnQuantity || 0), 0);
+            
+            // ✅ CRITICAL: Find store items from this specific bill
+            const storeItem = storeItems.find(si => 
+              String(si.barcode) === String(item.barcode) &&
+              String(si.boughtBillNumber) === String(bill.billNumber)
+            );
+            
+            // ✅ Available = what's currently in store from this bill
+            const availableQuantity = storeItem ? storeItem.quantity : 0;
+            
+            // Use base price (purchase price) for return
+            let basePrice = 0;
+            if (bill.currency === "IQD") {
+              basePrice = item.basePriceIQD || item.netPriceIQD || item.netPrice || item.outPriceIQD || 0;
+            } else {
+              basePrice = item.basePriceUSD || item.netPriceUSD || item.netPrice || item.outPriceUSD || 0;
+            }
+            
+            console.log(`📊 ${item.name}: In Store: ${availableQuantity}, Original: ${item.quantity}, Returned: ${previouslyReturned}`);
+            
+            return {
+              id: item.barcode,
+              barcode: item.barcode,
+              name: item.name,
+              returnQuantity: 0,
+              returnPrice: basePrice,
+              returnPriceUSD: item.outPriceUSD || 0,
+              returnPriceIQD: item.outPriceIQD || 0,
+              availableQuantity: Math.max(0, availableQuantity), // ✅ Only what's in store from this bill
+              originalQuantity: item.quantity || 0,
+              previouslyReturned: previouslyReturned,
+              netPrice: item.netPrice || 0,
+              outPrice: item.outPrice || 0,
+              basePriceUSD: item.basePriceUSD || 0,
+              basePriceIQD: item.basePriceIQD || 0,
+              isConsignment: item.isConsignment || false,
+              consignmentOwnerId: item.consignmentOwnerId || null,
+              expireDate: item.expireDate ? formatDate(item.expireDate) : 'N/A',
+              currency: bill.currency || "USD",
+              branch: item.branch || "Slemany",
+              boughtBillNumber: bill.billNumber,
+            };
+          });
+        
+        setReturnItems(validReturnItems);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error fetching store stock:", error);
+        setError("Failed to load available quantities");
+        setIsLoading(false);
+      }
+    };
+    
+    fetchStoreStock();
+  }
+};
+// ===================== NEW: createBoughtReturn =====================
+// Creates a bought-return document (return to supplier) and deducts the
+// returned quantities from the matching store batches for that bill.
 export async function createBoughtReturn(companyId, items, note, returnBillNumber) {
   try {
     if (!companyId) throw new Error("Company ID is required");
@@ -3192,6 +3521,7 @@ export async function createBoughtReturn(companyId, items, note, returnBillNumbe
       const branch = item.branch || "Slemany";
       const billNumber = item.billNumber;
 
+      // Find store batches tied to this exact bought bill first (most accurate)
       let storeQuery = query(
         collection(db, STORE_ITEMS_COLLECTION),
         where("barcode", "==", barcode),
@@ -3201,6 +3531,7 @@ export async function createBoughtReturn(companyId, items, note, returnBillNumbe
       let storeSnapshot = await getDocs(storeQuery);
       let candidates = storeSnapshot.docs.map((d) => ({ id: d.id, ...d.data(), quantity: Number(d.data().quantity) || 0 }));
 
+      // Fallback: barcode + branch + currency, if nothing matched the exact bill
       if (candidates.length === 0) {
         storeQuery = query(
           collection(db, STORE_ITEMS_COLLECTION),
@@ -3214,9 +3545,12 @@ export async function createBoughtReturn(companyId, items, note, returnBillNumbe
 
       const totalAvailable = candidates.reduce((sum, c) => sum + c.quantity, 0);
       if (totalAvailable < returnQty) {
-        throw new Error(`Cannot return ${returnQty} of "${item.name}". Only ${totalAvailable} currently in store.`);
+        throw new Error(
+          `Cannot return ${returnQty} of "${item.name}". Only ${totalAvailable} currently in store.`
+        );
       }
 
+      // Deduct FIFO by expiry date
       const sorted = candidates.slice().sort((a, b) => {
         const dA = a.expireDate?.toDate?.() || new Date(0);
         const dB = b.expireDate?.toDate?.() || new Date(0);
@@ -3244,7 +3578,7 @@ export async function createBoughtReturn(companyId, items, note, returnBillNumbe
       processedItems.push({
         ...item,
         returnQuantity: returnQty,
-        restoredAllocations: restoreAllocations,
+        restoredAllocations: restoreAllocations, // used later by deleteBoughtReturnItem / edit flows
       });
     }
 
@@ -3291,6 +3625,9 @@ export async function createBoughtReturn(companyId, items, note, returnBillNumbe
   }
 }
 
+// ===================== NEW: deleteBoughtReturn =====================
+// Deletes an entire bought-return document and restores all its items'
+// quantities back into the exact store batches they were deducted from.
 export async function deleteBoughtReturn(returnDocId) {
   try {
     if (!returnDocId) throw new Error("Return document ID is required");
@@ -3302,7 +3639,9 @@ export async function deleteBoughtReturn(returnDocId) {
 
     const items = Array.isArray(returnData.items) && returnData.items.length > 0
       ? returnData.items
-      : returnData.barcode ? [returnData] : [];
+      : returnData.barcode
+      ? [returnData]
+      : [];
 
     for (const item of items) {
       const allocations = item.restoredAllocations || [];
@@ -3335,6 +3674,7 @@ export async function deleteBoughtReturn(returnDocId) {
           }
         }
       } else if (restoreQty > 0) {
+        // Legacy fallback with no allocation tracking
         const storeQ = query(
           collection(db, STORE_ITEMS_COLLECTION),
           where("barcode", "==", item.barcode),
@@ -3363,6 +3703,9 @@ export async function deleteBoughtReturn(returnDocId) {
   }
 }
 
+// ===================== NEW: updateBoughtReturnBill =====================
+// Updates an ENTIRE return bill document (items array) in one atomic pass.
+// Replaces the old per-item loop, which never wrote to the real `items[]` field.
 export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
   try {
     if (!returnDocId) throw new Error("Return document ID is required");
@@ -3373,21 +3716,24 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
     if (!returnSnap.exists()) throw new Error(`Return bill ${returnDocId} not found`);
     const returnDocData = returnSnap.data();
 
-    const oldItems = Array.isArray(returnDocData.items) && returnDocData.items.length > 0
-      ? returnDocData.items
-      : returnDocData.barcode
-      ? [{
-          barcode: returnDocData.barcode,
-          name: returnDocData.name,
-          returnQuantity: returnDocData.returnQuantity || 0,
-          billNumber: returnDocData.billNumber || "",
-          branch: returnDocData.branch || "Slemany",
-          currency: returnDocData.currency || "USD",
-        }]
-      : [];
+    // Normalize old flat-format docs into a 1-item array so both formats share one path
+    const oldItems =
+      Array.isArray(returnDocData.items) && returnDocData.items.length > 0
+        ? returnDocData.items
+        : returnDocData.barcode
+        ? [{
+            barcode: returnDocData.barcode,
+            name: returnDocData.name,
+            returnQuantity: returnDocData.returnQuantity || 0,
+            billNumber: returnDocData.billNumber || "",
+            branch: returnDocData.branch || "Slemany",
+            currency: returnDocData.currency || "USD",
+          }]
+        : [];
 
     const billNumber = returnDocData.billNumber || oldItems[0]?.billNumber || "";
 
+    // ── STEP 1: For every item in the NEW array, apply only the DELTA to store ──
     for (const newItem of updatedItems) {
       const barcode = String(newItem.barcode);
       const oldMatch = oldItems.find((oi) => String(oi.barcode) === barcode);
@@ -3400,6 +3746,7 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
       const branch = newItem.branch || oldMatch?.branch || returnDocData.branch || "Slemany";
       const itemBillNumber = newItem.billNumber || billNumber;
 
+      // Ground truth: how much was purchased
       let originalBillQuantity = Number(newItem.quantity) || Number(oldMatch?.quantity) || 0;
       try {
         const billData = await getBoughtBillByNumber(itemBillNumber);
@@ -3407,12 +3754,13 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
         if (billItem) originalBillQuantity = Number(billItem.quantity) || originalBillQuantity;
       } catch (e) {}
 
+      // How much is returned on OTHER return bills (never touch/trust this doc's old data twice)
       const otherDocsSnap = await getDocs(
         query(collection(db, BOUGHT_RETURNS_COLLECTION), where("billNumber", "==", itemBillNumber))
       );
       let returnedElsewhere = 0;
       otherDocsSnap.docs.forEach((d) => {
-        if (d.id === returnDocId) return;
+        if (d.id === returnDocId) return; // this bill is already represented by oldQty
         const data = d.data();
         if (Array.isArray(data.items)) {
           data.items.forEach((it) => {
@@ -3426,7 +3774,8 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
       const maxReturnable = originalBillQuantity - returnedElsewhere;
       if (newQty > maxReturnable) {
         throw new Error(
-          `Cannot set return quantity to ${newQty} for "${newItem.name}". Only ${maxReturnable} units remain eligible from bill #${itemBillNumber}.`
+          `Cannot set return quantity to ${newQty} for "${newItem.name}". Only ${maxReturnable} units remain ` +
+          `eligible from bill #${itemBillNumber} (already returned on other bills: ${returnedElsewhere}).`
         );
       }
 
@@ -3440,9 +3789,13 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
       const storeDocs = storeSnapshot.docs.map((d) => ({ id: d.id, ...d.data(), quantity: Number(d.data().quantity) || 0 }));
 
       if (delta > 0) {
+        // Returning MORE than before -> deduct the extra from store
         const totalAvailable = storeDocs.reduce((s, d) => s + d.quantity, 0);
         if (totalAvailable < delta) {
-          throw new Error(`Cannot increase return quantity of "${newItem.name}" by ${delta}. Only ${totalAvailable} units currently in store.`);
+          throw new Error(
+            `Cannot increase return quantity of "${newItem.name}" by ${delta}. Only ${totalAvailable} units ` +
+            `currently in store (some may already be sold).`
+          );
         }
         const sorted = storeDocs.slice().sort((a, b) => {
           const dA = a.expireDate?.toDate?.() || new Date(0);
@@ -3459,6 +3812,7 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
           remaining -= deduct;
         }
       } else {
+        // Returning LESS than before -> add the difference back
         const addBack = Math.abs(delta);
         if (storeDocs.length > 0) {
           await updateDoc(doc(db, STORE_ITEMS_COLLECTION, storeDocs[0].id), {
@@ -3489,6 +3843,7 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
       }
     }
 
+    // ── STEP 2: Items that existed before but were removed entirely -> restore their FULL quantity ──
     for (const oldItem of oldItems) {
       const stillExists = updatedItems.some((ni) => String(ni.barcode) === String(oldItem.barcode));
       if (stillExists) continue;
@@ -3523,6 +3878,7 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
       }
     }
 
+    // ── STEP 3: Write the new items array + recomputed totals back — this is what the UI reads ──
     const totalReturnQty = updatedItems.reduce((s, it) => s + (Number(it.returnQuantity) || 0), 0);
     const totalReturnAmount = updatedItems.reduce((s, it) => {
       const p = it.currency === "IQD" ? (it.returnPriceIQD || it.returnPrice || 0) : (it.returnPriceUSD || it.returnPrice || 0);
@@ -3547,6 +3903,7 @@ export async function updateBoughtReturnBill(returnDocId, updatedItems, note) {
   }
 }
 
+
 export async function deleteBoughtReturnItem(returnDocId, barcode) {
   try {
     if (!returnDocId) throw new Error("Return document ID is required");
@@ -3558,19 +3915,20 @@ export async function deleteBoughtReturnItem(returnDocId, barcode) {
     const returnDocData = returnSnap.data();
     const targetBarcode = String(barcode);
 
-    const itemsArray = Array.isArray(returnDocData.items) && returnDocData.items.length > 0
-      ? returnDocData.items.slice()
-      : returnDocData.barcode
-      ? [{
-          barcode: returnDocData.barcode,
-          name: returnDocData.name,
-          returnQuantity: returnDocData.returnQuantity || 0,
-          billNumber: returnDocData.billNumber || "",
-          branch: returnDocData.branch || "Slemany",
-          currency: returnDocData.currency || "USD",
-          restoredAllocations: returnDocData.restoredAllocations || [],
-        }]
-      : [];
+    const itemsArray =
+      Array.isArray(returnDocData.items) && returnDocData.items.length > 0
+        ? returnDocData.items.slice()
+        : returnDocData.barcode
+        ? [{
+            barcode: returnDocData.barcode,
+            name: returnDocData.name,
+            returnQuantity: returnDocData.returnQuantity || 0,
+            billNumber: returnDocData.billNumber || "",
+            branch: returnDocData.branch || "Slemany",
+            currency: returnDocData.currency || "USD",
+            restoredAllocations: returnDocData.restoredAllocations || [],
+          }]
+        : [];
 
     const itemIndex = itemsArray.findIndex((it) => String(it.barcode) === targetBarcode);
     if (itemIndex === -1) throw new Error(`Item with barcode ${targetBarcode} not found in this return bill`);
@@ -3579,7 +3937,9 @@ export async function deleteBoughtReturnItem(returnDocId, barcode) {
     const restoreQty = Number(item.returnQuantity) || 0;
     const restoredAllocations = item.restoredAllocations || [];
 
+    // ── STEP 1: Restore quantity to store using the exact allocations ──
     if (restoreQty > 0 && restoredAllocations.length > 0) {
+      // Restore using the exact allocations from when the return was created
       for (const alloc of restoredAllocations) {
         try {
           const storeRef = doc(db, STORE_ITEMS_COLLECTION, alloc.storeItemId);
@@ -3590,6 +3950,8 @@ export async function deleteBoughtReturnItem(returnDocId, barcode) {
               updatedAt: serverTimestamp(),
             });
           } else {
+            // The store item was deleted, recreate it
+            // Find the original item data from the return
             const originalItem = itemsArray[itemIndex];
             await addDoc(collection(db, STORE_ITEMS_COLLECTION), {
               barcode: originalItem.barcode,
@@ -3614,6 +3976,7 @@ export async function deleteBoughtReturnItem(returnDocId, barcode) {
         }
       }
     } else if (restoreQty > 0) {
+      // Fallback: no allocations tracking, try to find a matching store item
       const currency = item.currency || returnDocData.currency || "USD";
       const branch = item.branch || returnDocData.branch || "Slemany";
       
@@ -3632,6 +3995,7 @@ export async function deleteBoughtReturnItem(returnDocId, barcode) {
           updatedAt: serverTimestamp(),
         });
       } else {
+        // Create a new store item
         await addDoc(collection(db, STORE_ITEMS_COLLECTION), {
           barcode: targetBarcode,
           name: item.name,
@@ -3652,8 +4016,10 @@ export async function deleteBoughtReturnItem(returnDocId, barcode) {
       }
     }
 
+    // ── STEP 2: Remove this item from the array ──
     itemsArray.splice(itemIndex, 1);
 
+    // ── STEP 3: Update or delete the return document ──
     if (itemsArray.length === 0) {
       await deleteDoc(returnRef);
     } else {
@@ -3684,6 +4050,8 @@ export async function deleteBoughtReturnItem(returnDocId, barcode) {
   }
 }
 
+// ===================== NEW: generateBoughtReturnBillNumber =====================
+// Format: BRET-YYYYMMDD-N, sequential per day, starting from 1
 export async function generateBoughtReturnBillNumber() {
   try {
     const now = new Date();
@@ -4174,6 +4542,7 @@ export const checkDocumentExists = async (documentId) => {
   }
 };
 
+// Add this function to get all payments (bought and sold)
 export async function getPayments() {
   try {
     const boughtPaymentsRef = collection(db, BOUGHT_PAYMENTS_COLLECTION);
@@ -4208,6 +4577,7 @@ export async function getPayments() {
       });
     });
     
+    // Sort by createdAt descending
     allPayments.sort((a, b) => {
       const dateA = a.createdAt || new Date(0);
       const dateB = b.createdAt || new Date(0);
@@ -4221,6 +4591,7 @@ export async function getPayments() {
   }
 }
 
+// In data.js - COMPLETE FIXED getBoughtBillByNumber function
 export async function getBoughtBillByNumber(billNumber) {
   try {
     if (!billNumber) {
@@ -4228,9 +4599,12 @@ export async function getBoughtBillByNumber(billNumber) {
       return null;
     }
     
+    console.log(`🔍 Looking for bought bill: ${billNumber} (${typeof billNumber})`);
+    
     const billsRef = collection(db, BOUGHT_BILLS_COLLECTION);
     let billData = null;
     
+    // Try multiple query approaches
     const strategies = [
       { field: "billNumber", value: String(billNumber) },
       { field: "billNumber", value: Number(billNumber) },
@@ -4252,25 +4626,36 @@ export async function getBoughtBillByNumber(billNumber) {
             date: data.date?.toDate ? data.date.toDate() : data.date,
             items: data.items || []
           };
+          console.log(`✅ Found bill using ${strategy.field}: ${strategy.value}`);
           break;
         }
-      } catch (err) {}
+      } catch (err) {
+        // Continue to next strategy
+      }
     }
     
+    // If not found, try searching all bills
     if (!billData) {
+      console.log(`🔍 Searching all bills for ${billNumber}...`);
       const allBillsSnapshot = await getDocs(billsRef);
+      
       for (const doc of allBillsSnapshot.docs) {
         const data = doc.data();
-        if (String(data.billNumber) === String(billNumber) || Number(data.billNumber) === Number(billNumber)) {
+        
+        // Check if billNumber matches
+        if (String(data.billNumber) === String(billNumber) ||
+            Number(data.billNumber) === Number(billNumber)) {
           billData = {
             id: doc.id,
             ...data,
             date: data.date?.toDate ? data.date.toDate() : data.date,
             items: data.items || []
           };
+          console.log(`✅ Found bill by scanning: ${billNumber}`);
           break;
         }
         
+        // Check if any item has this billNumber
         if (data.items && Array.isArray(data.items)) {
           const matchingItem = data.items.find(item => 
             String(item.billNumber) === String(billNumber) ||
@@ -4283,6 +4668,7 @@ export async function getBoughtBillByNumber(billNumber) {
               date: data.date?.toDate ? data.date.toDate() : data.date,
               items: data.items || []
             };
+            console.log(`✅ Found bill via item search: ${billNumber}`);
             break;
           }
         }
@@ -4290,6 +4676,10 @@ export async function getBoughtBillByNumber(billNumber) {
     }
     
     if (!billData) {
+      console.warn(`⚠️ Bill ${billNumber} not found in any query`);
+      
+      // Return a minimal bill object with the items from the return
+      // This allows the return to proceed even if the bill is not found
       return {
         id: null,
         billNumber: billNumber,
@@ -4331,6 +4721,7 @@ export async function uploadBillAttachment(billNumber, file) {
     if (!file) throw new Error("No file provided");
     const storageRef = ref(storage, `bill-attachments/${billNumber}/${file.name}`);
     const snapshot = await uploadBytes(storageRef, file);
+    console.log(`Attachment uploaded successfully for bill ${billNumber}:`, snapshot.metadata.name);
     return { success: true, path: snapshot.metadata.fullPath };
   } catch (error) {
     console.error("Error uploading bill attachment:", error);
@@ -4341,6 +4732,7 @@ export async function uploadBillAttachment(billNumber, file) {
 export async function getBillAttachmentUrl(billNumber) {
   try {
     if (!billNumber) throw new Error("Bill number is required");
+    console.log(`getBillAttachmentUrl called for bill ${billNumber} - functionality needs enhancement`);
     return null;
   } catch (error) {
     console.error("Error getting bill attachment URL:", error);
@@ -4367,6 +4759,7 @@ export async function uploadBillAttachmentWithMetadata(billNumber, file) {
       storagePath: snapshot.metadata.fullPath
     };
     await addDoc(collection(db, BILL_ATTACHMENTS_COLLECTION), attachmentData);
+    console.log(`Attachment uploaded and metadata stored for bill ${billNumber}`);
     return {
       success: true,
       downloadURL: downloadURL,
@@ -4408,6 +4801,7 @@ export async function deleteBillAttachment(billNumber, fileName) {
     const snapshot = await getDocs(q);
     const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
+    console.log(`Attachment deleted for bill ${billNumber}`);
     return { success: true };
   } catch (error) {
     console.error("Error deleting bill attachment:", error);
@@ -4417,11 +4811,13 @@ export async function deleteBillAttachment(billNumber, fileName) {
 
 export async function storeBase64Image(billNumber, base64Data, fileName, fileType) {
   try {
+    console.log(`💾 Storing base64 image for bill ${billNumber}...`);
     if (!billNumber) throw new Error('Bill number is required');
     if (!base64Data || !base64Data.startsWith('data:')) throw new Error('Invalid base64 data');
     const existingQuery = query(collection(db, BILL_ATTACHMENTS_COLLECTION), where("billNumber", "==", billNumber));
     const existingSnapshot = await getDocs(existingQuery);
     if (!existingSnapshot.empty) {
+      console.log(`🗑️ Deleting ${existingSnapshot.docs.length} existing attachments for bill ${billNumber}`);
       const deletePromises = existingSnapshot.docs.map(doc => deleteDoc(doc.ref));
       await Promise.all(deletePromises);
     }
@@ -4437,20 +4833,37 @@ export async function storeBase64Image(billNumber, base64Data, fileName, fileTyp
       billNumber_str: billNumber.toString(),
       timestamp: Date.now()
     };
+    console.log('📄 Attachment data to store:', {
+      billNumber: attachmentData.billNumber,
+      fileName: attachmentData.fileName,
+      fileSize: attachmentData.fileSize,
+      hasBase64: !!attachmentData.base64Data
+    });
     const docRef = await addDoc(collection(db, BILL_ATTACHMENTS_COLLECTION), attachmentData);
+    console.log(`✅ Base64 image stored for bill ${billNumber} with ID: ${docRef.id}`);
     return {
       id: docRef.id,
       ...attachmentData
     };
   } catch (error) {
     console.error("❌ Error storing base64 image:", error);
+    console.error('Error details:', {
+      billNumber,
+      fileName,
+      fileType,
+      base64Length: base64Data?.length
+    });
     throw new Error(`Failed to store scanned image: ${error.message}`);
   }
 }
 
 export async function getBase64BillAttachment(billNumber) {
   try {
-    if (!billNumber) return null;
+    if (!billNumber) {
+      console.log('❌ No bill number provided');
+      return null;
+    }
+    console.log(`🔍 Searching for base64 attachment for bill: ${billNumber}`);
     const q = query(
       collection(db, BILL_ATTACHMENTS_COLLECTION),
       where("billNumber", "==", billNumber),
@@ -4459,14 +4872,27 @@ export async function getBase64BillAttachment(billNumber) {
       limit(1)
     );
     const snapshot = await getDocs(q);
+    console.log(`📊 Found ${snapshot.docs.length} base64 attachments for bill ${billNumber}`);
     if (!snapshot.empty) {
       const attachmentData = snapshot.docs[0].data();
+      console.log('✅ Found base64 attachment:', {
+        id: snapshot.docs[0].id,
+        fileName: attachmentData.fileName,
+        fileSize: attachmentData.fileSize,
+        hasBase64: !!attachmentData.base64Data
+      });
       return attachmentData.base64Data || null;
     } else {
+      console.log(`❌ No base64 attachment found for bill ${billNumber}`);
       return null;
     }
   } catch (error) {
     console.error("❌ Error getting base64 bill attachment:", error);
+    console.error('Error details:', {
+      billNumber,
+      errorCode: error.code,
+      errorMessage: error.message
+    });
     return null;
   }
 }
@@ -4477,6 +4903,7 @@ export async function deleteBase64Attachment(billNumber) {
     const snapshot = await getDocs(q);
     const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
+    console.log(`Base64 attachment deleted for bill ${billNumber}`);
     return { success: true };
   } catch (error) {
     console.error("Error deleting base64 attachment:", error);
@@ -4484,6 +4911,7 @@ export async function deleteBase64Attachment(billNumber) {
   }
 }
 
+// Add this function to handle adding a company
 export async function addCompany(company) {
   try {
     const existing = await getDocs(query(collection(db, COMPANIES_COLLECTION), where("code", "==", company.code)));
@@ -4496,6 +4924,7 @@ export async function addCompany(company) {
   }
 }
 
+// Add this function to handle deleting a company
 export async function deleteCompany(companyId) {
   try {
     await deleteDoc(doc(db, COMPANIES_COLLECTION, companyId));
@@ -4506,6 +4935,7 @@ export async function deleteCompany(companyId) {
   }
 }
 
+// Add this function to handle updating a company
 export async function updateCompany(updatedCompany) {
   try {
     const companyRef = doc(db, COMPANIES_COLLECTION, updatedCompany.id);
@@ -4528,6 +4958,8 @@ export async function getPharmacySoldBills(pharmacyId, includeBillIds = []) {
 
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
+      
+      // Only this pharmacy's bills
       if (data.pharmacyId !== pharmacyId) continue;
 
       let dateValue;
@@ -4541,15 +4973,18 @@ export async function getPharmacySoldBills(pharmacyId, includeBillIds = []) {
         dateValue = new Date();
       }
 
+      // CRITICAL: Calculate totals from items if not already stored
       let totalAmountUSD = data.totalAmountUSD || 0;
       let totalAmountIQD = data.totalAmountIQD || 0;
       
+      // If totals are zero but we have items, calculate from items
       if ((totalAmountUSD === 0 && totalAmountIQD === 0) && data.items && data.items.length > 0) {
         for (const item of data.items) {
           const quantity = parseInt(item.quantity) || 0;
           totalAmountUSD += (parseFloat(item.outPriceUSD) || 0) * quantity;
           totalAmountIQD += (parseFloat(item.outPriceIQD) || 0) * quantity;
           
+          // Try alternative price fields
           if (totalAmountUSD === 0 && parseFloat(item.price) > 0 && item.currency === "USD") {
             totalAmountUSD += parseFloat(item.price) * quantity;
           }
@@ -4574,6 +5009,7 @@ export async function getPharmacySoldBills(pharmacyId, includeBillIds = []) {
       });
     }
 
+    // Keep bills that are Unpaid for this pharmacy, OR that are in the includeBillIds list
     return allBills.filter((bill) => {
       const isUnpaid = bill.paymentStatus !== "Paid";
       const isIncluded = includeBillIds.includes(bill.id);
@@ -4585,6 +5021,90 @@ export async function getPharmacySoldBills(pharmacyId, includeBillIds = []) {
   }
 }
 
+// export async function getPharmacyReturns(pharmacyId, includeReturnIds = []) {
+//   try {
+//     if (!pharmacyId) return [];
+
+//     const returnsRef = collection(db, RETURNS_COLLECTION);
+//     const q = query(returnsRef, where("pharmacyId", "==", pharmacyId));
+//     const snapshot = await getDocs(q);
+    
+//     const results = [];
+    
+//     for (const docSnap of snapshot.docs) {
+//       const data = docSnap.data();
+      
+//       // Get the return date
+//       let dateValue;
+//       if (data.returnDate) {
+//         if (typeof data.returnDate.toDate === "function") dateValue = data.returnDate.toDate();
+//         else if (data.returnDate instanceof Date) dateValue = data.returnDate;
+//         else if (data.returnDate.seconds) dateValue = new Date(data.returnDate.seconds * 1000);
+//         else dateValue = new Date();
+//       } else if (data.date) {
+//         if (typeof data.date.toDate === "function") dateValue = data.date.toDate();
+//         else if (data.date instanceof Date) dateValue = data.date;
+//         else if (data.date.seconds) dateValue = new Date(data.date.seconds * 1000);
+//         else dateValue = new Date();
+//       } else {
+//         dateValue = new Date();
+//       }
+      
+//       // Calculate return amount
+//       const qty = parseInt(data.returnQuantity) || 0;
+//       const price = parseFloat(data.returnPrice) || 0;
+//       const currency = data.currency || "IQD";
+      
+//       let totalReturnUSD = 0;
+//       let totalReturnIQD = 0;
+      
+//       if (currency === "USD") {
+//         totalReturnUSD = price * qty;
+//       } else {
+//         totalReturnIQD = price * qty;
+//       }
+      
+//       // Create a unique return number for display
+//       const returnNumberDisplay = data.returnBillNumber || `RET-${docSnap.id.slice(-6).toUpperCase()}`;
+      
+//       // Only include if unpaid OR specifically included (for edit mode)
+//       const isUnprocessed = data.paymentStatus !== "Processed";
+//       const isIncluded = includeReturnIds.includes(docSnap.id);
+      
+//       if (isUnprocessed || isIncluded) {
+//         results.push({
+//           id: docSnap.id,
+//           documentId: docSnap.id,
+//           returnBillNumber: returnNumberDisplay,
+//           pharmacyId: data.pharmacyId,
+//           pharmacyName: data.pharmacyName || "",
+//           billNumber: data.billNumber || "",
+//           billId: data.billId || "",
+//           date: dateValue,
+//           returnDate: dateValue,
+//           paymentStatus: data.paymentStatus || "Unpaid",
+//           totalReturnUSD: totalReturnUSD,
+//           totalReturnIQD: totalReturnIQD,
+//           returnQuantity: qty,
+//           returnPrice: price,
+//           currency: currency,
+//           returnNote: data.returnBillNote || data.returnNote || "",
+//           barcode: data.barcode,
+//           name: data.name,
+//           items: [data], // Keep for compatibility
+//         });
+//       }
+//     }
+    
+//     console.log(`Found ${results.length} returns for pharmacy ${pharmacyId}`);
+//     return results;
+//   } catch (error) {
+//     console.error("Error getting pharmacy returns:", error);
+//     throw error;
+//   }
+// }
+// Add these wrapper functions to lib/data.js
+// Make sure this function exists in your data.js
 export async function getPharmacyReturns(pharmacyId, includeReturnIds = []) {
   try {
     if (!pharmacyId) return [];
@@ -4598,6 +5118,7 @@ export async function getPharmacyReturns(pharmacyId, includeReturnIds = []) {
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
       
+      // Get the return date
       let dateValue;
       if (data.returnDate) {
         if (typeof data.returnDate.toDate === "function") dateValue = data.returnDate.toDate();
@@ -4613,10 +5134,12 @@ export async function getPharmacyReturns(pharmacyId, includeReturnIds = []) {
         dateValue = new Date();
       }
       
+      // Calculate total return amounts
       let totalReturnUSD = 0;
       let totalReturnIQD = 0;
       let totalReturnQty = 0;
       
+      // Check if this is a multi-item return (items array exists)
       if (data.items && Array.isArray(data.items) && data.items.length > 0) {
         for (const item of data.items) {
           const qty = parseInt(item.returnQuantity) || 0;
@@ -4643,12 +5166,15 @@ export async function getPharmacyReturns(pharmacyId, includeReturnIds = []) {
         totalReturnQty = qty;
       }
       
+      // Create a unique return number for display
       const returnNumberDisplay = data.returnBillNumber || `RET-${docSnap.id.slice(-6).toUpperCase()}`;
       
+      // Only include if unpaid OR specifically included
       const isUnprocessed = data.paymentStatus !== "Processed" && data.paymentStatus !== "Paid";
       const isIncluded = includeReturnIds.includes(docSnap.id);
       
       if (isUnprocessed || isIncluded) {
+        // Build items array for display
         let itemsArray = [];
         if (data.items && Array.isArray(data.items) && data.items.length > 0) {
           itemsArray = data.items.map(item => ({
@@ -4699,6 +5225,9 @@ export async function getPharmacyReturns(pharmacyId, includeReturnIds = []) {
   }
 }
 
+// ===================== GET PHARMACY BILLS =====================
+// Add this function to your data.js file
+
 export async function getPharmacyBills(pharmacyId) {
   try {
     if (!pharmacyId) {
@@ -4726,6 +5255,7 @@ export async function getPharmacyBills(pharmacyId) {
         dateValue = new Date();
       }
       
+      // Calculate total amount
       let totalAmount = 0;
       if (data.items && Array.isArray(data.items)) {
         for (const item of data.items) {
@@ -4750,6 +5280,7 @@ export async function getPharmacyBills(pharmacyId) {
       });
     }
     
+    // Sort by date (newest first)
     bills.sort((a, b) => new Date(b.date) - new Date(a.date));
     
     return { bills };
@@ -4760,19 +5291,29 @@ export async function getPharmacyBills(pharmacyId) {
   }
 }
 
-// ============================================================
-// CATALOG MANAGEMENT FUNCTIONS
-// ============================================================
 
+
+// ===================== CATALOG MANAGEMENT FUNCTIONS =====================
+// Add these to your existing data.js file
+
+
+
+
+
+
+
+// Search catalog items
 export async function searchCatalogItems(searchQuery, category = null) {
   try {
     const allItems = await getCatalogItems();
     let filtered = allItems;
     
+    // Filter by category
     if (category && category !== "All") {
       filtered = filtered.filter(item => item.category === category);
     }
     
+    // Filter by search query
     if (searchQuery && searchQuery.trim().length > 0) {
       const queryLower = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(item => 
@@ -4789,26 +5330,25 @@ export async function searchCatalogItems(searchQuery, category = null) {
   }
 }
 
+// Sync store items to catalog (when a new item is bought)
 export async function syncStoreItemToCatalog(storeItem) {
   try {
     if (!storeItem || !storeItem.name) return null;
     
+    // Check if item exists in catalog by name
     const existing = await getCatalogItemByName(storeItem.name);
     if (existing) {
+      // Update base price if needed
+      if (storeItem.netPrice && storeItem.netPrice !== existing.basePrice) {
+        // Optionally update base price or keep as is
+        console.log(`Item "${storeItem.name}" already exists in catalog. Price: ${existing.basePrice}`);
+      }
       return existing;
     }
     
-    const newItem = await createCatalogItem({
-      name: storeItem.name,
-      description: storeItem.description || '',
-      image: storeItem.image || '',
-      category: storeItem.category || 'Uncategorized',
-      basePrice: storeItem.netPrice || 0,
-      isVisible: false,
-      unit: storeItem.unit || 'piece',
-      barcode: storeItem.barcode || '',
-    });
+
     
+    console.log(`Created new catalog item "${storeItem.name}" (invisible)`);
     return newItem;
   } catch (error) {
     console.error("Error syncing store item to catalog:", error);
@@ -4816,6 +5356,15 @@ export async function syncStoreItemToCatalog(storeItem) {
   }
 }
 
+// ===================== CATALOG MANAGEMENT FUNCTIONS =====================
+// Add these to your existing data.js file
+
+// ===================== CATALOG MANAGEMENT FUNCTIONS =====================
+// Add these to your data.js
+
+const CATALOG_COLLECTION = "catalogItems";
+
+// Get all catalog items with stock info
 export async function getCatalogItemsWithStock() {
   try {
     const catalogRef = collection(db, CATALOG_COLLECTION);
@@ -4854,6 +5403,10 @@ export async function getCatalogItemsWithStock() {
   }
 }
 
+
+
+
+// Upload multiple images
 export async function uploadCatalogImages(files, itemName) {
   try {
     if (!files || files.length === 0) throw new Error("No files provided");
@@ -4874,6 +5427,9 @@ export async function uploadCatalogImages(files, itemName) {
   }
 }
 
+
+
+// Get all unique categories
 export async function getCatalogCategories() {
   try {
     const items = await getCatalogItemsWithStock();
@@ -4888,6 +5444,7 @@ export async function getCatalogCategories() {
   }
 }
 
+// Get catalog item by name (case insensitive)
 export async function getCatalogItemByName(name) {
   try {
     if (!name) return null;
@@ -4909,8 +5466,10 @@ export async function getCatalogItemByName(name) {
   }
 }
 
+// Create catalog item
 export async function createCatalogItem(itemData) {
   try {
+    // Check if item with same name already exists
     const existing = await getCatalogItemByName(itemData.name);
     if (existing) {
       throw new Error(`Item "${itemData.name}" already exists in catalog`);
@@ -4943,11 +5502,13 @@ export async function createCatalogItem(itemData) {
   }
 }
 
+// Update catalog item
 export async function updateCatalogItem(itemId, itemData) {
   try {
     if (!itemId) throw new Error("Item ID is required");
     const itemRef = doc(db, CATALOG_COLLECTION, itemId);
     
+    // Check if updating name and it conflicts with another item
     if (itemData.name) {
       const existing = await getCatalogItemByName(itemData.name);
       if (existing && existing.id !== itemId) {
@@ -4968,6 +5529,7 @@ export async function updateCatalogItem(itemId, itemData) {
       updatedAt: serverTimestamp(),
     };
 
+    // Remove undefined fields
     Object.keys(updateData).forEach(key => {
       if (updateData[key] === undefined) delete updateData[key];
     });
@@ -4980,6 +5542,7 @@ export async function updateCatalogItem(itemId, itemData) {
   }
 }
 
+// Get catalog item by ID
 export async function getCatalogItemById(itemId) {
   try {
     if (!itemId) throw new Error("Item ID is required");
@@ -4999,6 +5562,7 @@ export async function getCatalogItemById(itemId) {
   }
 }
 
+// Delete catalog item
 export async function deleteCatalogItem(itemId) {
   try {
     if (!itemId) throw new Error("Item ID is required");
@@ -5010,14 +5574,17 @@ export async function deleteCatalogItem(itemId) {
   }
 }
 
+// Upload image to Firebase Storage
 export async function uploadCatalogImage(file, itemName) {
   try {
     if (!file) throw new Error("No file provided");
     
+    // Create a unique filename
     const timestamp = Date.now();
     const fileName = `${itemName.replace(/\s/g, '_')}_${timestamp}.${file.name.split('.').pop()}`;
     const storageRef = ref(storage, `catalog-images/${fileName}`);
     
+    // Upload file
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
     
@@ -5028,11 +5595,18 @@ export async function uploadCatalogImage(file, itemName) {
   }
 }
 
+// ===================== SYNC STORE ITEMS TO CATALOG =====================
+// Add this to your data.js file
+
 export async function syncStoreItemsToCatalog() {
   try {
+    // Get all store items
     const storeItems = await getStoreItems();
+    
+    // Get all catalog items
     const catalogItems = await getCatalogItems();
     
+    // Create a map of existing catalog items by name (lowercase)
     const catalogMap = {};
     catalogItems.forEach(item => {
       if (item.name) {
@@ -5040,11 +5614,13 @@ export async function syncStoreItemsToCatalog() {
       }
     });
     
+    // Track results
     let created = 0;
     let skipped = 0;
     let errors = 0;
     const results = [];
     
+    // Process each store item
     for (const storeItem of storeItems) {
       try {
         if (!storeItem.name) {
@@ -5054,6 +5630,7 @@ export async function syncStoreItemsToCatalog() {
         
         const nameLower = storeItem.name.toLowerCase();
         
+        // Check if this item already exists in catalog
         if (catalogMap[nameLower]) {
           skipped++;
           results.push({
@@ -5064,20 +5641,23 @@ export async function syncStoreItemsToCatalog() {
           continue;
         }
         
+        // Get the price - use outPrice or netPrice
         let basePrice = storeItem.outPrice || storeItem.netPrice || 0;
+        // If both USD and IQD are available, use USD
         if (storeItem.outPriceUSD && storeItem.outPriceUSD > 0) {
           basePrice = storeItem.outPriceUSD;
         } else if (storeItem.outPriceIQD && storeItem.outPriceIQD > 0) {
-          basePrice = storeItem.outPriceIQD / 1500;
+          basePrice = storeItem.outPriceIQD / 1500; // Convert IQD to USD roughly
         }
         
+        // Create catalog item (invisible by default)
         const newItem = await createCatalogItem({
           name: storeItem.name,
           description: storeItem.description || '',
           image: storeItem.image || '',
           category: storeItem.category || 'Uncategorized',
           basePrice: basePrice || 0,
-          isVisible: false,
+          isVisible: false, // IMPORTANT: Invisible by default
           unit: storeItem.unit || 'piece',
           barcode: storeItem.barcode || '',
         });
@@ -5089,6 +5669,7 @@ export async function syncStoreItemsToCatalog() {
           id: newItem.id
         });
         
+        // Add to map to avoid duplicates in same sync
         catalogMap[nameLower] = newItem;
         
       } catch (error) {
@@ -5115,6 +5696,7 @@ export async function syncStoreItemsToCatalog() {
   }
 }
 
+// Get all catalog items (without stock info)
 export async function getCatalogItems() {
   try {
     const catalogRef = collection(db, CATALOG_COLLECTION);
@@ -5130,6 +5712,8 @@ export async function getCatalogItems() {
     return [];
   }
 }
+// ===================== GET RETURNS FOR PHARMACY =====================
+// Add this function to your data.js file
 
 export async function getReturnsForPharmacy(pharmacyId) {
   try {
@@ -5147,6 +5731,7 @@ export async function getReturnsForPharmacy(pharmacyId) {
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
       
+      // Get the return date
       let dateValue;
       if (data.returnDate) {
         if (typeof data.returnDate.toDate === "function") dateValue = data.returnDate.toDate();
@@ -5162,12 +5747,15 @@ export async function getReturnsForPharmacy(pharmacyId) {
         dateValue = new Date();
       }
       
+      // Check if this is a multi-item return (items array exists)
       if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+        // Process each item in the items array
         for (const item of data.items) {
           const qty = parseInt(item.returnQuantity) || 0;
           const price = parseFloat(item.returnPrice) || 0;
           const currency = item.currency || data.currency || "IQD";
           
+          // Create a unique return number for display
           const returnNumberDisplay = data.returnBillNumber || `RET-${docSnap.id.slice(-6).toUpperCase()}`;
           
           results.push({
@@ -5192,6 +5780,7 @@ export async function getReturnsForPharmacy(pharmacyId) {
           });
         }
       } else if (data.barcode) {
+        // Old format: single item per document
         const qty = parseInt(data.returnQuantity) || 0;
         const price = parseFloat(data.returnPrice) || 0;
         const currency = data.currency || "IQD";
@@ -5221,12 +5810,14 @@ export async function getReturnsForPharmacy(pharmacyId) {
       }
     }
     
+    // Filter: Only return UNPAID returns (not Processed or Paid)
     const unpaidReturns = results.filter(
       (returnItem) =>
         returnItem.paymentStatus !== "Processed" &&
         returnItem.paymentStatus !== "Paid"
     );
     
+    console.log(`Found ${unpaidReturns.length} unpaid returns for pharmacy ${pharmacyId}`);
     return unpaidReturns;
     
   } catch (error) {
@@ -5235,71 +5826,169 @@ export async function getReturnsForPharmacy(pharmacyId) {
   }
 }
 
+// ============================================================================
+// PART 1 — lib/data.js changes
+// ============================================================================
+
 function extractItemsFromReturnDoc(docId, data, pharmacyMap) {
   const pharmacyName = pharmacyMap[data.pharmacyId] || data.pharmacyName || "Unknown Pharmacy";
-  const returnDate = data.returnDate ? data.returnDate.toDate() : new Date();
-  const currency = data.currency || "IQD";
+  const returnDate   = data.returnDate ? data.returnDate.toDate() : new Date();
+  const currency     = data.currency || "IQD";
 
   if (data.items && Array.isArray(data.items) && data.items.length > 0) {
     return data.items.map(item => ({
-      id: docId,
-      barcode: item.barcode || "",
-      name: item.name || "",
+      id:             docId,
+      barcode:        item.barcode        || "",
+      name:           item.name           || "",
       returnQuantity: item.returnQuantity || 0,
-      returnPrice: item.returnPrice || 0,
+      returnPrice:    item.returnPrice    || 0,
       originalQuantity: item.originalQuantity || 0,
-      expireDate: item.expireDate || null,
-      currency: item.currency || currency,
-      billNumber: item.billNumber || data.billNumber || "",
-      billId: item.billId || data.billId || "",
+      expireDate:     item.expireDate     || null,
+      currency:       item.currency       || currency,
+      billNumber:     item.billNumber     || data.billNumber || "",
+      billId:         item.billId         || data.billId     || "",
+      // batch / bought-bill tracking
       saleBatchAllocations: item.saleBatchAllocations || [],
-      restoreAllocations: item.restoreAllocations || [],
-      branch: item.branch || "Slemany",
+      restoreAllocations:   item.restoreAllocations   || [],
+      branch:         item.branch || "Slemany",
       boughtBillNumber: item.boughtBillNumber || null,
-      returnBillNumber: data.returnBillNumber || `RET-${docId.slice(-6).toUpperCase()}`,
-      returnBillNote: data.returnBillNote || "",
-      pharmacyReturnBillNumber: data.pharmacyReturnBillNumber || "",
-      pharmacyId: data.pharmacyId,
+      returnBillNumber:          data.returnBillNumber || `RET-${docId.slice(-6).toUpperCase()}`,
+      returnBillNote:            data.returnBillNote   || "",
+      pharmacyReturnBillNumber:  data.pharmacyReturnBillNumber || "",
+      pharmacyId:   data.pharmacyId,
       pharmacyName: pharmacyName,
       paymentStatus: data.paymentStatus || "Unpaid",
-      returnDate: returnDate,
+      returnDate:   returnDate,
     }));
   }
 
   if (data.barcode) {
     return [{
-      id: docId,
-      barcode: data.barcode || "",
-      name: data.name || "",
+      id:             docId,
+      barcode:        data.barcode        || "",
+      name:           data.name           || "",
       returnQuantity: data.returnQuantity || 0,
-      returnPrice: data.returnPrice || 0,
+      returnPrice:    data.returnPrice    || 0,
       originalQuantity: data.originalQuantity || 0,
-      expireDate: data.expireDate || null,
-      currency: currency,
-      billNumber: data.billNumber || "",
-      billId: data.billId || "",
+      expireDate:     data.expireDate     || null,
+      currency:       currency,
+      billNumber:     data.billNumber     || "",
+      billId:         data.billId         || "",
       saleBatchAllocations: data.saleBatchAllocations || [],
-      restoreAllocations: data.restoreAllocations || [],
-      branch: data.branch || "Slemany",
+      restoreAllocations:   data.restoreAllocations   || [],
+      branch:         data.branch || "Slemany",
       boughtBillNumber: data.boughtBillNumber || null,
-      returnBillNumber: data.returnBillNumber || `RET-${docId.slice(-6).toUpperCase()}`,
-      returnBillNote: data.returnBillNote || "",
+      returnBillNumber:         data.returnBillNumber || `RET-${docId.slice(-6).toUpperCase()}`,
+      returnBillNote:           data.returnBillNote   || "",
       pharmacyReturnBillNumber: data.pharmacyReturnBillNumber || "",
-      pharmacyId: data.pharmacyId,
+      pharmacyId:   data.pharmacyId,
       pharmacyName: pharmacyName,
       paymentStatus: data.paymentStatus || "Unpaid",
-      returnDate: returnDate,
+      returnDate:   returnDate,
     }];
   }
 
   return [];
 }
 
+// ── B) getReturnById: carry batch info through into the flat items list ────
+// Inside getReturnById, in the loop that pushes onto `items`, add the two
+// NEW lines below (everything else in that push stays the same):
+//
+//   items.push({
+//     id:              docSnap.id,
+//     barcode:         item.barcode,
+//     ...
+//     alreadyReturnedByOthers: 0,
+//     availableQuantity: item.originalQuantity || 0,
+//     // NEW:
+//     saleBatchAllocations: item.saleBatchAllocations || [],
+//     restoreAllocations:   item.restoreAllocations   || [],
+//     branch: item.branch || "Slemany",
+//   });
+
+// ── C) Helper shared by create/update: distribute a return quantity across
+//       the original sale's batchAllocations, skipping past what earlier
+//       returns already consumed, and apply it directly to those exact
+//       storeItemIds. Falls back to barcode+branch+currency matching only
+//       when no batch allocation data exists (legacy sales). ─────────────
+async function rahJ91ZuNL8Y2px8iYciYeHN8sfSh5eXH8({ barcode, name, branch, currency, expireDate, returnPrice, returnQty, saleBatchAllocations, skipQty }) {
+  const applied = [];
+  let skip = Number(skipQty) || 0;
+  let remaining = Number(returnQty) || 0;
+
+  for (const alloc of (saleBatchAllocations || [])) {
+    if (remaining <= 0) break;
+    const allocQty = Number(alloc.quantity) || 0;
+    if (skip >= allocQty) { skip -= allocQty; continue; }
+    const availableHere = allocQty - skip;
+    skip = 0;
+    const restoreHere = Math.min(remaining, availableHere);
+    if (restoreHere <= 0) continue;
+
+    try {
+      const storeRef = doc(db, STORE_ITEMS_COLLECTION, alloc.storeItemId);
+      const storeSnap = await getDoc(storeRef);
+      if (storeSnap.exists()) {
+        await updateDoc(storeRef, {
+          quantity: (Number(storeSnap.data().quantity) || 0) + restoreHere,
+          updatedAt: serverTimestamp(),
+        });
+        applied.push({ storeItemId: alloc.storeItemId, quantity: restoreHere });
+        remaining -= restoreHere;
+      }
+      // If the exact batch doc no longer exists, fall through — it'll be
+      // covered by the fallback below instead of silently vanishing.
+    } catch (e) {
+      console.error(`Failed to restore to batch ${alloc.storeItemId}:`, e);
+    }
+  }
+
+  // Fallback: no batch allocation data (legacy sale) or allocations didn't
+  // cover the full return — match by barcode+branch+currency as a last resort.
+  if (remaining > 0) {
+    const storeItemsRef = collection(db, STORE_ITEMS_COLLECTION);
+    const sq = query(storeItemsRef, where("barcode", "==", barcode), where("branch", "==", branch));
+    const storeSnapshot = await getDocs(sq);
+    const candidates = storeSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const matchByCurrency = candidates.filter((c) => (c.originalCurrency || c.priceType) === currency);
+    const target = matchByCurrency[0] || candidates[0];
+
+    if (target) {
+      await updateDoc(doc(db, STORE_ITEMS_COLLECTION, target.id), {
+        quantity: (Number(target.quantity) || 0) + remaining,
+        updatedAt: serverTimestamp(),
+      });
+      applied.push({ storeItemId: target.id, quantity: remaining });
+    } else {
+      const expireDateTimestamp = expireDate ? toFirestoreTimestamp(expireDate) : null;
+      const price = Number(returnPrice) || 0;
+      const newDoc = await addDoc(collection(db, STORE_ITEMS_COLLECTION), {
+        barcode, name: name || "Unknown Item", quantity: remaining,
+        expireDate: expireDateTimestamp, branch,
+        isConsignment: false, consignmentOwnerId: null,
+        originalCurrency: currency, priceType: currency,
+        netPriceUSD: currency === "USD" ? price : 0,
+        netPriceIQD: currency === "IQD" ? price : 0,
+        outPriceUSD: currency === "USD" ? price : 0,
+        outPriceIQD: currency === "IQD" ? price : 0,
+        basePriceUSD: 0, basePriceIQD: 0,
+        boughtBillNumber: "RETURNED",
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      });
+      applied.push({ storeItemId: newDoc.id, quantity: remaining });
+    }
+    remaining = 0;
+  }
+
+  return applied;
+}
 async function restoreQuantityToStore({ barcode, name, branch, currency, expireDate, returnPrice, returnQty, saleBatchAllocations, skipQty, boughtBillNumber }) {
   const applied = [];
   let skip = Number(skipQty) || 0;
   let remaining = Number(returnQty) || 0;
 
+  // ── Tier 1: exact batch restore using the sale's own batchAllocations ──────
   for (const alloc of (saleBatchAllocations || [])) {
     if (remaining <= 0) break;
     const allocQty = Number(alloc.quantity) || 0;
@@ -5325,6 +6014,7 @@ async function restoreQuantityToStore({ barcode, name, branch, currency, expireD
     }
   }
 
+  // ── Tier 2: barcode + branch + boughtBillNumber ─────────────────────────────
   if (remaining > 0 && boughtBillNumber) {
     const storeItemsRef = collection(db, STORE_ITEMS_COLLECTION);
     const bq = query(
@@ -5351,6 +6041,7 @@ async function restoreQuantityToStore({ barcode, name, branch, currency, expireD
     }
   }
 
+  // ── Tier 3: barcode + branch only (last resort) ─────────────────────────────
   if (remaining > 0) {
     const storeItemsRef = collection(db, STORE_ITEMS_COLLECTION);
     const sq = query(storeItemsRef, where("barcode", "==", barcode), where("branch", "==", branch));
@@ -5397,7 +6088,6 @@ async function restoreQuantityToStore({ barcode, name, branch, currency, expireD
 
   return applied;
 }
-
 export async function returnItemsToStore(pharmacyId, items, note, returnBillNumber, totalAmount, totalQty) {
   try {
     if (!pharmacyId) throw new Error("Pharmacy ID is required");
@@ -5418,7 +6108,7 @@ export async function returnItemsToStore(pharmacyId, items, note, returnBillNumb
         returnPrice: item.returnPrice,
         returnQty,
         saleBatchAllocations: item.saleBatchAllocations || [],
-        skipQty: item.alreadyReturned || 0,
+        skipQty: item.alreadyReturned || 0, // qty already restored by earlier returns for this bill+item
         boughtBillNumber: item.boughtBillNumber || null,
       });
 
@@ -5426,8 +6116,8 @@ export async function returnItemsToStore(pharmacyId, items, note, returnBillNumb
         ...item,
         branch: item.branch || "Slemany",
         boughtBillNumber: item.boughtBillNumber || null,
-        saleBatchAllocations: item.saleBatchAllocations || [],
-        restoreAllocations: applied,
+        saleBatchAllocations: item.saleBatchAllocations || [], // keep for future edits
+        restoreAllocations: applied,                            // exactly what THIS return touched
       });
     }
 
@@ -5461,6 +6151,7 @@ export async function returnItemsToStore(pharmacyId, items, note, returnBillNumb
   }
 }
 
+// ── E) deleteReturnBillAndRestoreToSale — reverse the exact batches touched ─
 export async function deleteReturnBillAndRestoreToSale(returnId) {
   try {
     if (!returnId) throw new Error("Return ID is required");
@@ -5497,14 +6188,16 @@ export async function deleteReturnBillAndRestoreToSale(returnId) {
       }
     }
 
-    const itemsToReverse = Array.isArray(returnData.items) && returnData.items.length > 0
-      ? returnData.items
-      : returnData.barcode ? [returnData] : [];
+    const itemsToReverse =
+      Array.isArray(returnData.items) && returnData.items.length > 0
+        ? returnData.items
+        : returnData.barcode ? [returnData] : [];
 
     for (const item of itemsToReverse) {
       const restoreAllocations = item.restoreAllocations || [];
 
       if (restoreAllocations.length > 0) {
+        // Precise reversal: undo exactly what was added to these exact batches.
         for (const alloc of restoreAllocations) {
           try {
             const storeRef = doc(db, STORE_ITEMS_COLLECTION, alloc.storeItemId);
@@ -5521,6 +6214,7 @@ export async function deleteReturnBillAndRestoreToSale(returnId) {
           }
         }
       } else {
+        // Legacy return with no batch tracking — fall back to old behavior.
         const returnQty = Number(item.returnQuantity) || 0;
         if (returnQty <= 0) continue;
         const barcode = item.barcode;
@@ -5568,15 +6262,17 @@ export async function updateReturnItems(returnBillNumber, items, totalAmount, to
     const returnRef = doc(db, RETURNS_COLLECTION, returnDoc.id);
     const existingData = returnDoc.data();
 
-    const oldItems = Array.isArray(existingData.items) && existingData.items.length > 0
-      ? existingData.items
-      : existingData.barcode ? [existingData] : [];
+    const oldItems =
+      Array.isArray(existingData.items) && existingData.items.length > 0
+        ? existingData.items
+        : existingData.barcode ? [existingData] : [];
 
     const newItemsWithAllocations = [];
 
     for (const newItem of items) {
       const oldItem = oldItems.find((i) => i.barcode === newItem.barcode);
 
+      // STEP 1 — reverse exactly what this return previously added.
       const oldAllocations = oldItem?.restoreAllocations || [];
       for (const alloc of oldAllocations) {
         try {
@@ -5591,6 +6287,8 @@ export async function updateReturnItems(returnBillNumber, items, totalAmount, to
         }
       }
 
+      // STEP 2 — reapply for the new quantity, skipping past what OTHER
+      // return bills (not this one) have already consumed.
       const returnQty = Number(newItem.returnQuantity) || 0;
       const saleBatchAllocations = newItem.saleBatchAllocations || oldItem?.saleBatchAllocations || [];
       const branch = newItem.branch || oldItem?.branch || "Slemany";

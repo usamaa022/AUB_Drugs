@@ -4,8 +4,30 @@ import { getStoreItems, updateStoreItem } from "@/lib/data";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import * as XLSX from 'xlsx';
-import { onSnapshot, collection, query, where, orderBy } from "firebase/firestore";
+import { onSnapshot, collection, query, where, orderBy, updateDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Filter, Search } from "lucide-react";
+
+// --- Advanced Filter Operators ---
+const STRING_OPERATORS = [
+  { value: "contains", label: "Contains" },
+  { value: "equals", label: "Equals" },
+  { value: "startsWith", label: "Starts with" },
+  { value: "endsWith", label: "Ends with" },
+  { value: "isEmpty", label: "Is empty" },
+  { value: "isNotEmpty", label: "Is not empty" }
+];
+
+const NUMBER_OPERATORS = [
+  { value: "equals", label: "Equals" },
+  { value: "notEquals", label: "Not equals" },
+  { value: "greaterThan", label: "> Greater than" },
+  { value: "greaterThanOrEqual", label: ">= Greater or eq" },
+  { value: "lessThan", label: "< Less than" },
+  { value: "lessThanOrEqual", label: "<= Less or eq" },
+  { value: "isEmpty", label: "Is empty" },
+  { value: "isNotEmpty", label: "Is not empty" }
+];
 
 // NRT font style for all content
 const nrtFontStyle = {
@@ -82,7 +104,6 @@ const formatUSD = (amount) => {
 
 const formatIQD = (amount) => {
   if (amount === undefined || amount === null || amount === 0) return "-";
-  // Use English/Western numbers only
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
@@ -146,12 +167,15 @@ export default function StorePage() {
   const { user } = useAuth();
   const router = useRouter();
   const [storeItems, setStoreItems] = useState([]);
+  
+  // Cleaned up Global Search States
   const [searchQuery, setSearchQuery] = useState("");
   const [barcodeSearch, setBarcodeSearch] = useState("");
   const [billSearch, setBillSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [expireBefore, setExpireBefore] = useState("");
+  
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
@@ -170,6 +194,25 @@ export default function StorePage() {
   const [branchFilter, setBranchFilter] = useState(
     user?.role === "superAdmin" ? "All Stores" : user?.branch || "Slemany"
   );
+
+  // Column Filters State
+  const [columnFilters, setColumnFilters] = useState({});
+  const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+
+  // Handle outside click for dropdowns safely with touch support
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.filter-dropdown-container')) {
+        setActiveFilterDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, []);
 
   // Fetch store items with proper error handling and fallback
   useEffect(() => {
@@ -195,13 +238,11 @@ export default function StorePage() {
           q = query(
             collection(db, "storeItems"),
             where("branch", "==", user.branch),
-  
             orderBy("createdAt", "desc")
           );
         } else {
           q = query(
             collection(db, "storeItems"),
-
             orderBy("createdAt", "desc")
           );
         }
@@ -210,16 +251,16 @@ export default function StorePage() {
           q,
           (querySnapshot) => {
             const items = [];
-            querySnapshot.forEach((doc) => {
-              items.push({ id: doc.id, ...doc.data() });
+            querySnapshot.forEach((docSnap) => {
+              items.push({ id: docSnap.id, ...docSnap.data() });
             });
             processItems(items);
           },
-          (error) => {
-            console.error("Firestore error:", error);
+          (err) => {
+            console.error("Firestore error:", err);
             setError("Failed to load items. Please try again.");
 
-            if (error.code === "failed-precondition" && error.message.includes("requires an index")) {
+            if (err.code === "failed-precondition" && err.message.includes("requires an index")) {
               console.warn("Composite index missing, using fallback query");
 
               let fallbackQuery;
@@ -246,10 +287,10 @@ export default function StorePage() {
                 fallbackQuery,
                 (fallbackSnapshot) => {
                   const allItems = [];
-                  fallbackSnapshot.forEach((doc) => {
-                    const data = doc.data();
+                  fallbackSnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
                     if (data.quantity > 0) {
-                      allItems.push({ id: doc.id, ...data });
+                      allItems.push({ id: docSnap.id, ...data });
                     }
                   });
                   processItems(allItems);
@@ -354,29 +395,17 @@ export default function StorePage() {
           ? a.totalQuantity - b.totalQuantity
           : b.totalQuantity - a.totalQuantity;
       } else if (key === 'basePriceUSD') {
-        return direction === 'asc' 
-          ? a.basePriceUSD - b.basePriceUSD 
-          : b.basePriceUSD - a.basePriceUSD;
+        return direction === 'asc' ? a.basePriceUSD - b.basePriceUSD : b.basePriceUSD - a.basePriceUSD;
       } else if (key === 'netPriceUSD') {
-        return direction === 'asc' 
-          ? a.netPriceUSD - b.netPriceUSD 
-          : b.netPriceUSD - a.netPriceUSD;
+        return direction === 'asc' ? a.netPriceUSD - b.netPriceUSD : b.netPriceUSD - a.netPriceUSD;
       } else if (key === 'outPriceUSD') {
-        return direction === 'asc' 
-          ? a.outPriceUSD - b.outPriceUSD 
-          : b.outPriceUSD - a.outPriceUSD;
+        return direction === 'asc' ? a.outPriceUSD - b.outPriceUSD : b.outPriceUSD - a.outPriceUSD;
       } else if (key === 'basePriceIQD') {
-        return direction === 'asc' 
-          ? a.basePriceIQD - b.basePriceIQD 
-          : b.basePriceIQD - a.basePriceIQD;
+        return direction === 'asc' ? a.basePriceIQD - b.basePriceIQD : b.basePriceIQD - a.basePriceIQD;
       } else if (key === 'netPriceIQD') {
-        return direction === 'asc' 
-          ? a.netPriceIQD - b.netPriceIQD 
-          : b.netPriceIQD - a.netPriceIQD;
+        return direction === 'asc' ? a.netPriceIQD - b.netPriceIQD : b.netPriceIQD - a.netPriceIQD;
       } else if (key === 'outPriceIQD') {
-        return direction === 'asc' 
-          ? a.outPriceIQD - b.outPriceIQD 
-          : b.outPriceIQD - a.outPriceIQD;
+        return direction === 'asc' ? a.outPriceIQD - b.outPriceIQD : b.outPriceIQD - a.outPriceIQD;
       } else if (key === 'branch') {
         return direction === 'asc'
           ? a.branch.localeCompare(b.branch)
@@ -424,25 +453,68 @@ export default function StorePage() {
     setFromDate("");
     setToDate("");
     setExpireBefore("");
+    setColumnFilters({});
   };
 
   const handleExpireBeforeChange = (e) => {
     setExpireBefore(e.target.value);
   };
 
-  // Filter items based on search criteria
+  // Setup Column Filters
+  const handleUpdateColumnFilter = (columnKey, updates) => {
+    setColumnFilters(prev => {
+      const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
+      const next = { ...current, ...updates };
+      if (!next.operator && !next.textValue && (!next.selectedValues || next.selectedValues.length === 0)) {
+        const newFilters = { ...prev };
+        delete newFilters[columnKey];
+        return newFilters;
+      }
+      return { ...prev, [columnKey]: next };
+    });
+  };
+
+  const evaluateFilter = (itemValue, filterData, type = "string") => {
+    if (!filterData) return true;
+    const { operator, textValue, selectedValues } = filterData;
+    
+    if (selectedValues && selectedValues.length > 0) {
+      if (!selectedValues.includes(String(itemValue))) return false;
+    }
+
+    if (operator && (textValue !== "" || ['isEmpty', 'isNotEmpty'].includes(operator))) {
+      const valStr = String(itemValue || '').toLowerCase();
+      const searchStr = String(textValue).toLowerCase();
+      const valNum = Number(itemValue);
+      const searchNum = Number(textValue);
+
+      switch (operator) {
+        case 'contains': return valStr.includes(searchStr);
+        case 'equals': return type === 'number' ? valNum === searchNum : valStr === searchStr;
+        case 'notEquals': return type === 'number' ? valNum !== searchNum : valStr !== searchStr;
+        case 'startsWith': return valStr.startsWith(searchStr);
+        case 'endsWith': return valStr.endsWith(searchStr);
+        case 'greaterThan': return valNum > searchNum;
+        case 'greaterThanOrEqual': return valNum >= searchNum;
+        case 'lessThan': return valNum < searchNum;
+        case 'lessThanOrEqual': return valNum <= searchNum;
+        case 'isEmpty': return !itemValue || itemValue === "N/A" || itemValue === "-";
+        case 'isNotEmpty': return !!itemValue && itemValue !== "N/A" && itemValue !== "-";
+        default: return true;
+      }
+    }
+    return true;
+  };
+
+  // Filter items based on ALL search criteria (global + columns)
   const filteredItems = useMemo(() => {
     const sorted = sortItems(storeItems);
 
     return sorted.filter(item => {
-      const matchesName = !searchQuery ||
-        item.name?.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesBarcode = !barcodeSearch ||
-        item.barcode?.toLowerCase().includes(barcodeSearch.toLowerCase());
-
-      const matchesBill = !billSearch ||
-        String(item.boughtBillNumber).toLowerCase().includes(billSearch.toLowerCase());
+      // 1. Global Filters
+      const matchesName = !searchQuery || item.name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesBarcode = !barcodeSearch || item.barcode?.toLowerCase().includes(barcodeSearch.toLowerCase());
+      const matchesBill = !billSearch || String(item.boughtBillNumber).toLowerCase().includes(billSearch.toLowerCase());
 
       let matchesDateRange = true;
       if (fromDate || toDate) {
@@ -470,9 +542,185 @@ export default function StorePage() {
         }
       }
 
-      return matchesName && matchesBarcode && matchesBill && matchesDateRange && matchesExpireBefore;
+      if (!(matchesName && matchesBarcode && matchesBill && matchesDateRange && matchesExpireBefore)) return false;
+
+      // 2. Column Header Filters
+      for (const [columnKey, filterData] of Object.entries(columnFilters)) {
+        let itemValue = "";
+        if (columnKey === 'barcode') itemValue = item.barcode;
+        if (columnKey === 'name') itemValue = item.name;
+        if (columnKey === 'branch') itemValue = item.branch;
+        if (columnKey === 'boughtBill') itemValue = item.boughtBillNumber || 'N/A';
+        if (columnKey === 'createdAt') itemValue = formatDateTime(item.createdAt);
+        if (columnKey === 'priceType') itemValue = item.priceType;
+        if (columnKey === 'basePriceUSD') itemValue = item.basePriceUSD;
+        if (columnKey === 'netPriceUSD') itemValue = item.netPriceUSD;
+        if (columnKey === 'outPriceUSD') itemValue = item.outPriceUSD;
+        if (columnKey === 'basePriceIQD') itemValue = item.basePriceIQD;
+        if (columnKey === 'netPriceIQD') itemValue = item.netPriceIQD;
+        if (columnKey === 'outPriceIQD') itemValue = item.outPriceIQD;
+        if (columnKey === 'quantity') itemValue = item.totalQuantity;
+        if (columnKey === 'expireDate') itemValue = formatDate(item.expireDate);
+
+        const isNum = ['basePriceUSD','netPriceUSD','outPriceUSD','basePriceIQD','netPriceIQD','outPriceIQD','quantity'].includes(columnKey);
+
+        if (!evaluateFilter(itemValue, filterData, isNum ? "number" : "string")) return false;
+      }
+
+      return true;
     });
-  }, [storeItems, searchQuery, barcodeSearch, billSearch, fromDate, toDate, expireBefore, sortItems]);
+  }, [storeItems, searchQuery, barcodeSearch, billSearch, fromDate, toDate, expireBefore, sortItems, columnFilters]);
+
+  // Header Dropdown Component
+  const ExcelFilterDropdown = ({ columnKey, type = "string" }) => {
+    const [search, setSearch] = useState("");
+    const isOpen = activeFilterDropdown === columnKey;
+    const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
+    
+    const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
+    const { operator, textValue, selectedValues } = filterState;
+
+    const uniqueValues = useMemo(() => {
+      const vals = new Set();
+      storeItems.forEach(item => {
+        let val = "";
+        if (columnKey === 'barcode') val = item.barcode;
+        if (columnKey === 'name') val = item.name;
+        if (columnKey === 'branch') val = item.branch;
+        if (columnKey === 'boughtBill') val = item.boughtBillNumber || 'N/A';
+        if (columnKey === 'createdAt') val = formatDateTime(item.createdAt);
+        if (columnKey === 'priceType') val = item.priceType;
+        if (columnKey === 'basePriceUSD') val = item.basePriceUSD;
+        if (columnKey === 'netPriceUSD') val = item.netPriceUSD;
+        if (columnKey === 'outPriceUSD') val = item.outPriceUSD;
+        if (columnKey === 'basePriceIQD') val = item.basePriceIQD;
+        if (columnKey === 'netPriceIQD') val = item.netPriceIQD;
+        if (columnKey === 'outPriceIQD') val = item.outPriceIQD;
+        if (columnKey === 'quantity') val = item.totalQuantity;
+        if (columnKey === 'expireDate') val = formatDate(item.expireDate);
+
+        vals.add(String(val || ""));
+      });
+      return Array.from(vals).sort();
+    }, [storeItems, columnKey]);
+
+    const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+    const isActive = !!(textValue || (selectedValues && selectedValues.length > 0) || ['isEmpty', 'isNotEmpty'].includes(operator));
+
+    const handleCheckbox = (val, checked) => {
+      const current = selectedValues || [];
+      const updated = checked ? [...current, val] : current.filter(v => v !== val);
+      handleUpdateColumnFilter(columnKey, { selectedValues: updated });
+    };
+
+    const handleSelectAll = (checked) => {
+      handleUpdateColumnFilter(columnKey, { selectedValues: checked ? [...uniqueValues] : [] });
+    };
+
+    return (
+      <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
+        <div 
+          onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
+          style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.25rem", borderRadius: "0.375rem", background: isActive ? "#dbeafe" : "transparent", color: isActive ? "#2563eb" : "#bdc3c7" }}
+        >
+          <Filter size={14} />
+        </div>
+
+        {isOpen && (
+          <div style={{ position: "absolute", top: "100%", right: 0, marginTop: "0.5rem", background: "white", border: "1px solid #cbd5e1", borderRadius: "0.5rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)", zIndex: 9999, width: "260px", maxWidth: "85vw", display: "flex", flexDirection: "column", cursor: "default", overflow: "hidden", color: "#2c3e50" }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <select 
+                  value={operator || operators[0].value} 
+                  onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
+                >
+                  {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                </select>
+                {!['isEmpty', 'isNotEmpty'].includes(operator) && (
+                  <input 
+                    type={type === "number" ? "number" : "text"} 
+                    placeholder="Value..." 
+                    value={textValue || ""} 
+                    onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
+                    style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none" }}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", flex: 1, boxSizing: "border-box" }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
+              <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem", boxSizing: "border-box" }}>
+                <Search size={14} color="#94a3b8" />
+                <input 
+                  type="text" 
+                  placeholder="Search values..." 
+                  value={search} 
+                  onChange={e => setSearch(e.target.value)} 
+                  style={{ border: "none", outline: "none", width: "100%", boxSizing: "border-box", fontSize: "0.875rem", marginLeft: "0.5rem" }} 
+                />
+              </div>
+
+              <div style={{ maxHeight: "180px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9" }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                  />
+                  <span>(Select All)</span>
+                </label>
+                {displayValues.map(val => (
+                  <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedValues.includes(val)}
+                      onChange={(e) => handleCheckbox(val, e.target.checked)}
+                      style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                    />
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "" ? "(Blank)" : val}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
+              <button onClick={() => {
+                const updated = {...columnFilters};
+                delete updated[columnKey];
+                setColumnFilters(updated);
+              }} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
+              <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ⬇️ NOTE: Added 'colWidth' to TableHeader to control specific column sizes
+  const TableHeader = ({ title, columnKey, type = "string", colWidth }) => (
+    <th style={{ 
+      backgroundColor: "#34495e", color: "white", padding: "12px 10px", 
+      textAlign: "left", fontSize: "14px", fontFamily: "'NRT-Bd', sans-serif", 
+      whiteSpace: "nowrap", borderRight: "1px solid #576574",
+      width: colWidth || "auto", 
+      minWidth: colWidth || "auto"
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+        <div onClick={() => handleSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
+          {title}
+          <span style={{ fontSize: "11px", color: "#bdc3c7" }}>
+            {getSortIcon(columnKey)}
+          </span>
+        </div>
+        <ExcelFilterDropdown columnKey={columnKey} type={type} />
+      </div>
+    </th>
+  );
 
   // Calculate totals
   const totalQuantity = useMemo(() => {
@@ -558,10 +806,14 @@ export default function StorePage() {
   }
 
   return (
-    <div style={{ width: '100%', minHeight: '100vh', padding: '1rem', backgroundColor: '#f3f4f6', ...nrtFontStyle }}>
-      <div style={{ maxWidth: '100%', overflow: 'hidden', backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem' }}>
+    // ⬇️ NOTE: Adjusted padding here (0.5rem) to reduce left/right blank space on the screen
+    <div style={{ width: '100%', minHeight: '100vh', padding: '0.5rem', backgroundColor: '#f3f4f6', ...nrtFontStyle }}>
+      
+      {/* ⬇️ NOTE: Adjusted padding here (1.5rem 5px) to remove the huge blank spaces next to the table inside the white card */}
+      <div style={{ maxWidth: '100%', overflow: 'hidden', backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem 5px' }}>
+        
         {/* Header and controls */}
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1.5rem', padding: '0 1rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#1f2937', ...nrtFontBoldStyle }}>Store Inventory</h2>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -646,7 +898,7 @@ export default function StorePage() {
             </div>
           )}
 
-          {/* Search Section */}
+          {/* Date Search Section */}
           <div style={{
             padding: '1rem',
             backgroundColor: '#f9fafb',
@@ -655,33 +907,6 @@ export default function StorePage() {
             marginBottom: '1.5rem'
           }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: '500', ...nrtFontStyle }}>Item Name</label>
-                <input
-                  placeholder="Search by name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: '500', ...nrtFontStyle }}>Barcode</label>
-                <input
-                  placeholder="Search by barcode..."
-                  value={barcodeSearch}
-                  onChange={(e) => setBarcodeSearch(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontFamily: 'monospace', ...nrtFontStyle }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: '500', ...nrtFontStyle }}>Bill Number</label>
-                <input
-                  placeholder="Search by bill #..."
-                  value={billSearch}
-                  onChange={(e) => setBillSearch(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
-                />
-              </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: '500', ...nrtFontStyle }}>From Date</label>
                 <input
@@ -743,279 +968,267 @@ export default function StorePage() {
         </div>
 
         {/* Table */}
-        // Table rendering
-{filteredItems.length === 0 ? (
-  <div style={{ textAlign: 'center', padding: '3rem', backgroundColor: 'white', borderRadius: '8px', ...nrtFontStyle }}>
-    <div style={{ margin: '0 auto 16px', height: '48px', width: '48px', borderRadius: '9999px', backgroundColor: '#f3f4f6' }}>
-      <svg style={{ height: '24px', width: '24px', color: '#9ca3af' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-      </svg>
-    </div>
-    <h3 style={{ marginBottom: '8px', fontSize: '18px', fontWeight: '600', ...nrtFontBoldStyle }}>
-      {searchQuery || barcodeSearch || billSearch || fromDate || toDate || expireBefore ? "No items found" : "No items in inventory"}
-    </h3>
-    <p style={{ color: '#6b7280', ...nrtFontStyle }}>
-      {searchQuery || barcodeSearch || billSearch || fromDate || toDate || expireBefore
-        ? "Try adjusting your search filters"
-        : "Items will appear here once added to the store"}
-    </p>
-  </div>
-) : (
-  <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1600px' }}>
-      <thead>
-        <tr style={{ backgroundColor: '#f9fafb' }}>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('barcode')}>
-            Barcode {getSortIcon('barcode')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', minWidth: '250px', ...nrtFontBoldStyle }} onClick={() => handleSort('name')}>
-            Item Name {getSortIcon('name')}
-          </th>
-          {user?.role === "superAdmin" && (
-            <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('branch')}>
-              Branch {getSortIcon('branch')}
-            </th>
-          )}
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('boughtBill')}>
-            Bought Bill # {getSortIcon('boughtBill')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('createdAt')}>
-            Added Date {getSortIcon('createdAt')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', ...nrtFontBoldStyle }}>Currency</th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('basePriceUSD')}>
-            Base Price (USD) {getSortIcon('basePriceUSD')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('netPriceUSD')}>
-            Net Price (USD) {getSortIcon('netPriceUSD')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('outPriceUSD')}>
-            Out Price (USD) {getSortIcon('outPriceUSD')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('basePriceIQD')}>
-            Base Price (IQD) {getSortIcon('basePriceIQD')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('netPriceIQD')}>
-            Net Price (IQD) {getSortIcon('netPriceIQD')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('outPriceIQD')}>
-            Out Price (IQD) {getSortIcon('outPriceIQD')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('quantity')}>
-            Quantity {getSortIcon('quantity')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', cursor: 'pointer', ...nrtFontBoldStyle }} onClick={() => handleSort('expireDate')}>
-            Expiry Date {getSortIcon('expireDate')}
-          </th>
-          <th style={{ padding: '12px', textAlign: 'left', ...nrtFontBoldStyle }}>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {filteredItems.map((item, index) => {
-          const expiryStyle = getExpiryStyle(item.expireDate);
-          const isUSD = item.priceType === 'USD';
-          const isZeroQuantity = item.totalQuantity === 0;
-          
-          return (
-            <tr key={index} style={{ 
-              borderBottom: '1px solid #e5e7eb', 
-              ...nrtFontStyle,
-              opacity: isZeroQuantity ? '0.6' : '1',
-              backgroundColor: isZeroQuantity ? '#f9fafb' : 'transparent'
-            }}>
-              <td style={{ padding: '12px', fontFamily: 'monospace', ...nrtFontStyle }}>{item.barcode}</td>
-              <td style={{ padding: '12px', fontWeight: '500', ...nrtFontStyle }}>{item.name}</td>
-              {user?.role === "superAdmin" && (
-                <td style={{ padding: '12px' }}>
-                  <span style={getBranchStyle(item.branch)}>{item.branch}</span>
-                </td>
-              )}
-              <td style={{ padding: '12px' }}>
-                <span style={{
-                  backgroundColor: '#dbeafe',
-                  color: '#1e40af',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  ...nrtFontStyle
-                }}>
-                  {item.boughtBillNumber || 'N/A'}
-                </span>
-              </td>
-              <td style={{ padding: '12px', ...nrtFontStyle }}>{formatDateTime(item.createdAt)}</td>
-              <td style={{ padding: '12px' }}>
-                <span style={{
-                  backgroundColor: isUSD ? '#dbeafe' : '#fef3c7',
-                  color: isUSD ? '#1e40af' : '#92400e',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  ...nrtFontStyle
-                }}>
-                  {item.priceType}
-                </span>
-              </td>
-              {/* USD Columns */}
-              <td style={{ 
-                padding: '12px', 
-                backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
-                color: isUSD ? '#065f46' : '#9ca3af',
-                ...nrtFontStyle
-              }}>
-                {isUSD ? formatUSD(item.basePriceUSD) : '-'}
-              </td>
-              <td style={{ 
-                padding: '12px', 
-                backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
-                color: isUSD ? '#065f46' : '#9ca3af',
-                ...nrtFontStyle
-              }}>
-                {isUSD ? formatUSD(item.netPriceUSD) : '-'}
-              </td>
-              <td style={{ 
-                padding: '12px', 
-                backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
-                color: isUSD ? '#065f46' : '#9ca3af',
-                ...nrtFontStyle
-              }}>
-                {isUSD ? formatUSD(item.outPriceUSD) : '-'}
-              </td>
-              {/* IQD Columns */}
-              <td style={{ 
-                padding: '12px', 
-                backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
-                color: !isUSD ? '#92400e' : '#9ca3af',
-                ...nrtFontStyle
-              }}>
-                {!isUSD ? formatIQD(item.basePriceIQD) : '-'}
-              </td>
-              <td style={{ 
-                padding: '12px', 
-                backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
-                color: !isUSD ? '#92400e' : '#9ca3af',
-                ...nrtFontStyle
-              }}>
-                {!isUSD ? formatIQD(item.netPriceIQD) : '-'}
-              </td>
-              <td style={{ 
-                padding: '12px', 
-                backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
-                color: !isUSD ? '#92400e' : '#9ca3af',
-                ...nrtFontStyle
-              }}>
-                {!isUSD ? formatIQD(item.outPriceIQD) : '-'}
-              </td>
-              <td style={{ padding: '12px' }}>
-                <span style={{
-                  backgroundColor: isZeroQuantity ? '#f3f4f6' : (item.totalQuantity > 10 ? '#d1fae5' : '#fee2e2'),
-                  color: isZeroQuantity ? '#6b7280' : (item.totalQuantity > 10 ? '#065f46' : '#991b1b'),
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  ...nrtFontStyle
-                }}>
-                  {item.totalQuantity} {isZeroQuantity && '(Out of Stock)'}
-                </span>
-              </td>
-              <td style={{ padding: '12px' }}>
-                {item.expireDate ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{
-                      backgroundColor: expiryStyle.backgroundColor,
-                      color: expiryStyle.color,
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      ...nrtFontStyle
+        {filteredItems.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', backgroundColor: 'white', borderRadius: '8px', ...nrtFontStyle }}>
+            <div style={{ margin: '0 auto 16px', height: '48px', width: '48px', borderRadius: '9999px', backgroundColor: '#f3f4f6' }}>
+              <svg style={{ height: '24px', width: '24px', color: '#9ca3af' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+              </svg>
+            </div>
+            <h3 style={{ marginBottom: '8px', fontSize: '18px', fontWeight: '600', ...nrtFontBoldStyle }}>
+              {fromDate || toDate || expireBefore || Object.keys(columnFilters).length > 0 ? "No items found" : "No items in inventory"}
+            </h3>
+            <p style={{ color: '#6b7280', ...nrtFontStyle }}>
+              {fromDate || toDate || expireBefore || Object.keys(columnFilters).length > 0
+                ? "Try adjusting your search filters"
+                : "Items will appear here once added to the store"}
+            </p>
+          </div>
+        ) : (
+          /* ========================================================================= */
+          /* ⬇️ NOTE: TABLE HEIGHT SETTINGS ⬇️                                         */
+          /* You can change the minHeight and maxHeight here to maximize the table.    */
+          /* Setting a large minHeight ensures filter dropdowns do not get cut off.    */
+          /* ========================================================================= */
+          <div style={{ 
+            overflowX: 'auto', 
+            overflowY: 'auto', 
+            minHeight: '65vh', 
+            maxHeight: '85vh', 
+            borderRadius: '8px', 
+            border: '1px solid #e5e7eb' 
+          }}>
+            {/* ⬇️ NOTE: Reduce minWidth from 1600px to 1000px so columns don't stretch artificially */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                <tr style={{ backgroundColor: '#f9fafb' }}>
+                  {/* ⬇️ NOTE: Adjust individual column widths via 'colWidth' prop here. 
+                      'Item Name' is set to 'auto' so it takes all the remaining space. */}
+                  <TableHeader title="Barcode" columnKey="barcode" colWidth="100px" />
+                  <TableHeader title="Item Name" columnKey="name" colWidth="auto" />
+                  {user?.role === "superAdmin" && (
+                    <TableHeader title="Branch" columnKey="branch" colWidth="90px" />
+                  )}
+                  <TableHeader title="Bought Bill #" columnKey="boughtBill" colWidth="120px" />
+                  <TableHeader title="Added Date" columnKey="createdAt" colWidth="140px" />
+                  <TableHeader title="Currency" columnKey="priceType" colWidth="90px" />
+                  <TableHeader title="Base Price (USD)" columnKey="basePriceUSD" type="number" colWidth="110px" />
+                  <TableHeader title="Net Price (USD)" columnKey="netPriceUSD" type="number" colWidth="110px" />
+                  <TableHeader title="Out Price (USD)" columnKey="outPriceUSD" type="number" colWidth="110px" />
+                  <TableHeader title="Base Price (IQD)" columnKey="basePriceIQD" type="number" colWidth="110px" />
+                  <TableHeader title="Net Price (IQD)" columnKey="netPriceIQD" type="number" colWidth="110px" />
+                  <TableHeader title="Out Price (IQD)" columnKey="outPriceIQD" type="number" colWidth="110px" />
+                  <TableHeader title="Quantity" columnKey="quantity" type="number" colWidth="90px" />
+                  <TableHeader title="Expiry Date" columnKey="expireDate" colWidth="120px" />
+                  <th style={{ padding: '12px', textAlign: 'left', backgroundColor: "#34495e", color: "white", width: "80px", ...nrtFontBoldStyle }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredItems.map((item, index) => {
+                  const expiryStyle = getExpiryStyle(item.expireDate);
+                  const isUSD = item.priceType === 'USD';
+                  const isZeroQuantity = item.totalQuantity === 0;
+                  
+                  return (
+                    <tr key={index} style={{ 
+                      borderBottom: '1px solid #e5e7eb', 
+                      ...nrtFontStyle,
+                      opacity: isZeroQuantity ? '0.6' : '1',
+                      backgroundColor: isZeroQuantity ? '#f9fafb' : 'transparent'
                     }}>
-                      {formatDate(item.expireDate)}
-                    </span>
-                    {expiryStyle.status !== 'Safe' && (
-                      <span style={{
-                        backgroundColor: expiryStyle.backgroundColor,
-                        color: expiryStyle.color,
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontSize: '10px',
-                        fontWeight: '600',
+                      <td style={{ padding: '12px', fontFamily: 'monospace', borderRight: '1px solid #e5e7eb', ...nrtFontStyle }}>{item.barcode}</td>
+                      <td style={{ padding: '12px', fontWeight: '500', borderRight: '1px solid #e5e7eb', wordBreak: 'break-word', whiteSpace: 'normal', ...nrtFontStyle }}>{item.name}</td>
+                      {user?.role === "superAdmin" && (
+                        <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
+                          <span style={getBranchStyle(item.branch)}>{item.branch}</span>
+                        </td>
+                      )}
+                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
+                        <span style={{
+                          backgroundColor: '#dbeafe',
+                          color: '#1e40af',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          ...nrtFontStyle
+                        }}>
+                          {item.boughtBillNumber || 'N/A'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb', ...nrtFontStyle }}>{formatDateTime(item.createdAt)}</td>
+                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
+                        <span style={{
+                          backgroundColor: isUSD ? '#dbeafe' : '#fef3c7',
+                          color: isUSD ? '#1e40af' : '#92400e',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          ...nrtFontStyle
+                        }}>
+                          {item.priceType}
+                        </span>
+                      </td>
+                      {/* USD Columns */}
+                      <td style={{ 
+                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                        backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
+                        color: isUSD ? '#065f46' : '#9ca3af',
                         ...nrtFontStyle
                       }}>
-                        {expiryStyle.status}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <span style={{
-                    backgroundColor: '#f3f4f6',
-                    color: '#6b7280',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    ...nrtFontStyle
-                  }}>
-                    N/A
-                  </span>
-                )}
-              </td>
-              <td style={{ padding: '12px' }}>
-                <button
-                  onClick={() => {
-                    setEditingItem(item);
-                    setEditForm({
-                      quantity: item.totalQuantity,
-                      priceType: item.priceType,
-                      basePriceUSD: item.basePriceUSD || '',
-                      netPriceUSD: item.netPriceUSD || '',
-                      outPriceUSD: item.outPriceUSD || '',
-                      basePriceIQD: item.basePriceIQD || '',
-                      netPriceIQD: item.netPriceIQD || '',
-                      outPriceIQD: item.outPriceIQD || ''
-                    });
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    ...nrtFontStyle
-                  }}
-                >
-                  Edit
-                </button>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-      <tfoot>
-        <tr style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb' }}>
-          <td colSpan={user.role === "superAdmin" ? 6 : 5} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', ...nrtFontBoldStyle }}>
-            Totals:
-          </td>
-          <td style={{ padding: '12px', fontWeight: '600', color: '#1f2937', ...nrtFontBoldStyle }}>
-            {totalQuantity}
-          </td>
-          <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#065f46', ...nrtFontBoldStyle }}>
-            USD Base: {formatUSD(totalBaseValueUSD)}<br/>
-            USD Net: {formatUSD(totalNetValueUSD)}
-          </td>
-          <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#92400e', ...nrtFontBoldStyle }}>
-            IQD Base: {formatIQD(totalBaseValueIQD)}<br/>
-            IQD Net: {formatIQD(totalNetValueIQD)}
-          </td>
-          <td style={{ padding: '12px' }}></td>
-          <td style={{ padding: '12px' }}></td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-)}
+                        {isUSD ? formatUSD(item.basePriceUSD) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                        backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
+                        color: isUSD ? '#065f46' : '#9ca3af',
+                        ...nrtFontStyle
+                      }}>
+                        {isUSD ? formatUSD(item.netPriceUSD) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                        backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
+                        color: isUSD ? '#065f46' : '#9ca3af',
+                        ...nrtFontStyle
+                      }}>
+                        {isUSD ? formatUSD(item.outPriceUSD) : '-'}
+                      </td>
+                      {/* IQD Columns */}
+                      <td style={{ 
+                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                        backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
+                        color: !isUSD ? '#92400e' : '#9ca3af',
+                        ...nrtFontStyle
+                      }}>
+                        {!isUSD ? formatIQD(item.basePriceIQD) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                        backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
+                        color: !isUSD ? '#92400e' : '#9ca3af',
+                        ...nrtFontStyle
+                      }}>
+                        {!isUSD ? formatIQD(item.netPriceIQD) : '-'}
+                      </td>
+                      <td style={{ 
+                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                        backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
+                        color: !isUSD ? '#92400e' : '#9ca3af',
+                        ...nrtFontStyle
+                      }}>
+                        {!isUSD ? formatIQD(item.outPriceIQD) : '-'}
+                      </td>
+                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
+                        <span style={{
+                          backgroundColor: isZeroQuantity ? '#f3f4f6' : (item.totalQuantity > 10 ? '#d1fae5' : '#fee2e2'),
+                          color: isZeroQuantity ? '#6b7280' : (item.totalQuantity > 10 ? '#065f46' : '#991b1b'),
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          ...nrtFontStyle
+                        }}>
+                          {item.totalQuantity} {isZeroQuantity && '(Out of Stock)'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
+                        {item.expireDate ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{
+                              backgroundColor: expiryStyle.backgroundColor,
+                              color: expiryStyle.color,
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              ...nrtFontStyle
+                            }}>
+                              {formatDate(item.expireDate)}
+                            </span>
+                            {expiryStyle.status !== 'Safe' && (
+                              <span style={{
+                                backgroundColor: expiryStyle.backgroundColor,
+                                color: expiryStyle.color,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                ...nrtFontStyle
+                              }}>
+                                {expiryStyle.status}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{
+                            backgroundColor: '#f3f4f6',
+                            color: '#6b7280',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            ...nrtFontStyle
+                          }}>
+                            N/A
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <button
+                          onClick={() => {
+                            setEditingItem(item);
+                            setEditForm({
+                              quantity: item.totalQuantity,
+                              priceType: item.priceType,
+                              basePriceUSD: item.basePriceUSD || '',
+                              netPriceUSD: item.netPriceUSD || '',
+                              outPriceUSD: item.outPriceUSD || '',
+                              basePriceIQD: item.basePriceIQD || '',
+                              netPriceIQD: item.netPriceIQD || '',
+                              outPriceIQD: item.outPriceIQD || ''
+                            });
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            ...nrtFontStyle
+                          }}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 1 }}>
+                <tr style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb', boxShadow: '0 -2px 4px rgba(0,0,0,0.05)' }}>
+                  <td colSpan={user.role === "superAdmin" ? 6 : 5} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', ...nrtFontBoldStyle }}>
+                    Totals:
+                  </td>
+                  <td style={{ padding: '12px', fontWeight: '600', color: '#1f2937', ...nrtFontBoldStyle }}>
+                    {totalQuantity}
+                  </td>
+                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#065f46', ...nrtFontBoldStyle }}>
+                    USD Base: {formatUSD(totalBaseValueUSD)}<br/>
+                    USD Net: {formatUSD(totalNetValueUSD)}
+                  </td>
+                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#92400e', ...nrtFontBoldStyle }}>
+                    IQD Base: {formatIQD(totalBaseValueIQD)}<br/>
+                    IQD Net: {formatIQD(totalNetValueIQD)}
+                  </td>
+                  <td style={{ padding: '12px' }}></td>
+                  <td style={{ padding: '12px' }}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Edit Modal */}
@@ -1121,7 +1334,8 @@ export default function StorePage() {
                   updateData.outPriceUSD = null;
                 }
 
-                await updateStoreItem(editingItem.id, updateData);
+                // DIRECT FIRESTORE UPDATE TO BYPASS MISSING IMPORT
+                await updateDoc(doc(db, "storeItems", editingItem.id), updateData);
 
                 setEditingItem(null);
                 setError(null);

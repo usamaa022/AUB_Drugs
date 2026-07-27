@@ -1,4 +1,5 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
@@ -12,11 +13,13 @@ export default function Navbar() {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const mobileMenuRef = useRef(null);
   const menuButtonRef = useRef(null);
+  const userMenuRef = useRef(null);
 
-  // Close mobile menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -26,6 +29,13 @@ export default function Navbar() {
         !menuButtonRef.current.contains(event.target)
       ) {
         setIsMobileMenuOpen(false);
+      }
+
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target)
+      ) {
+        setIsUserMenuOpen(false);
       }
     };
     
@@ -38,7 +48,7 @@ export default function Navbar() {
     };
   }, []);
 
-  // Prevent body scroll when menu is open
+  // Prevent body scroll when mobile menu is open
   useEffect(() => {
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden';
@@ -80,25 +90,25 @@ export default function Navbar() {
       <nav
         style={{
           backgroundColor: "#ffffff",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+          borderBottom: "1px solid #e5e7eb",
+          boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
           position: "sticky",
           top: 0,
           zIndex: 1000,
           width: "100%",
           padding: "0",
-          // REMOVED: overflow: "hidden" - this was clipping the dropdowns
         }}
       >
         <div
           style={{
-            maxWidth: "100%",
+            maxWidth: "1400px",
             margin: "0 auto",
-            padding: "0 12px",
+            padding: "0 1rem",
             width: "100%",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            height: "56px",
+            height: "60px",
             boxSizing: "border-box",
             position: "relative",
           }}
@@ -113,9 +123,11 @@ export default function Navbar() {
               textDecoration: "none",
               whiteSpace: "nowrap",
               flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
             }}
           >
-            <img src="/Aranlogo.png"  width={'150px'} /> 
+            <img src="/Aranlogo.png" alt="Aran Logo" style={{ width: '140px', height: 'auto', objectFit: 'contain' }} /> 
           </Link>
 
           {/* Desktop Navigation */}
@@ -123,8 +135,8 @@ export default function Navbar() {
             style={{
               display: "none",
               alignItems: "center",
-              gap: "0.25rem",
-              flexWrap: "wrap",
+              gap: "0.5rem",
+              flexWrap: "nowrap",
             }}
             className="desktop-nav"
           >
@@ -134,17 +146,17 @@ export default function Navbar() {
                 <button
                   onClick={() => toggleDropdown('buying')}
                   style={{
-                    background: "none",
+                    background: pathname.includes("/buying") || pathname.includes("/bought") ? "#eff6ff" : "none",
                     border: "none",
-                    color: pathname.includes("/buying") ? "#3b82f6" : "#6b7280",
-                    fontSize: "0.85rem",
-                    fontWeight: 500,
+                    color: pathname.includes("/buying") || pathname.includes("/bought") ? "#2563eb" : "#4b5563",
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.25rem",
-                    padding: "0.5rem 0.6rem",
-                    borderRadius: "6px",
+                    gap: "0.375rem",
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "0.375rem",
                     transition: "all 0.2s ease",
                     whiteSpace: "nowrap",
                   }}
@@ -168,13 +180,13 @@ export default function Navbar() {
                   <div
                     style={{
                       position: "absolute",
-                      top: "100%",
+                      top: "calc(100% + 4px)",
                       left: 0,
-                      minWidth: "180px",
-                      backgroundColor: "#fff",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                      padding: "0.5rem 0",
+                      minWidth: "190px",
+                      backgroundColor: "#ffffff",
+                      borderRadius: "0.5rem",
+                      boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
+                      padding: "0.375rem 0",
                       border: "1px solid #e5e7eb",
                       zIndex: 9999,
                     }}
@@ -184,10 +196,12 @@ export default function Navbar() {
                       style={{
                         display: "block",
                         padding: "0.5rem 1rem",
-                        color: pathname === "/buying" ? "#3b82f6" : "#374151",
+                        color: pathname === "/buying" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/buying" ? 600 : 400,
                         textDecoration: "none",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease",
+                        fontSize: "0.875rem",
+                        transition: "all 0.15s ease",
+                        backgroundColor: pathname === "/buying" ? "#f0f9ff" : "transparent",
                       }}
                       onClick={() => setOpenDropdown(null)}
                     >
@@ -198,10 +212,12 @@ export default function Navbar() {
                       style={{
                         display: "block",
                         padding: "0.5rem 1rem",
-                        color: pathname === "/bought_returns" ? "#3b82f6" : "#374151",
+                        color: pathname === "/bought_returns" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/bought_returns" ? 600 : 400,
                         textDecoration: "none",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease",
+                        fontSize: "0.875rem",
+                        transition: "all 0.15s ease",
+                        backgroundColor: pathname === "/bought_returns" ? "#f0f9ff" : "transparent",
                       }}
                       onClick={() => setOpenDropdown(null)}
                     >
@@ -212,10 +228,12 @@ export default function Navbar() {
                       style={{
                         display: "block",
                         padding: "0.5rem 1rem",
-                        color: pathname === "/Bought_Statement" ? "#3b82f6" : "#374151",
+                        color: pathname === "/Bought_Statement" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/Bought_Statement" ? 600 : 400,
                         textDecoration: "none",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease",
+                        fontSize: "0.875rem",
+                        transition: "all 0.15s ease",
+                        backgroundColor: pathname === "/Bought_Statement" ? "#f0f9ff" : "transparent",
                       }}
                       onClick={() => setOpenDropdown(null)}
                     >
@@ -231,17 +249,17 @@ export default function Navbar() {
               <button
                 onClick={() => toggleDropdown('sales')}
                 style={{
-                  background: "none",
+                  background: (pathname.includes("/selling") || pathname.includes("/sold") || pathname.includes("/return") || pathname === "/statements") ? "#eff6ff" : "none",
                   border: "none",
-                  color: pathname.includes("/selling") || pathname.includes("/sold") || pathname.includes("/return") || pathname === "/statements" ? "#3b82f6" : "#6b7280",
-                  fontSize: "0.85rem",
-                  fontWeight: 500,
+                  color: (pathname.includes("/selling") || pathname.includes("/sold") || pathname.includes("/return") || pathname === "/statements") ? "#2563eb" : "#4b5563",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  gap: "0.25rem",
-                  padding: "0.5rem 0.6rem",
-                  borderRadius: "6px",
+                  gap: "0.375rem",
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "0.375rem",
                   transition: "all 0.2s ease",
                   whiteSpace: "nowrap",
                 }}
@@ -265,13 +283,13 @@ export default function Navbar() {
                 <div
                   style={{
                     position: "absolute",
-                    top: "100%",
+                    top: "calc(100% + 4px)",
                     left: 0,
-                    minWidth: "180px",
-                    backgroundColor: "#fff",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                    padding: "0.5rem 0",
+                    minWidth: "190px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "0.5rem",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
+                    padding: "0.375rem 0",
                     border: "1px solid #e5e7eb",
                     zIndex: 9999,
                   }}
@@ -281,10 +299,11 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/selling" ? "#3b82f6" : "#374151",
+                      color: pathname === "/selling" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/selling" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/selling" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -295,10 +314,11 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/sold" ? "#3b82f6" : "#374151",
+                      color: pathname === "/sold" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/sold" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/sold" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -309,25 +329,27 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/return" ? "#3b82f6" : "#374151",
+                      color: pathname === "/return" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/return" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/return" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
                     Returns
                   </Link>
-                  <div style={{ borderTop: "1px solid #e5e7eb", margin: "0.25rem 0" }} />
+                  <div style={{ borderTop: "1px solid #f3f4f6", margin: "0.25rem 0" }} />
                   <Link
                     href="/statements"
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/statements" ? "#3b82f6" : "#374151",
+                      color: pathname === "/statements" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/statements" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/statements" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -342,17 +364,17 @@ export default function Navbar() {
               <button
                 onClick={() => toggleDropdown('inventory')}
                 style={{
-                  background: "none",
+                  background: (pathname.includes("/items") || pathname.includes("/store")) ? "#eff6ff" : "none",
                   border: "none",
-                  color: pathname.includes("/items") || pathname.includes("/store") ? "#3b82f6" : "#6b7280",
-                  fontSize: "0.85rem",
-                  fontWeight: 500,
+                  color: (pathname.includes("/items") || pathname.includes("/store")) ? "#2563eb" : "#4b5563",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  gap: "0.25rem",
-                  padding: "0.5rem 0.6rem",
-                  borderRadius: "6px",
+                  gap: "0.375rem",
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "0.375rem",
                   transition: "all 0.2s ease",
                   whiteSpace: "nowrap",
                 }}
@@ -376,13 +398,13 @@ export default function Navbar() {
                 <div
                   style={{
                     position: "absolute",
-                    top: "100%",
+                    top: "calc(100% + 4px)",
                     left: 0,
-                    minWidth: "180px",
-                    backgroundColor: "#fff",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                    padding: "0.5rem 0",
+                    minWidth: "190px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "0.5rem",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
+                    padding: "0.375rem 0",
                     border: "1px solid #e5e7eb",
                     zIndex: 9999,
                   }}
@@ -393,10 +415,11 @@ export default function Navbar() {
                       style={{
                         display: "block",
                         padding: "0.5rem 1rem",
-                        color: pathname === "/items" ? "#3b82f6" : "#374151",
+                        color: pathname === "/items" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/items" ? 600 : 400,
                         textDecoration: "none",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease",
+                        fontSize: "0.875rem",
+                        backgroundColor: pathname === "/items" ? "#f0f9ff" : "transparent",
                       }}
                       onClick={() => setOpenDropdown(null)}
                     >
@@ -408,10 +431,11 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/store" ? "#3b82f6" : "#374151",
+                      color: pathname === "/store" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/store" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/store" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -426,17 +450,17 @@ export default function Navbar() {
               <button
                 onClick={() => toggleDropdown('payments')}
                 style={{
-                  background: "none",
+                  background: pathname.includes("/payments") ? "#eff6ff" : "none",
                   border: "none",
-                  color: pathname.includes("/payments") ? "#3b82f6" : "#6b7280",
-                  fontSize: "0.85rem",
-                  fontWeight: 500,
+                  color: pathname.includes("/payments") ? "#2563eb" : "#4b5563",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  gap: "0.25rem",
-                  padding: "0.5rem 0.6rem",
-                  borderRadius: "6px",
+                  gap: "0.375rem",
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "0.375rem",
                   transition: "all 0.2s ease",
                   whiteSpace: "nowrap",
                 }}
@@ -460,13 +484,13 @@ export default function Navbar() {
                 <div
                   style={{
                     position: "absolute",
-                    top: "100%",
+                    top: "calc(100% + 4px)",
                     left: 0,
-                    minWidth: "180px",
-                    backgroundColor: "#fff",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                    padding: "0.5rem 0",
+                    minWidth: "190px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "0.5rem",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
+                    padding: "0.375rem 0",
                     border: "1px solid #e5e7eb",
                     zIndex: 9999,
                   }}
@@ -476,10 +500,11 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/payments/create" ? "#3b82f6" : "#374151",
+                      color: pathname === "/payments/create" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/payments/create" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/payments/create" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -491,10 +516,11 @@ export default function Navbar() {
                       style={{
                         display: "block",
                         padding: "0.5rem 1rem",
-                        color: pathname.includes("/bought_payments/") ? "#3b82f6" : "#374151",
+                        color: pathname.includes("/bought_payments/") ? "#2563eb" : "#374151",
+                        fontWeight: pathname.includes("/bought_payments/") ? 600 : 400,
                         textDecoration: "none",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease",
+                        fontSize: "0.875rem",
+                        backgroundColor: pathname.includes("/bought_payments/") ? "#f0f9ff" : "transparent",
                       }}
                       onClick={() => setOpenDropdown(null)}
                     >
@@ -510,17 +536,17 @@ export default function Navbar() {
               <button
                 onClick={() => toggleDropdown('transport')}
                 style={{
-                  background: "none",
+                  background: pathname.includes("/transport") ? "#eff6ff" : "none",
                   border: "none",
-                  color: pathname.includes("/transport") ? "#3b82f6" : "#6b7280",
-                  fontSize: "0.85rem",
-                  fontWeight: 500,
+                  color: pathname.includes("/transport") ? "#2563eb" : "#4b5563",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  gap: "0.25rem",
-                  padding: "0.5rem 0.6rem",
-                  borderRadius: "6px",
+                  gap: "0.375rem",
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "0.375rem",
                   transition: "all 0.2s ease",
                   whiteSpace: "nowrap",
                 }}
@@ -544,13 +570,13 @@ export default function Navbar() {
                 <div
                   style={{
                     position: "absolute",
-                    top: "100%",
+                    top: "calc(100% + 4px)",
                     left: 0,
-                    minWidth: "180px",
-                    backgroundColor: "#fff",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                    padding: "0.5rem 0",
+                    minWidth: "190px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "0.5rem",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
+                    padding: "0.375rem 0",
                     border: "1px solid #e5e7eb",
                     zIndex: 9999,
                   }}
@@ -560,10 +586,11 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/transport/send" ? "#3b82f6" : "#374151",
+                      color: pathname === "/transport/send" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/transport/send" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/transport/send" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -574,10 +601,11 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/transport/receive" ? "#3b82f6" : "#374151",
+                      color: pathname === "/transport/receive" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/transport/receive" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/transport/receive" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -588,10 +616,11 @@ export default function Navbar() {
                     style={{
                       display: "block",
                       padding: "0.5rem 1rem",
-                      color: pathname === "/transport/transportHistory" ? "#3b82f6" : "#374151",
+                      color: pathname === "/transport/transportHistory" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/transport/transportHistory" ? 600 : 400,
                       textDecoration: "none",
-                      fontSize: "0.85rem",
-                      transition: "all 0.2s ease",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/transport/transportHistory" ? "#f0f9ff" : "transparent",
                     }}
                     onClick={() => setOpenDropdown(null)}
                   >
@@ -607,17 +636,17 @@ export default function Navbar() {
                 <button
                   onClick={() => toggleDropdown('accounts')}
                   style={{
-                    background: "none",
+                    background: (pathname.includes("/companies") || pathname.includes("/pharmacies")) ? "#eff6ff" : "none",
                     border: "none",
-                    color: pathname.includes("/companies") || pathname.includes("/pharmacies") ? "#3b82f6" : "#6b7280",
-                    fontSize: "0.85rem",
-                    fontWeight: 500,
+                    color: (pathname.includes("/companies") || pathname.includes("/pharmacies")) ? "#2563eb" : "#4b5563",
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.25rem",
-                    padding: "0.5rem 0.6rem",
-                    borderRadius: "6px",
+                    gap: "0.375rem",
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "0.375rem",
                     transition: "all 0.2s ease",
                     whiteSpace: "nowrap",
                   }}
@@ -641,13 +670,13 @@ export default function Navbar() {
                   <div
                     style={{
                       position: "absolute",
-                      top: "100%",
+                      top: "calc(100% + 4px)",
                       left: 0,
-                      minWidth: "180px",
-                      backgroundColor: "#fff",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                      padding: "0.5rem 0",
+                      minWidth: "190px",
+                      backgroundColor: "#ffffff",
+                      borderRadius: "0.5rem",
+                      boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
+                      padding: "0.375rem 0",
                       border: "1px solid #e5e7eb",
                       zIndex: 9999,
                     }}
@@ -657,10 +686,11 @@ export default function Navbar() {
                       style={{
                         display: "block",
                         padding: "0.5rem 1rem",
-                        color: pathname === "/pharmacies" ? "#3b82f6" : "#374151",
+                        color: pathname === "/pharmacies" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/pharmacies" ? 600 : 400,
                         textDecoration: "none",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease",
+                        fontSize: "0.875rem",
+                        backgroundColor: pathname === "/pharmacies" ? "#f0f9ff" : "transparent",
                       }}
                       onClick={() => setOpenDropdown(null)}
                     >
@@ -671,10 +701,11 @@ export default function Navbar() {
                       style={{
                         display: "block",
                         padding: "0.5rem 1rem",
-                        color: pathname === "/companies" ? "#3b82f6" : "#374151",
+                        color: pathname === "/companies" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/companies" ? 600 : 400,
                         textDecoration: "none",
-                        fontSize: "0.85rem",
-                        transition: "all 0.2s ease",
+                        fontSize: "0.875rem",
+                        backgroundColor: pathname === "/companies" ? "#f0f9ff" : "transparent",
                       }}
                       onClick={() => setOpenDropdown(null)}
                     >
@@ -686,27 +717,166 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Right side - User & Mobile Menu */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-            {/* User Badge - Desktop only */}
-            <div
-              style={{
-                display: "none",
-                color: "#374151",
-                fontWeight: 500,
-                fontSize: "0.75rem",
-                backgroundColor: "#f3f4f6",
-                padding: "0.25rem 0.6rem",
-                borderRadius: "20px",
-                border: "1px solid #e5e7eb",
-                whiteSpace: "nowrap",
-              }}
-              className="user-badge"
-            >
-              {user?.email}
+          {/* Right side - User Profile Popover Menu (Desktop) & Mobile Toggle */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+            
+            {/* Desktop User Profile Button & Popover */}
+            <div className="user-badge" style={{ position: "relative" }} ref={userMenuRef}>
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #cbd5e1",
+                  padding: "0.35rem 0.75rem",
+                  borderRadius: "9999px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  outline: "none",
+                }}
+              >
+                <div
+                  style={{
+                    width: "24px",
+                    height: "24px",
+                    borderRadius: "50%",
+                    backgroundColor: "#2563eb",
+                    color: "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "0.75rem",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {(user?.email || "U")[0].toUpperCase()}
+                </div>
+                <span
+                  style={{
+                    color: "#0f172a",
+                    fontWeight: 600,
+                    fontSize: "0.8125rem",
+                    maxWidth: "140px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {user?.email}
+                </span>
+                <svg
+                  style={{
+                    width: "12px",
+                    height: "12px",
+                    color: "#64748b",
+                    transform: isUserMenuOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.2s ease",
+                  }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* User Dropdown Menu */}
+              {isUserMenuOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 6px)",
+                    width: "240px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "0.75rem",
+                    border: "1px solid #e2e8f0",
+                    boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.05)",
+                    zIndex: 9999,
+                    padding: "0.75rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <div style={{ borderBottom: "1px solid #f1f5f9", paddingBottom: "0.5rem" }}>
+                    <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b", fontWeight: 500 }}>
+                      Logged in as
+                    </p>
+                    <p style={{ margin: "0.125rem 0 0 0", fontSize: "0.875rem", color: "#0f172a", fontWeight: 700, wordBreak: "break-all" }}>
+                      {user?.email}
+                    </p>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        marginTop: "0.375rem",
+                        padding: "0.15rem 0.5rem",
+                        borderRadius: "9999px",
+                        fontSize: "0.6875rem",
+                        fontWeight: "700",
+                        backgroundColor: user?.role === "superAdmin" ? "#f3e8ff" : user?.role === "admin" ? "#dbeafe" : "#d1fae5",
+                        color: user?.role === "superAdmin" ? "#7c3aed" : user?.role === "admin" ? "#1e40af" : "#065f46",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {user?.role || "User"}
+                    </span>
+                  </div>
+
+                  <Link
+                    href="/users"
+                    onClick={() => setIsUserMenuOpen(false)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      padding: "0.5rem",
+                      borderRadius: "0.375rem",
+                      color: "#334155",
+                      fontSize: "0.875rem",
+                      fontWeight: 500,
+                      textDecoration: "none",
+                      transition: "background 0.15s ease",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8fafc"}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    👤 Account Settings
+                  </Link>
+
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      handleLogout();
+                    }}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.5rem",
+                      padding: "0.5rem",
+                      borderRadius: "0.375rem",
+                      backgroundColor: "#fef2f2",
+                      color: "#dc2626",
+                      border: "1px solid #fecaca",
+                      fontSize: "0.875rem",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = "#fee2e2"}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = "#fef2f2"}
+                  >
+                    🚪 Sign Out
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Mobile Menu Toggle */}
+            {/* Mobile Menu Toggle Button */}
             <button
               ref={menuButtonRef}
               onClick={toggleMobileMenu}
@@ -715,33 +885,28 @@ export default function Navbar() {
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                padding: "8px",
+                padding: "6px",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#6b7280",
-                borderRadius: "8px",
+                color: "#4b5563",
+                borderRadius: "6px",
                 transition: "background-color 0.2s ease",
-                width: "44px",
-                height: "44px",
                 touchAction: "manipulation",
                 WebkitTapHighlightColor: "transparent",
                 zIndex: 1001,
-                position: "relative",
               }}
               className="mobile-toggle"
               aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
             >
               <svg 
-                width="28" 
-                height="28" 
+                width="24" 
+                height="24" 
                 viewBox="0 0 24 24" 
                 fill="none" 
                 stroke="currentColor" 
-                strokeWidth="2"
-                style={{
-                  pointerEvents: "none",
-                  display: "block",
-                }}
+                strokeWidth="2.2"
+                strokeLinecap="round" 
+                strokeLinejoin="round"
               >
                 {isMobileMenuOpen ? (
                   <>
@@ -761,41 +926,83 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Mobile Menu */}
+      {/* Mobile Drawer Menu */}
       {isMobileMenuOpen && (
         <div
           ref={mobileMenuRef}
           style={{
             position: "fixed",
-            top: "56px",
+            top: "60px",
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "#fff",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            padding: "16px",
+            backgroundColor: "#ffffff",
+            boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+            padding: "1rem",
             zIndex: 999,
             overflowY: "auto",
             overflowX: "hidden",
             borderTop: "1px solid #e5e7eb",
             width: "100%",
-            maxWidth: "100%",
             boxSizing: "border-box",
-            animation: "slideDown 0.3s ease",
+            animation: "slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         >
-          {/* Close button at top of menu */}
-          <div style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            marginBottom: "12px",
-            paddingBottom: "12px",
-            borderBottom: "1px solid #f3f4f6",
-          }}>
-          
-          </div>
+          {/* Mobile User Profile Summary Banner */}
+          {user && (
+            <div
+              style={{
+                backgroundColor: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: "0.75rem",
+                padding: "0.875rem",
+                marginBottom: "1rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+              }}
+            >
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  backgroundColor: "#2563eb",
+                  color: "white",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1rem",
+                  fontWeight: "bold",
+                  flexShrink: 0,
+                }}
+              >
+                {(user.email || "U")[0].toUpperCase()}
+              </div>
+              <div style={{ overflow: "hidden", flex: 1 }}>
+                <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 700, color: "#0f172a", wordBreak: "break-all" }}>
+                  {user.email}
+                </p>
+                <span
+                  style={{
+                    display: "inline-block",
+                    marginTop: "0.25rem",
+                    padding: "0.1rem 0.5rem",
+                    borderRadius: "4px",
+                    fontSize: "0.6875rem",
+                    fontWeight: "700",
+                    backgroundColor: user.role === "superAdmin" ? "#f3e8ff" : user.role === "admin" ? "#dbeafe" : "#d1fae5",
+                    color: user.role === "superAdmin" ? "#7c3aed" : user.role === "admin" ? "#1e40af" : "#065f46",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {user.role || "User"}
+                </span>
+              </div>
+            </div>
+          )}
 
-          {/* Mobile Menu Items */}
+          {/* Buying Links */}
           {user?.role === "superAdmin" && (
             <div style={{ marginBottom: "0.5rem" }}>
               <button
@@ -803,23 +1010,23 @@ export default function Navbar() {
                 style={{
                   background: "none",
                   border: "none",
-                  color: "#374151",
-                  fontSize: "1rem",
+                  color: "#1e293b",
+                  fontSize: "0.9375rem",
                   fontWeight: 600,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   width: "100%",
-                  padding: "0.5rem 0",
-                  borderBottom: "1px solid #f3f4f6",
+                  padding: "0.625rem 0",
+                  borderBottom: "1px solid #f1f5f9",
                 }}
               >
                 Buying
                 <svg
                   style={{
-                    width: "18px",
-                    height: "18px",
+                    width: "16px",
+                    height: "16px",
                     transition: "transform 0.2s ease",
                     transform: openDropdown === 'mobile-buying' ? "rotate(180deg)" : "rotate(0deg)",
                   }}
@@ -831,39 +1038,39 @@ export default function Navbar() {
                 </svg>
               </button>
               {openDropdown === 'mobile-buying' && (
-                <div style={{ paddingLeft: "1rem", marginTop: "0.25rem" }}>
-                  <Link href="/buying" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Buying Form</Link>
-                  <Link href="/bought_returns" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Bought Returns</Link>
-                  <Link href="/Bought_Statement" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Bought Statement</Link>
+                <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
+                  <Link href="/buying" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Buying Form</Link>
+                  <Link href="/bought_returns" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Bought Returns</Link>
+                  <Link href="/Bought_Statement" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Bought Statement</Link>
                 </div>
               )}
             </div>
           )}
 
-          {/* Sales */}
+          {/* Sales Links */}
           <div style={{ marginBottom: "0.5rem" }}>
             <button
               onClick={() => toggleDropdown('mobile-sales')}
               style={{
                 background: "none",
                 border: "none",
-                color: "#374151",
-                fontSize: "1rem",
+                color: "#1e293b",
+                fontSize: "0.9375rem",
                 fontWeight: 600,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 width: "100%",
-                padding: "0.5rem 0",
-                borderBottom: "1px solid #f3f4f6",
+                padding: "0.625rem 0",
+                borderBottom: "1px solid #f1f5f9",
               }}
             >
               Sales
               <svg
                 style={{
-                  width: "18px",
-                  height: "18px",
+                  width: "16px",
+                  height: "16px",
                   transition: "transform 0.2s ease",
                   transform: openDropdown === 'mobile-sales' ? "rotate(180deg)" : "rotate(0deg)",
                 }}
@@ -875,39 +1082,39 @@ export default function Navbar() {
               </svg>
             </button>
             {openDropdown === 'mobile-sales' && (
-              <div style={{ paddingLeft: "1rem", marginTop: "0.25rem" }}>
-                <Link href="/selling" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Create Sale</Link>
-                <Link href="/sold" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Sales History</Link>
-                <Link href="/return" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Returns</Link>
-                <Link href="/statements" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Statements</Link>
+              <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
+                <Link href="/selling" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Create Sale</Link>
+                <Link href="/sold" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Sales History</Link>
+                <Link href="/return" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Returns</Link>
+                <Link href="/statements" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Statements</Link>
               </div>
             )}
           </div>
 
-          {/* Inventory */}
+          {/* Inventory Links */}
           <div style={{ marginBottom: "0.5rem" }}>
             <button
               onClick={() => toggleDropdown('mobile-inventory')}
               style={{
                 background: "none",
                 border: "none",
-                color: "#374151",
-                fontSize: "1rem",
+                color: "#1e293b",
+                fontSize: "0.9375rem",
                 fontWeight: 600,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 width: "100%",
-                padding: "0.5rem 0",
-                borderBottom: "1px solid #f3f4f6",
+                padding: "0.625rem 0",
+                borderBottom: "1px solid #f1f5f9",
               }}
             >
               Inventory
               <svg
                 style={{
-                  width: "18px",
-                  height: "18px",
+                  width: "16px",
+                  height: "16px",
                   transition: "transform 0.2s ease",
                   transform: openDropdown === 'mobile-inventory' ? "rotate(180deg)" : "rotate(0deg)",
                 }}
@@ -919,39 +1126,39 @@ export default function Navbar() {
               </svg>
             </button>
             {openDropdown === 'mobile-inventory' && (
-              <div style={{ paddingLeft: "1rem", marginTop: "0.25rem" }}>
+              <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
                 {user?.role !== "employee" && (
-                  <Link href="/items" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Items</Link>
+                  <Link href="/items" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Items</Link>
                 )}
-                <Link href="/store" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Store</Link>
+                <Link href="/store" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Store</Link>
               </div>
             )}
           </div>
 
-          {/* Payments */}
+          {/* Payments Links */}
           <div style={{ marginBottom: "0.5rem" }}>
             <button
               onClick={() => toggleDropdown('mobile-payments')}
               style={{
                 background: "none",
                 border: "none",
-                color: "#374151",
-                fontSize: "1rem",
+                color: "#1e293b",
+                fontSize: "0.9375rem",
                 fontWeight: 600,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 width: "100%",
-                padding: "0.5rem 0",
-                borderBottom: "1px solid #f3f4f6",
+                padding: "0.625rem 0",
+                borderBottom: "1px solid #f1f5f9",
               }}
             >
               Payments
               <svg
                 style={{
-                  width: "18px",
-                  height: "18px",
+                  width: "16px",
+                  height: "16px",
                   transition: "transform 0.2s ease",
                   transform: openDropdown === 'mobile-payments' ? "rotate(180deg)" : "rotate(0deg)",
                 }}
@@ -963,39 +1170,39 @@ export default function Navbar() {
               </svg>
             </button>
             {openDropdown === 'mobile-payments' && (
-              <div style={{ paddingLeft: "1rem", marginTop: "0.25rem" }}>
-                <Link href="/payments/create" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Sales Payment</Link>
+              <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
+                <Link href="/payments/create" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Sales Payment</Link>
                 {user?.role === "superAdmin" && (
-                  <Link href="/bought_payments/" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Buy Payment</Link>
+                  <Link href="/bought_payments/" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Buy Payment</Link>
                 )}
               </div>
             )}
           </div>
 
-          {/* Transport */}
+          {/* Transport Links */}
           <div style={{ marginBottom: "0.5rem" }}>
             <button
               onClick={() => toggleDropdown('mobile-transport')}
               style={{
                 background: "none",
                 border: "none",
-                color: "#374151",
-                fontSize: "1rem",
+                color: "#1e293b",
+                fontSize: "0.9375rem",
                 fontWeight: 600,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 width: "100%",
-                padding: "0.5rem 0",
-                borderBottom: "1px solid #f3f4f6",
+                padding: "0.625rem 0",
+                borderBottom: "1px solid #f1f5f9",
               }}
             >
               Transport
               <svg
                 style={{
-                  width: "18px",
-                  height: "18px",
+                  width: "16px",
+                  height: "16px",
                   transition: "transform 0.2s ease",
                   transform: openDropdown === 'mobile-transport' ? "rotate(180deg)" : "rotate(0deg)",
                 }}
@@ -1007,15 +1214,15 @@ export default function Navbar() {
               </svg>
             </button>
             {openDropdown === 'mobile-transport' && (
-              <div style={{ paddingLeft: "1rem", marginTop: "0.25rem" }}>
-                <Link href="/transport/send" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Send Transport</Link>
-                <Link href="/transport/receive" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Receive Transport</Link>
-                <Link href="/transport/transportHistory" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Transport History</Link>
+              <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
+                <Link href="/transport/send" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Send Transport</Link>
+                <Link href="/transport/receive" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Receive Transport</Link>
+                <Link href="/transport/transportHistory" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Transport History</Link>
               </div>
             )}
           </div>
 
-          {/* Accounts */}
+          {/* Accounts Links */}
           {(user?.role === "admin" || user?.role === "superAdmin") && (
             <div style={{ marginBottom: "0.5rem" }}>
               <button
@@ -1023,23 +1230,23 @@ export default function Navbar() {
                 style={{
                   background: "none",
                   border: "none",
-                  color: "#374151",
-                  fontSize: "1rem",
+                  color: "#1e293b",
+                  fontSize: "0.9375rem",
                   fontWeight: 600,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   width: "100%",
-                  padding: "0.5rem 0",
-                  borderBottom: "1px solid #f3f4f6",
+                  padding: "0.625rem 0",
+                  borderBottom: "1px solid #f1f5f9",
                 }}
               >
                 Accounts
                 <svg
                   style={{
-                    width: "18px",
-                    height: "18px",
+                    width: "16px",
+                    height: "16px",
                     transition: "transform 0.2s ease",
                     transform: openDropdown === 'mobile-accounts' ? "rotate(180deg)" : "rotate(0deg)",
                   }}
@@ -1051,49 +1258,54 @@ export default function Navbar() {
                 </svg>
               </button>
               {openDropdown === 'mobile-accounts' && (
-                <div style={{ paddingLeft: "1rem", marginTop: "0.25rem" }}>
-                  <Link href="/pharmacies" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Pharmacies</Link>
-                  <Link href="/companies" style={{ display: "block", padding: "0.4rem 0", color: "#374151", textDecoration: "none", fontSize: "0.9rem" }} onClick={closeMobileMenu}>Companies</Link>
+                <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
+                  <Link href="/pharmacies" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Pharmacies</Link>
+                  <Link href="/companies" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Companies</Link>
                 </div>
               )}
             </div>
           )}
 
-          {/* Logout Button */}
-          <div style={{
-            borderTop: "1px solid #e5e7eb",
-            paddingTop: "0.75rem",
-            marginTop: "0.5rem",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "8px",
-          }}>
-            <span style={{ color: "#6b7280", fontSize: "0.8rem", wordBreak: "break-all" }}>{user?.email}</span>
-            <button
-              onClick={handleLogout}
+          {/* User Settings & Logout Button */}
+          <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "0.875rem", marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <Link
+              href="/users"
+              onClick={closeMobileMenu}
               style={{
-                backgroundColor: "#ef4444",
-                color: "white",
-                border: "none",
-                padding: "0.5rem 1.5rem",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "0.9rem",
-                boxShadow: "0 2px 4px rgba(239, 68, 68, 0.3)",
-                transition: "all 0.2s ease",
-                flexShrink: 0,
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = "#dc2626";
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = "#ef4444";
+                display: "block",
+                padding: "0.625rem",
+                borderRadius: "0.375rem",
+                color: "#334155",
+                fontWeight: 600,
+                fontSize: "0.875rem",
+                textDecoration: "none",
+                backgroundColor: "#f8fafc",
+                textAlign: "center",
               }}
             >
-              🚪 Logout
+              👤 Account Settings
+            </Link>
+
+            <button
+              onClick={() => {
+                closeMobileMenu();
+                handleLogout();
+              }}
+              style={{
+                backgroundColor: "#ef4444",
+                color: "#ffffff",
+                border: "none",
+                padding: "0.625rem",
+                borderRadius: "0.375rem",
+                cursor: "pointer",
+                fontWeight: "600",
+                fontSize: "0.875rem",
+                width: "100%",
+                boxShadow: "0 2px 4px rgba(239, 68, 68, 0.2)",
+                transition: "all 0.2s ease",
+              }}
+            >
+              🚪 Sign Out
             </button>
           </div>
         </div>
@@ -1103,7 +1315,7 @@ export default function Navbar() {
         @keyframes slideDown {
           from {
             opacity: 0;
-            transform: translateY(-10px);
+            transform: translateY(-8px);
           }
           to {
             opacity: 1;
