@@ -1,6 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { collection, getDocs } from "firebase/firestore";
 import {
   TrendingUp,
   TrendingDown,
@@ -35,8 +39,6 @@ import {
   ComposedChart,
   Line
 } from "recharts";
-import { db } from "@/lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
 
 // --- Formatter Utilities ---
 const formatCurrency = (amount, currency = "IQD") => {
@@ -77,14 +79,16 @@ const THEME = {
 
 // ==========================================
 // MAIN COMPONENT
-// Replace "admin" with actual user role from your auth context ("user", "admin", "superAdmin")
 // ==========================================
 export default function DetailedDashboardPage({ userRole = "admin" }) {
+  const router = useRouter();
+  
   // --- RBAC Logic ---
   const canViewAll = userRole === "admin" || userRole === "superAdmin";
   
   // --- State ---
-  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("sales");
   const [data, setData] = useState({
     soldBills: [],
@@ -103,9 +107,24 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // --- Auth Guard ---
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        // Redirect unauthorized users instantly
+        router.push("/login");
+      } else {
+        // Allow access to the dashboard
+        setAuthLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
   // --- Data Fetching ---
   const fetchData = async () => {
-    setLoading(true);
+    setDataLoading(true);
     try {
       // Parallel fetching for performance
       const [soldSnap, boughtSnap, storeSnap] = await Promise.all([
@@ -122,13 +141,16 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
     } catch (error) {
       console.error("Dashboard Fetch Error:", error);
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
   };
 
+  // Only attempt to fetch data once authentication is confirmed
   useEffect(() => {
-    fetchData();
-  }, [refreshKey, canViewAll]);
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [refreshKey, canViewAll, authLoading]);
 
   // --- Master Filter Engine ---
   const { filteredSold, filteredBought, filteredStore } = useMemo(() => {
@@ -342,12 +364,14 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
   }, [filteredSold, filteredBought, filters, canViewAll]);
 
   // --- View Control ---
-  if (loading) {
+  if (authLoading || dataLoading) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: THEME.bg }}>
         <div style={{ textAlign: "center" }}>
           <Loader2 style={{ width: "3rem", height: "3rem", animation: "spin 1s linear infinite", color: THEME.primary, margin: "0 auto 1rem" }} />
-          <p style={{ color: THEME.neutral, fontWeight: 500 }}>Compiling Datasets...</p>
+          <p style={{ color: THEME.neutral, fontWeight: 500 }}>
+            {authLoading ? "Authenticating securely..." : "Compiling Datasets..."}
+          </p>
         </div>
       </div>
     );
@@ -377,6 +401,7 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
                 </h1>
                 <p style={{ color: THEME.neutral, fontSize: "0.75rem", margin: 0, fontWeight: 500 }}>
                   Role: <span style={{ color: canViewAll ? THEME.admin : THEME.primary }}>{userRole.toUpperCase()}</span>
+                
                 </p>
               </div>
             </div>
