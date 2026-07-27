@@ -111,14 +111,11 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        // Redirect unauthorized users instantly
         router.push("/login");
       } else {
-        // Allow access to the dashboard
         setAuthLoading(false);
       }
     });
-
     return () => unsubscribe();
   }, [router]);
 
@@ -126,7 +123,6 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
   const fetchData = async () => {
     setDataLoading(true);
     try {
-      // Parallel fetching for performance
       const [soldSnap, boughtSnap, storeSnap] = await Promise.all([
         getDocs(collection(db, "soldBills")),
         canViewAll ? getDocs(collection(db, "boughtBills")) : Promise.resolve({ docs: [] }),
@@ -145,7 +141,6 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
     }
   };
 
-  // Only attempt to fetch data once authentication is confirmed
   useEffect(() => {
     if (!authLoading) {
       fetchData();
@@ -161,7 +156,6 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
     const query = searchQuery.toLowerCase();
 
     const applyFilters = (bill, isStoreItem = false) => {
-      // Search Filter
       if (query) {
         const matchName = (bill.pharmacyName || bill.companyName || bill.name || "").toLowerCase().includes(query);
         const matchNum = String(bill.billNumber || bill.barcode || "").includes(query);
@@ -174,15 +168,11 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
         return true;
       }
 
-      // Date Filter
       const bDate = parseDate(bill.date);
       if (dateRange === "month" && (bDate.getFullYear() !== targetYear || bDate.getMonth() !== targetMonth)) return false;
       if (dateRange === "year" && bDate.getFullYear() !== targetYear) return false;
 
-      // Currency Filter
       if (currency !== "all" && bill.currency !== currency) return false;
-
-      // Payment Status Filter
       if (paymentStatus !== "all" && bill.paymentStatus !== paymentStatus) return false;
 
       return true;
@@ -198,20 +188,15 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
   // --- Deep Metrics Processing ---
   const metrics = useMemo(() => {
     const m = {
-      // Sales
       sales: { usd: 0, iqd: 0, count: filteredSold.length, itemsSold: 0, unpaidUsd: 0, unpaidIqd: 0 },
-      // Purchases
       purchases: { usd: 0, iqd: 0, count: filteredBought.length, itemsBought: 0, unpaidUsd: 0, unpaidIqd: 0 },
-      // Profit & Inventory (Admins only)
       profit: { usd: 0, iqd: 0 },
       inventoryValue: { usd: 0, iqd: 0 },
-      // Rankings
       topSoldProducts: {},
       topClients: {},
       topSuppliers: {}
     };
 
-    // Process Sales
     filteredSold.forEach(bill => {
       const isUnpaid = bill.paymentStatus !== "Paid";
       m.sales.usd += bill.totalAmountUSD || 0;
@@ -233,7 +218,6 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
         m.sales.itemsSold += qty;
         const pName = item.name || "Unknown";
         
-        // Cost calculation for profit
         const costUsd = (Number(item.basePriceUSD) || 0) * qty;
         const costIqd = (Number(item.basePriceIQD) || 0) * qty;
         const revUsd = (Number(item.outPriceUSD) || Number(item.price) || 0) * qty;
@@ -251,7 +235,6 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
       });
     });
 
-    // Process Purchases (Admins only)
     if (canViewAll) {
       filteredBought.forEach(bill => {
         const isUnpaid = bill.paymentStatus !== "Paid";
@@ -281,7 +264,6 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
         m.topSuppliers[supName].count += 1;
       });
 
-      // Inventory Valuation
       filteredStore.forEach(item => {
         const qty = Number(item.quantity) || 0;
         m.inventoryValue.usd += (Number(item.netPriceUSD) || 0) * qty;
@@ -377,8 +359,8 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
     );
   }
 
-  const Card = ({ children, style = {} }) => (
-    <div style={{ background: THEME.card, borderRadius: "0.75rem", border: `1px solid ${THEME.border}`, padding: "1.25rem", ...style }}>
+  const Card = ({ children, className = "", style = {} }) => (
+    <div className={className} style={{ background: THEME.card, borderRadius: "0.75rem", border: `1px solid ${THEME.border}`, padding: "1.25rem", ...style }}>
       {children}
     </div>
   );
@@ -386,11 +368,36 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
   return (
     <div style={{ minHeight: "100vh", background: THEME.bg, fontFamily: "system-ui, sans-serif", paddingBottom: "4rem" }}>
       
+      {/* INJECTED CSS FOR MOBILE RESPONSIVENESS */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .main-container { max-width: 1600px; margin: 1.5rem auto; padding: 0 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+        .header-wrap { display: flex; justify-content: space-between; align-items: center; }
+        .filter-wrap { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; background: ${THEME.bg}; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid ${THEME.border}; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+        .chart-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; }
+        .card-wrapper { min-width: 0; }
+        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        
+        @media (max-width: 768px) {
+          .main-container { padding: 0 0.5rem; margin: 1rem auto; gap: 1rem; }
+          .header-wrap { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .sync-btn { width: 100%; justify-content: center; }
+          .filter-wrap { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0.75rem; -webkit-overflow-scrolling: touch; }
+          .filter-wrap select, .filter-wrap input { flex-shrink: 0; min-width: 120px; }
+          .search-box { min-width: 250px !important; }
+          .chart-grid { grid-template-columns: 1fr; }
+          .tabs-wrap { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 5px; }
+        }
+      `}} />
+
       {/* HEADER & GLOBAL FILTERS */}
-      <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,0.9)", backdropFilter: "blur(10px)", borderBottom: `1px solid ${THEME.border}`, padding: "1rem 1.5rem" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,0.9)", backdropFilter: "blur(10px)", borderBottom: `1px solid ${THEME.border}`, padding: "1rem" }}>
         <div style={{ maxWidth: "1600px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "1rem" }}>
           
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="header-wrap">
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
               <div style={{ background: canViewAll ? THEME.admin : THEME.primary, padding: "0.5rem", borderRadius: "0.5rem", color: "white" }}>
                 {canViewAll ? <ShieldAlert size={20} /> : <Activity size={20} />}
@@ -401,18 +408,17 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
                 </h1>
                 <p style={{ color: THEME.neutral, fontSize: "0.75rem", margin: 0, fontWeight: 500 }}>
                   Role: <span style={{ color: canViewAll ? THEME.admin : THEME.primary }}>{userRole.toUpperCase()}</span>
-                
                 </p>
               </div>
             </div>
             
-            <button onClick={() => setRefreshKey(k=>k+1)} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 1rem", background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: "0.5rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" }}>
+            <button className="sync-btn" onClick={() => setRefreshKey(k=>k+1)} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 1rem", background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: "0.5rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" }}>
               <RefreshCw size={16} /> Sync Data
             </button>
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center", background: THEME.bg, padding: "0.5rem", borderRadius: "0.5rem", border: `1px solid ${THEME.border}` }}>
-            <Filter size={16} color={THEME.neutral} style={{ margin: "0 0.5rem" }} />
+          <div className="filter-wrap hide-scrollbar">
+            <Filter size={16} color={THEME.neutral} style={{ margin: "0 0.5rem", flexShrink: 0 }} />
             
             <select value={filters.dateRange} onChange={(e) => setFilters(f => ({ ...f, dateRange: e.target.value }))} style={{ padding: "0.4rem", borderRadius: "0.375rem", border: `1px solid ${THEME.border}`, fontSize: "0.875rem" }}>
               <option value="month">Month View</option>
@@ -439,24 +445,24 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
               <option value="Unpaid">Unpaid / Debt</option>
             </select>
 
-            <div style={{ display: "flex", flex: 1, minWidth: "200px", background: "white", padding: "0.4rem", borderRadius: "0.375rem", border: `1px solid ${THEME.border}`, alignItems: "center" }}>
-              <Search size={16} color={THEME.neutral} style={{ marginRight: "0.5rem" }} />
-              <input type="text" placeholder="Search invoices, items, or clients..." value={filters.searchQuery} onChange={(e) => setFilters(f => ({ ...f, searchQuery: e.target.value }))} style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem" }} />
-              {filters.searchQuery && <X size={14} color={THEME.expense} cursor="pointer" onClick={() => setFilters(f => ({...f, searchQuery: ""}))} />}
+            <div className="search-box" style={{ display: "flex", flex: 1, minWidth: "200px", background: "white", padding: "0.4rem", borderRadius: "0.375rem", border: `1px solid ${THEME.border}`, alignItems: "center" }}>
+              <Search size={16} color={THEME.neutral} style={{ marginRight: "0.5rem", flexShrink: 0 }} />
+              <input type="text" placeholder="Search invoices, items, or clients..." value={filters.searchQuery} onChange={(e) => setFilters(f => ({ ...f, searchQuery: e.target.value }))} style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem", minWidth: 0 }} />
+              {filters.searchQuery && <X size={14} color={THEME.expense} cursor="pointer" style={{ flexShrink: 0 }} onClick={() => setFilters(f => ({...f, searchQuery: ""}))} />}
             </div>
           </div>
 
           {/* Contextual Tabs based on Role */}
-          <div style={{ display: "flex", gap: "1rem", borderBottom: `2px solid ${THEME.border}`, paddingBottom: "0.25rem" }}>
-            {canViewAll && <button onClick={() => setActiveTab("overview")} style={{ background: "none", border: "none", borderBottom: activeTab === "overview" ? `2px solid ${THEME.admin}` : "none", color: activeTab === "overview" ? THEME.admin : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer" }}>Command Center</button>}
-            <button onClick={() => setActiveTab("sales")} style={{ background: "none", border: "none", borderBottom: activeTab === "sales" ? `2px solid ${THEME.primary}` : "none", color: activeTab === "sales" ? THEME.primary : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer" }}>Sales & Distribution</button>
-            {canViewAll && <button onClick={() => setActiveTab("purchases")} style={{ background: "none", border: "none", borderBottom: activeTab === "purchases" ? `2px solid ${THEME.expense}` : "none", color: activeTab === "purchases" ? THEME.expense : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer" }}>Procurement</button>}
+          <div className="tabs-wrap hide-scrollbar" style={{ display: "flex", gap: "1rem", borderBottom: `2px solid ${THEME.border}` }}>
+            {canViewAll && <button onClick={() => setActiveTab("overview")} style={{ background: "none", border: "none", borderBottom: activeTab === "overview" ? `2px solid ${THEME.admin}` : "none", color: activeTab === "overview" ? THEME.admin : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Command Center</button>}
+            <button onClick={() => setActiveTab("sales")} style={{ background: "none", border: "none", borderBottom: activeTab === "sales" ? `2px solid ${THEME.primary}` : "none", color: activeTab === "sales" ? THEME.primary : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Sales & Distribution</button>
+            {canViewAll && <button onClick={() => setActiveTab("purchases")} style={{ background: "none", border: "none", borderBottom: activeTab === "purchases" ? `2px solid ${THEME.expense}` : "none", color: activeTab === "purchases" ? THEME.expense : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Procurement</button>}
           </div>
 
         </div>
       </div>
 
-      <div style={{ maxWidth: "1600px", margin: "1.5rem auto", padding: "0 1.5rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div className="main-container">
         
         {/* ==================================================== */}
         {/* TAB: SALES (Visible to All) */}
@@ -464,7 +470,7 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
         {activeTab === "sales" && (
           <>
             {/* Sales KPIs */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1rem" }}>
+            <div className="kpi-grid">
               <Card style={{ borderTop: `4px solid ${THEME.usd}` }}>
                 <p style={{ margin: 0, fontSize: "0.875rem", color: THEME.neutral, fontWeight: 600 }}>Total Revenue (USD)</p>
                 <h2 style={{ margin: "0.5rem 0", fontSize: "1.75rem", color: "#0f172a" }}>{formatCurrency(metrics.sales.usd, "USD")}</h2>
@@ -483,8 +489,8 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
             </div>
 
             {/* Sales Charts & Tables */}
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem" }}>
-              <Card style={{ minHeight: "350px" }}>
+            <div className="chart-grid">
+              <Card className="card-wrapper" style={{ minHeight: "350px" }}>
                 <h3 style={{ margin: "0 0 1rem 0", fontSize: "1rem" }}>Sales Timeline</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={timelineData}>
@@ -494,8 +500,8 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={THEME.border} />
                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={v => `$${v/1000}k`} />
-                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={v => `$${v/1000}k`} width={50} />
+                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} width={50} />
                     <Tooltip formatter={(val, name) => [formatCurrency(val, name.includes('USD') ? 'USD' : 'IQD'), name]} />
                     <Legend />
                     <Area yAxisId="left" type="monotone" dataKey="salesUSD" name="Sales USD" stroke={THEME.usd} fill="url(#colorSalesUSD)" strokeWidth={2} />
@@ -504,16 +510,16 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
                 </ResponsiveContainer>
               </Card>
 
-              <Card>
+              <Card className="card-wrapper">
                 <h3 style={{ margin: "0 0 1rem 0", fontSize: "1rem" }}>Top Performing Clients</h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                   {metrics.topClients.map((client, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${THEME.border}`, paddingBottom: "0.5rem" }}>
-                      <div>
-                        <p style={{ margin: 0, fontWeight: 600, fontSize: "0.875rem" }}>{client.name}</p>
+                      <div style={{ minWidth: 0, flex: 1, paddingRight: "10px" }}>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: "0.875rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{client.name}</p>
                         <p style={{ margin: 0, fontSize: "0.75rem", color: THEME.neutral }}>{client.count} orders</p>
                       </div>
-                      <div style={{ textAlign: "right" }}>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <p style={{ margin: 0, fontWeight: 600, color: THEME.usd, fontSize: "0.875rem" }}>{formatCurrency(client.usd, "USD")}</p>
                         <p style={{ margin: 0, fontSize: "0.75rem", color: THEME.iqd }}>{formatCurrency(client.iqd, "IQD")}</p>
                       </div>
@@ -524,28 +530,30 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
             </div>
 
             {/* Detailed Products List */}
-            <Card>
+            <Card className="card-wrapper">
               <h3 style={{ margin: "0 0 1rem 0", fontSize: "1rem" }}>Itemized Sales Performance</h3>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
-                <thead>
-                  <tr style={{ borderBottom: `2px solid ${THEME.border}`, color: THEME.neutral, textAlign: "left" }}>
-                    <th style={{ padding: "0.75rem" }}>Product Name</th>
-                    <th style={{ padding: "0.75rem" }}>Units Dispensed</th>
-                    <th style={{ padding: "0.75rem", textAlign: "right" }}>Revenue (USD)</th>
-                    <th style={{ padding: "0.75rem", textAlign: "right" }}>Revenue (IQD)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {metrics.topSoldProducts.map((p, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${THEME.border}` }}>
-                      <td style={{ padding: "0.75rem", fontWeight: 500 }}>{p.name}</td>
-                      <td style={{ padding: "0.75rem" }}>{formatNumber(p.qty)}</td>
-                      <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.usd, fontWeight: 500 }}>{formatCurrency(p.usd, "USD")}</td>
-                      <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.iqd, fontWeight: 500 }}>{formatCurrency(p.iqd, "IQD")}</td>
+              <div className="table-responsive">
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "500px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${THEME.border}`, color: THEME.neutral, textAlign: "left" }}>
+                      <th style={{ padding: "0.75rem" }}>Product Name</th>
+                      <th style={{ padding: "0.75rem" }}>Units Dispensed</th>
+                      <th style={{ padding: "0.75rem", textAlign: "right" }}>Revenue (USD)</th>
+                      <th style={{ padding: "0.75rem", textAlign: "right" }}>Revenue (IQD)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {metrics.topSoldProducts.map((p, i) => (
+                      <tr key={i} style={{ borderBottom: `1px solid ${THEME.border}` }}>
+                        <td style={{ padding: "0.75rem", fontWeight: 500 }}>{p.name}</td>
+                        <td style={{ padding: "0.75rem" }}>{formatNumber(p.qty)}</td>
+                        <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.usd, fontWeight: 500 }}>{formatCurrency(p.usd, "USD")}</td>
+                        <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.iqd, fontWeight: 500 }}>{formatCurrency(p.iqd, "IQD")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </>
         )}
@@ -555,7 +563,7 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
         {/* ==================================================== */}
         {canViewAll && activeTab === "overview" && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+            <div className="kpi-grid">
               <Card style={{ background: THEME.admin, color: "white" }}>
                 <p style={{ margin: 0, fontSize: "0.875rem", opacity: 0.9 }}>Gross Profit (USD)</p>
                 <h2 style={{ margin: "0.5rem 0", fontSize: "1.75rem" }}>{formatCurrency(metrics.profit.usd, "USD")}</h2>
@@ -578,13 +586,13 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
               </Card>
             </div>
 
-            <Card style={{ minHeight: "400px" }}>
+            <Card className="card-wrapper" style={{ minHeight: "400px" }}>
               <h3 style={{ margin: "0 0 1rem 0", fontSize: "1rem" }}>Cash Flow: Sales vs Procurement vs Profit</h3>
               <ResponsiveContainer width="100%" height={350}>
                 <ComposedChart data={timelineData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={THEME.border} />
                   <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={v => `$${v/1000}k`} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={v => `$${v/1000}k`} width={50} />
                   <Tooltip formatter={(val, name) => [formatCurrency(val, 'USD'), name]} />
                   <Legend />
                   <Bar dataKey="salesUSD" name="Revenue" fill={THEME.usd} radius={[4,4,0,0]} />
@@ -601,7 +609,7 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
         {/* ==================================================== */}
         {canViewAll && activeTab === "purchases" && (
           <>
-             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1rem" }}>
+             <div className="kpi-grid">
               <Card style={{ borderTop: `4px solid ${THEME.expense}` }}>
                 <p style={{ margin: 0, fontSize: "0.875rem", color: THEME.neutral, fontWeight: 600 }}>Total Spent (USD)</p>
                 <h2 style={{ margin: "0.5rem 0", fontSize: "1.75rem", color: "#0f172a" }}>{formatCurrency(metrics.purchases.usd, "USD")}</h2>
@@ -617,28 +625,30 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
               </Card>
             </div>
 
-            <Card>
+            <Card className="card-wrapper">
               <h3 style={{ margin: "0 0 1rem 0", fontSize: "1rem" }}>Top Suppliers</h3>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
-                <thead>
-                  <tr style={{ borderBottom: `2px solid ${THEME.border}`, color: THEME.neutral, textAlign: "left" }}>
-                    <th style={{ padding: "0.75rem" }}>Supplier Name</th>
-                    <th style={{ padding: "0.75rem" }}>Invoices</th>
-                    <th style={{ padding: "0.75rem", textAlign: "right" }}>Spend (USD)</th>
-                    <th style={{ padding: "0.75rem", textAlign: "right" }}>Spend (IQD)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {metrics.topSuppliers.map((s, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${THEME.border}` }}>
-                      <td style={{ padding: "0.75rem", fontWeight: 500 }}>{s.name}</td>
-                      <td style={{ padding: "0.75rem" }}>{s.count}</td>
-                      <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.expense, fontWeight: 500 }}>{formatCurrency(s.usd, "USD")}</td>
-                      <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.expense, fontWeight: 500 }}>{formatCurrency(s.iqd, "IQD")}</td>
+              <div className="table-responsive">
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "500px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${THEME.border}`, color: THEME.neutral, textAlign: "left" }}>
+                      <th style={{ padding: "0.75rem" }}>Supplier Name</th>
+                      <th style={{ padding: "0.75rem" }}>Invoices</th>
+                      <th style={{ padding: "0.75rem", textAlign: "right" }}>Spend (USD)</th>
+                      <th style={{ padding: "0.75rem", textAlign: "right" }}>Spend (IQD)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {metrics.topSuppliers.map((s, i) => (
+                      <tr key={i} style={{ borderBottom: `1px solid ${THEME.border}` }}>
+                        <td style={{ padding: "0.75rem", fontWeight: 500 }}>{s.name}</td>
+                        <td style={{ padding: "0.75rem" }}>{s.count}</td>
+                        <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.expense, fontWeight: 500 }}>{formatCurrency(s.usd, "USD")}</td>
+                        <td style={{ padding: "0.75rem", textAlign: "right", color: THEME.expense, fontWeight: 500 }}>{formatCurrency(s.iqd, "IQD")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </>
         )}
