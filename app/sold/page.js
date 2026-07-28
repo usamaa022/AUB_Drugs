@@ -103,12 +103,53 @@ export default function SoldPage() {
   // --- Formatters ---
   const formatNumberIQD = (num) => num ? Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "0";
   const formatNumberUSD = (num) => num ? Number(num).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "0";
-  
-  const formatDateOnly = (date) => {
-    if (!date) return 'N/A';
-    const d = date.toDate ? date.toDate() : new Date(date);
-    if (isNaN(d.getTime())) return 'N/A';
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+
+  // Robust Expire Date Formatter (fixes the N/A issue)
+  const formatExpireDate = (date) => {
+    if (!date) return "N/A";
+    try {
+      let dateObj;
+      if (date.toDate && typeof date.toDate === "function") {
+        dateObj = date.toDate();
+      } else if (date instanceof Date) {
+        dateObj = date;
+      } else if (date.seconds) {
+        dateObj = new Date(date.seconds * 1000);
+      } else if (typeof date === "string") {
+        dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) {
+          // Handle DD/MM/YYYY
+          const parts = date.split("/");
+          if (parts.length === 3) {
+            const day = parseInt(parts[0]);
+            const month = parseInt(parts[1]) - 1;
+            const year = parseInt(parts[2]);
+            dateObj = new Date(year, month, day);
+          }
+          // Handle DD-MM-YYYY
+          if (isNaN(dateObj.getTime())) {
+            const parts2 = date.split("-");
+            if (parts2.length === 3) {
+              const year = parseInt(parts2[0]);
+              const month = parseInt(parts2[1]) - 1;
+              const day = parseInt(parts2[2]);
+              dateObj = new Date(year, month, day);
+            }
+          }
+        }
+      } else {
+        return "N/A";
+      }
+      
+      if (!dateObj || isNaN(dateObj.getTime())) return "N/A";
+      const day = String(dateObj.getDate()).padStart(2, "0");
+      const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+      const year = dateObj.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (error) {
+      console.error("Error formatting expire date:", error, date);
+      return "N/A";
+    }
   };
 
   const formatDateTime = (date) => {
@@ -122,8 +163,10 @@ export default function SoldPage() {
   const allItems = useMemo(() =>
     bills.flatMap(bill =>
       bill.items?.map(item => {
-        const isIQD = item.originalCurrency === 'IQD';
-        const isUSD = item.originalCurrency === 'USD';
+        // 🔥 FIXED: Selling Currency is determined by the BILL, not the item's original state
+        const billCurrency = bill.currency || 'USD'; 
+        const isIQD = billCurrency === 'IQD';
+        const isUSD = billCurrency === 'USD';
 
         const priceIQD = isIQD ? (item.outPriceIQD || item.price || 0) : 0;
         const priceUSD = isUSD ? (item.outPriceUSD || item.price || 0) : 0;
@@ -133,23 +176,22 @@ export default function SoldPage() {
           billNumber: String(bill.billNumber),
           saleDate: bill.date,
           pharmacyId: bill.pharmacyId,
-          pharmacyName: pharmacies.find(p => p.id === bill.pharmacyId)?.name || 'Unknown',
+          pharmacyName: pharmacies.find(p => p.id === bill.pharmacyId)?.name || bill.pharmacyName || 'Unknown',
           paymentStatus: bill.paymentStatus || 'Unpaid',
           isConsignment: bill.isConsignment ? 'تحت صرف' : 'Owned',
           attachment: bill.attachment || item.attachment || null,
           hasAttachment: (bill.hasAttachment || item.attachment) ? 'Yes' : 'No',
+          billCurrency, // Store the bill currency for rendering later
           priceIQD, priceUSD,
           totalPriceIQD: isIQD ? (priceIQD * (item.quantity || 0)) : 0,
           totalPriceUSD: isUSD ? (priceUSD * (item.quantity || 0)) : 0,
-          originalCurrency: item.originalCurrency || (isIQD ? 'IQD' : 'USD'),
-          netPriceIQD: isIQD ? (item.netPriceIQD || 0) : 0,
-          netPriceUSD: isUSD ? (item.netPriceUSD || 0) : 0,
-          basePriceIQD: isIQD ? (item.basePriceIQD || 0) : 0,
-          basePriceUSD: isUSD ? (item.basePriceUSD || 0) : 0,
+          originalCurrency: item.originalCurrency || 'USD',
+          netPriceIQD: item.originalCurrency === 'IQD' ? (item.netPriceIQD || item.netPrice || 0) : 0,
+          netPriceUSD: item.originalCurrency === 'USD' ? (item.netPriceUSD || item.netPrice || 0) : 0,
           expireDate: item.expireDate || null,
           
           _formattedSaleDate: formatDateTime(bill.date),
-          _formattedExpireDate: formatDateOnly(item.expireDate)
+          _formattedExpireDate: formatExpireDate(item.expireDate)
         };
       }) || []
     ), [bills, pharmacies]
@@ -301,10 +343,10 @@ export default function SoldPage() {
       'ناوی کاڵا': item.name,
       'بارکۆد': item.barcode,
       'عدد': item.quantity,
-      'نرخ (دینار)': item.originalCurrency === 'IQD' ? formatNumberIQD(item.priceIQD) : "0",
-      'کۆی گشتی (دینار)': item.originalCurrency === 'IQD' ? formatNumberIQD(item.totalPriceIQD) : "0",
-      'نرخ ($)': item.originalCurrency === 'USD' ? formatNumberUSD(item.priceUSD) : "0",
-      'کۆی گشتی ($)': item.originalCurrency === 'USD' ? formatNumberUSD(item.totalPriceUSD) : "0",
+      'نرخ (دینار)': item.billCurrency === 'IQD' ? formatNumberIQD(item.priceIQD) : "0",
+      'کۆی گشتی (دینار)': item.billCurrency === 'IQD' ? formatNumberIQD(item.totalPriceIQD) : "0",
+      'نرخ ($)': item.billCurrency === 'USD' ? formatNumberUSD(item.priceUSD) : "0",
+      'کۆی گشتی ($)': item.billCurrency === 'USD' ? formatNumberUSD(item.totalPriceUSD) : "0",
       'ژمارەی پسوڵە': item.billNumber,
       'دەرمانخانە': item.pharmacyName,
       'بەرواری فرۆشتن': item._formattedSaleDate,
@@ -554,10 +596,10 @@ export default function SoldPage() {
                   <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", fontWeight: "500", color: "#0f172a", borderRight: "1px solid #e2e8f0" }}>{item.name}</td>
                   <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#64748b", borderRight: "1px solid #e2e8f0" }}>{item.barcode}</td>
                   <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", fontWeight: "600", color: "#334155", borderRight: "1px solid #e2e8f0" }}>{item.quantity}</td>
-                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#059669", borderRight: "1px solid #e2e8f0" }}>{item.originalCurrency === 'IQD' ? formatNumberIQD(item.priceIQD) : ""}</td>
-                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#059669", fontWeight: "bold", borderRight: "1px solid #e2e8f0" }}>{item.originalCurrency === 'IQD' ? formatNumberIQD(item.totalPriceIQD) : ""}</td>
-                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#2563eb", borderRight: "1px solid #e2e8f0" }}>{item.originalCurrency === 'USD' ? formatNumberUSD(item.priceUSD) : ""}</td>
-                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#2563eb", fontWeight: "bold", borderRight: "1px solid #e2e8f0" }}>{item.originalCurrency === 'USD' ? formatNumberUSD(item.totalPriceUSD) : ""}</td>
+                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#059669", borderRight: "1px solid #e2e8f0" }}>{item.billCurrency === 'IQD' ? formatNumberIQD(item.priceIQD) : ""}</td>
+                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#059669", fontWeight: "bold", borderRight: "1px solid #e2e8f0" }}>{item.billCurrency === 'IQD' ? formatNumberIQD(item.totalPriceIQD) : ""}</td>
+                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#2563eb", borderRight: "1px solid #e2e8f0" }}>{item.billCurrency === 'USD' ? formatNumberUSD(item.priceUSD) : ""}</td>
+                  <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#2563eb", fontWeight: "bold", borderRight: "1px solid #e2e8f0" }}>{item.billCurrency === 'USD' ? formatNumberUSD(item.totalPriceUSD) : ""}</td>
                   <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", fontFamily: "monospace", color: "#475569", borderRight: "1px solid #e2e8f0" }}>{item.billNumber}</td>
                   <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#0f172a", fontWeight: "500", borderRight: "1px solid #e2e8f0" }}>{item.pharmacyName}</td>
                   <td style={{ padding: "0.875rem 0.75rem", fontSize: "0.875rem", color: "#475569", borderRight: "1px solid #e2e8f0" }}>{item._formattedSaleDate}</td>

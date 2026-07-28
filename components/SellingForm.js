@@ -195,7 +195,7 @@ const formatFinancialLine = (usd, iqd, hasUSD, hasIQD) => {
   return parts[0];
 };
 
-// ─── FIXED calculatePharmacyFinancialSummary ──────────────────────────────────
+// Calculate Financial Summary
 const calculatePharmacyFinancialSummary = (
   pharmacyId,
   allBills = [],
@@ -226,10 +226,7 @@ const calculatePharmacyFinancialSummary = (
 
   if (isPreview && currentBillItems.length > 0) {
     currentBillItems.forEach((item) => {
-      const price =
-        item.originalCurrency === "IQD"
-          ? item.outPriceIQD || item.price || 0
-          : item.outPriceUSD || item.price || 0;
+      const price = item.price || 0;
       if (item.originalCurrency === "IQD") {
         pharmacyHasIQD = true;
         totalUnpaidBillsIQD += price * item.quantity;
@@ -1074,7 +1071,7 @@ const styles = {
   },
   rowContainer: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr auto',
+    gridTemplateColumns: '1fr 1fr 1fr auto',
     gap: '12px',
     alignItems: 'end',
     marginBottom: '12px',
@@ -1084,7 +1081,6 @@ const styles = {
     boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
     border: '1px solid #f0f0f0',
   },
-  
   noteRowContainer: {
     display: 'grid',
     gridTemplateColumns: '1fr',
@@ -1096,7 +1092,6 @@ const styles = {
     borderLeft: '1px solid #f0f0f0',
     borderRight: '1px solid #f0f0f0',
     borderBottom: '1px solid #f0f0f0',
-    // No borderTop to avoid conflict
   },
   noteFieldFull: {
     display: 'flex',
@@ -1363,50 +1358,6 @@ const styles = {
     fontFamily: 'inherit',
     boxSizing: 'border-box',
   },
-  noteField: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    width: '100%',
-  },
-  textareaField: {
-    padding: '8px 12px',
-    fontSize: '14px',
-    border: '1.5px solid #e9ecef',
-    borderRadius: '8px',
-    width: '100%',
-    height: '38px',
-    resize: 'none',
-    fontFamily: 'inherit',
-    outline: 'none',
-    transition: 'all 0.2s ease',
-    backgroundColor: '#ffffff',
-    color: '#4b5563',
-    overflow: 'hidden',
-    boxSizing: 'border-box',
-  },
-  consignmentContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingTop: '4px',
-    paddingBottom: '4px',
-    minHeight: '38px',
-  },
-  consignmentCheckbox: {
-    width: '16px',
-    height: '16px',
-    margin: 0,
-    cursor: 'pointer',
-    accentColor: '#f59e0b',
-  },
-  consignmentLabel: {
-    fontSize: '13px',
-    color: '#6b7280',
-    cursor: 'pointer',
-    fontWeight: '500',
-    whiteSpace: 'nowrap',
-  },
   selectedItemControls: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -1436,7 +1387,6 @@ const styles = {
     gap: '10px',
     marginTop: '15px',
   },
-  // Mobile responsive styles
   mobileScroll: {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
@@ -1445,7 +1395,6 @@ const styles = {
 };
 
 export default function SellingForm({ onBillCreated, userRole, user }) {
-  // ✅ ALL useState hooks - INSIDE the component
   const [allPharmacies, setAllPharmacies] = useState([]);
   const [showPharmacyList, setShowPharmacyList] = useState(false);
   const [pharmacySearch, setPharmacySearch] = useState("");
@@ -1453,8 +1402,11 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const [pharmacyName, setPharmacyName] = useState("");
   const [pharmacySuggestions, setPharmacySuggestions] = useState([]);
   const [showPharmacySuggestions, setShowPharmacySuggestions] = useState(false);
+  
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState("Unpaid");
+  const [billCurrency, setBillCurrency] = useState("USD"); // ✅ Global Bill Currency
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
@@ -1498,9 +1450,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
   const pharmacySearchRef = useRef(null);
   const searchQueryRef = useRef(null);
-  const fileInputRef = useRef(null);
 
-  // ── Helper functions ──────────────────────────────────────────────────────
   const loadReturnedItemsForBill = useCallback(async (billNumber, resolvedPharmacyId) => {
     try {
       const pid = resolvedPharmacyId;
@@ -1544,7 +1494,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     }
   }, []);
 
-  // ── resetForm ──────────────────────────────────────────────────────────────
   const resetForm = useCallback(() => {
     setIsEditMode(false);
     setEditingBillNumber(null);
@@ -1557,26 +1506,23 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     setNote("");
     setSaleDate(new Date().toISOString().split("T")[0]);
     setPaymentMethod("Unpaid");
+    setBillCurrency("USD"); // Reset bill currency
     setError(null);
     setReturnedItemsMap({});
   }, []);
 
-  // ── cancelEdit ─────────────────────────────────────────────────────────────
   const cancelEdit = useCallback(() => {
     resetForm();
   }, [resetForm]);
 
-  // ── cancelBill ─────────────────────────────────────────────────────────────
   const cancelBill = useCallback(() => {
     if (selectedItems.length === 0 && !pharmacyId) {
       return;
     }
-    
     const confirmCancel = window.confirm(
       "Are you sure you want to cancel this bill?\n\n" +
       "All selected items will be cleared."
     );
-    
     if (confirmCancel) {
       resetForm();
       setSearchQuery("");
@@ -1585,7 +1531,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     }
   }, [selectedItems, pharmacyId, resetForm]);
 
-  // ── loadAllAttachments ─────────────────────────────────────────────────
   const loadAllAttachments = useCallback(async (bills) => {
     const attachments = {};
     await Promise.all(bills.map(async (bill) => {
@@ -1600,20 +1545,20 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     setBillAttachments(prev => ({ ...prev, ...attachments }));
   }, []);
 
-  // ── validateBillBeforeSubmit ────────────────────────────────────────────
   const validateBillBeforeSubmit = useCallback(() => {
     let warningMessage = "";
     selectedItems.forEach((item) => {
-      if (item.price < item.netPrice) {
-        const sym = item.originalCurrency === "IQD" ? "IQD" : "$";
-        warningMessage += `• ${item.name}: Selling price (${sym} ${item.price}) is below net price (${sym} ${item.netPrice})\n`;
+      // Validate against the current bill currency active price
+      const price = parseFloat(item.price) || 0;
+      const net = billCurrency === "IQD" ? item.netPriceIQD : item.netPriceUSD;
+      if (price < net) {
+        warningMessage += `• ${item.name}: Selling price (${billCurrency === "IQD" ? "IQD" : "$"} ${price}) is below net price (${billCurrency === "IQD" ? "IQD" : "$"} ${net})\n`;
       }
     });
     if (warningMessage) return window.confirm(`Price Warning:\n${warningMessage}\nDo you want to proceed anyway?`);
     return true;
-  }, [selectedItems]);
+  }, [selectedItems, billCurrency]);
 
-  // ── handleItemChange ──────────────────────────────────────────────────────
   const handleItemChange = useCallback((index, field, value) => {
     const updatedItems = [...selectedItems];
     if (updatedItems[index].isLocked) {
@@ -1630,20 +1575,37 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       const maxQty = updatedItems[index].availableQuantity || 1;
       updatedItems[index].quantity = Math.min(Math.max(1, parseInt(value) || 1), maxQty);
     } else if (field === "price") {
-      const price = parseFloat(value) || 0;
-      updatedItems[index].price = price;
-      if (updatedItems[index].originalCurrency === "IQD") {
-        updatedItems[index].outPriceIQD = price;
+      const parsedValue = value === "" ? "" : parseFloat(value);
+      updatedItems[index].price = parsedValue;
+      if (billCurrency === "IQD") {
+        updatedItems[index].outPriceIQD = parsedValue || 0;
         updatedItems[index].outPriceUSD = 0;
       } else {
-        updatedItems[index].outPriceUSD = price;
+        updatedItems[index].outPriceUSD = parsedValue || 0;
         updatedItems[index].outPriceIQD = 0;
       }
     }
     setSelectedItems(updatedItems);
+  }, [selectedItems, billCurrency]);
+
+  // ✅ NEW: Handle Global Bill Currency Toggle
+  const handleBillCurrencyChange = useCallback((e) => {
+    const newCurr = e.target.value;
+    setBillCurrency(newCurr);
+
+    const updatedItems = selectedItems.map(item => {
+      const defaultPrice = newCurr === "USD" ? (item.defaultOutPriceUSD || 0) : (item.defaultOutPriceIQD || 0);
+      const initialPrice = defaultPrice > 0 ? defaultPrice : "";
+      return {
+        ...item,
+        price: initialPrice,
+        outPriceUSD: newCurr === "USD" ? (initialPrice || 0) : 0,
+        outPriceIQD: newCurr === "IQD" ? (initialPrice || 0) : 0,
+      };
+    });
+    setSelectedItems(updatedItems);
   }, [selectedItems]);
 
-  // ── handleRemoveItem ──────────────────────────────────────────────────────
   const handleRemoveItem = useCallback((index) => {
     const item = selectedItems[index];
     if (item.isLocked) {
@@ -1660,7 +1622,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     setSelectedItems(updatedItems);
   }, [selectedItems]);
 
-  // ── loadBillForEditing ────────────────────────────────────────────────────
   const loadBillForEditing = useCallback(async (bill) => {
     setIsEditMode(true);
     setEditingBillNumber(bill.billNumber);
@@ -1693,6 +1654,15 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     setPaymentMethod(bill.paymentStatus || "Unpaid");
     setIsConsignment(bill.isConsignment || false);
     setNote(bill.note || "");
+
+    // Determine the bill currency. If not stored at root, infer from first item.
+    let inferredCurrency = bill.currency || "USD";
+    if (!bill.currency && bill.items && bill.items.length > 0) {
+      if (bill.items[0].outPriceIQD > 0 && !bill.items[0].outPriceUSD) {
+        inferredCurrency = "IQD";
+      }
+    }
+    setBillCurrency(inferredCurrency);
 
     const returnedMap = await loadReturnedItemsForBill(bill.billNumber, bill.pharmacyId);
     setReturnedItemsMap(returnedMap);
@@ -1750,31 +1720,28 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       }
 
       let displayPrice = item.price || 0;
-      if (originalCurrency === "IQD") {
+      if (inferredCurrency === "IQD") {
         displayPrice = item.outPriceIQD || item.price || 0;
       } else {
         displayPrice = item.outPriceUSD || item.price || 0;
       }
 
-      let displayNetPrice = item.netPrice || 0;
-      if (originalCurrency === "IQD") {
-        displayNetPrice = item.netPriceIQD || item.netPrice || 0;
-      } else {
-        displayNetPrice = item.netPriceUSD || item.netPrice || 0;
-      }
+      // Restore defaults in case user switches back and forth
+      const defUSD = originalCurrency === "USD" ? (item.outPriceUSD || item.price) : 0;
+      const defIQD = originalCurrency === "IQD" ? (item.outPriceIQD || item.price) : 0;
 
       return {
         ...item,
         batchId: bestBatchId || `batch-${item.barcode}-${item.expireDate}`,
         availableQuantity: availableQuantity,
         quantity: item.quantity,
-        netPrice: displayNetPrice,
+        netPrice: item.netPrice || 0,
         price: displayPrice,
         originalCurrency: originalCurrency || "USD",
-        outPriceUSD: item.outPriceUSD || (originalCurrency === "USD" ? displayPrice : 0),
-        outPriceIQD: item.outPriceIQD || (originalCurrency === "IQD" ? displayPrice : 0),
-        netPriceUSD: item.netPriceUSD || (originalCurrency === "USD" ? displayNetPrice : 0),
-        netPriceIQD: item.netPriceIQD || (originalCurrency === "IQD" ? displayNetPrice : 0),
+        defaultOutPriceUSD: defUSD,
+        defaultOutPriceIQD: defIQD,
+        outPriceUSD: item.outPriceUSD || (inferredCurrency === "USD" ? displayPrice : 0),
+        outPriceIQD: item.outPriceIQD || (inferredCurrency === "IQD" ? displayPrice : 0),
         hasReturn: hasReturn,
         isLocked: hasReturn,
         returnQuantity: returnQty,
@@ -1789,20 +1756,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [recentBills, storeItems, loadReturnedItemsForBill]);
 
-  // ── handleUpdateBill ──────────────────────────────────────────────────────
   const handleUpdateBill = useCallback(async () => {
-    if (!pharmacyId) { 
-      setError("Please select a pharmacy."); 
-      return; 
-    }
-    if (selectedItems.length === 0) { 
-      setError("Please add at least one item."); 
-      return; 
-    }
-    if (!editingBillNumber) { 
-      setError("No bill selected for update."); 
-      return; 
-    }
+    if (!pharmacyId) { setError("Please select a pharmacy."); return; }
+    if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
+    if (!editingBillNumber) { setError("No bill selected for update."); return; }
 
     const lockedItems = selectedItems.filter(item => item.isLocked);
     if (lockedItems.length > 0) {
@@ -1841,9 +1798,9 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         quantity: parseInt(item.quantity) || 0,
         netPriceUSD: item.netPriceUSD || 0,
         netPriceIQD: item.netPriceIQD || 0,
-        outPriceUSD: item.outPriceUSD || 0,
-        outPriceIQD: item.outPriceIQD || 0,
-        price: item.price || 0,
+        outPriceUSD: billCurrency === "USD" ? (parseFloat(item.price) || 0) : 0,
+        outPriceIQD: billCurrency === "IQD" ? (parseFloat(item.price) || 0) : 0,
+        price: parseFloat(item.price) || 0,
         expireDate: item.expireDate,
         batchId: item.batchId,
         originalCurrency: item.originalCurrency || "USD",
@@ -1885,6 +1842,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         items: filteredItems,
         pharmacyId,
         pharmacyName,
+        currency: billCurrency, // Update root currency
         date: dateToSave,
         paymentMethod,
         isConsignment,
@@ -1919,9 +1877,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       setError(error.message || "Failed to update bill. Please try again.");
       setIsLoading(false);
     }
-  }, [pharmacyId, selectedItems, validateBillBeforeSubmit, editingBillNumber, user, onBillCreated, pharmacyName, saleDate, paymentMethod, isConsignment, note, selectedBill, loadAllAttachments, recentBills, resetForm]);
+  }, [pharmacyId, selectedItems, validateBillBeforeSubmit, editingBillNumber, user, onBillCreated, pharmacyName, saleDate, paymentMethod, isConsignment, note, selectedBill, loadAllAttachments, recentBills, resetForm, billCurrency]);
 
-  // ── generateSellingBillNumber ─────────────────────────────────────────────
   const generateSellingBillNumber = useCallback(async () => {
     try {
       const billsRef = collection(db, "soldBills");
@@ -1941,7 +1898,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     }
   }, []);
 
-  // ── handleSubmit ──────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     if (!pharmacyId) { setError("Please select a pharmacy."); return; }
     if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
@@ -1968,11 +1924,11 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         quantity: item.quantity,
         netPriceUSD: item.netPriceUSD || 0,
         netPriceIQD: item.netPriceIQD || 0,
-        outPriceUSD: item.outPriceUSD || 0,
-        outPriceIQD: item.outPriceIQD || 0,
+        outPriceUSD: billCurrency === "USD" ? (parseFloat(item.price) || 0) : 0,
+        outPriceIQD: billCurrency === "IQD" ? (parseFloat(item.price) || 0) : 0,
         basePriceUSD: item.basePriceUSD || 0,
         basePriceIQD: item.basePriceIQD || 0,
-        price: item.price,
+        price: parseFloat(item.price) || 0,
         expireDate: item.expireDate,
         batchId: item.batchId,
         originalCurrency: item.originalCurrency || "USD",
@@ -1984,6 +1940,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         items: preparedItems,
         pharmacyId,
         pharmacyName,
+        currency: billCurrency, // Store root currency
         paymentMethod,
         isConsignment,
         note: note.trim(),
@@ -2015,9 +1972,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       setError(error.message || "Failed to create bill. Please try again.");
       setIsLoading(false);
     }
-  }, [pharmacyId, selectedItems, validateBillBeforeSubmit, user, onBillCreated, paymentMethod, isConsignment, note, pharmacyName, generateSellingBillNumber, loadAllAttachments]);
+  }, [pharmacyId, selectedItems, validateBillBeforeSubmit, user, onBillCreated, paymentMethod, isConsignment, note, pharmacyName, generateSellingBillNumber, loadAllAttachments, billCurrency]);
 
-  // ── Attachment functions ──────────────────────────────────────────────────
   const processDocumentImage = useCallback(async (billNumber, base64Image, sourceType) => {
     if (!billNumber) { alert("Please select a bill first"); return; }
     setIsScanning(true);
@@ -2215,7 +2171,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     }
   }, [handleScanDocument, handleFileUpload]);
 
-  // ── getBatchesForItem ─────────────────────────────────────────────────────
   const getBatchesForItem = useCallback((barcode) => {
     return storeItems
       .filter((item) => item.barcode === barcode && item.quantity > 0)
@@ -2236,11 +2191,16 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       .sort((a, b) => new Date(a.expireDate) - new Date(b.expireDate));
   }, [storeItems]);
 
-  // ── handleSelectBatch ─────────────────────────────────────────────────────
   const handleSelectBatch = useCallback((batch) => {
     const existingItemIndex = selectedItems.findIndex((item) => item.batchId === batch.batchId);
-    const displayPrice = batch.originalCurrency === "IQD" ? batch.outPriceIQD : batch.outPriceUSD;
-    const displayNetPrice = batch.originalCurrency === "IQD" ? batch.netPriceIQD : batch.netPriceUSD;
+    
+    // Setup defaults so we can revert when bill currency switches back
+    const defaultOutPriceUSD = batch.outPriceUSD || 0;
+    const defaultOutPriceIQD = batch.outPriceIQD || 0;
+    
+    const initialPrice = billCurrency === "USD" 
+      ? (defaultOutPriceUSD > 0 ? defaultOutPriceUSD : "") 
+      : (defaultOutPriceIQD > 0 ? defaultOutPriceIQD : "");
 
     if (existingItemIndex >= 0) {
       const updatedItems = [...selectedItems];
@@ -2255,14 +2215,16 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       setSelectedItems([...selectedItems, {
         ...batch,
         quantity: 1,
-        price: displayPrice,
-        netPrice: displayNetPrice,
-        outPrice: displayPrice,
+        defaultOutPriceUSD: defaultOutPriceUSD,
+        defaultOutPriceIQD: defaultOutPriceIQD,
+        price: initialPrice,
+        netPrice: batch.originalCurrency === "IQD" ? batch.netPriceIQD : batch.netPriceUSD,
+        outPrice: initialPrice,
         availableQuantity: availableQty,
         batchId: batch.batchId,
         originalCurrency: batch.originalCurrency || "USD",
-        outPriceUSD: batch.outPriceUSD,
-        outPriceIQD: batch.outPriceIQD,
+        outPriceUSD: billCurrency === "USD" ? (initialPrice || 0) : 0,
+        outPriceIQD: billCurrency === "IQD" ? (initialPrice || 0) : 0,
         netPriceUSD: batch.netPriceUSD,
         netPriceIQD: batch.netPriceIQD,
         hasReturn: false,
@@ -2270,9 +2232,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       }]);
     }
     setSearchQuery("");
-  }, [selectedItems, storeItems]);
+  }, [selectedItems, storeItems, billCurrency]);
 
-  // ── groupSearchResults ────────────────────────────────────────────────────
   const groupSearchResults = useCallback((results) => {
     const grouped = {};
     results.forEach((item) => {
@@ -2283,7 +2244,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     return Object.values(grouped);
   }, [getBatchesForItem]);
 
-  // ── sorting functions ─────────────────────────────────────────────────────
   const sortBills = useCallback((bills, key, direction) => {
     return [...bills].sort((a, b) => {
       let aValue, bValue;
@@ -2325,7 +2285,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     return sortConfig.direction === 'asc' ? '↑' : '↓';
   }, [sortConfig.key, sortConfig.direction]);
 
-  // ── showBillTemplate ─────────────────────────────────────────────────────
   const showBillTemplate = useCallback(() => {
     if (!pharmacyId) { setError("Please select a pharmacy first."); return; }
     if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
@@ -2334,12 +2293,13 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       billNumber: "TEMP0000",
       items: selectedItems.map(item => ({
         ...item,
-        outPriceUSD: item.originalCurrency === "USD" ? (item.outPriceUSD || item.price) : 0,
-        outPriceIQD: item.originalCurrency === "IQD" ? (item.outPriceIQD || item.price) : 0,
+        outPriceUSD: billCurrency === "USD" ? (parseFloat(item.price) || 0) : 0,
+        outPriceIQD: billCurrency === "IQD" ? (parseFloat(item.price) || 0) : 0,
       })),
       date: saleDate,
       pharmacyName,
       pharmacyId,
+      currency: billCurrency,
       paymentStatus: paymentMethod,
       isConsignment,
       note,
@@ -2348,16 +2308,14 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     };
     setCurrentBill(tempBill);
     setShowBillPreview(true);
-  }, [pharmacyId, selectedItems, saleDate, pharmacyName, paymentMethod, isConsignment, note, user]);
+  }, [pharmacyId, selectedItems, saleDate, pharmacyName, paymentMethod, isConsignment, note, user, billCurrency]);
 
-  // ── closeBillPreview ─────────────────────────────────────────────────────
   const closeBillPreview = useCallback(() => {
     setShowBillPreview(false);
     setCurrentBill(null);
     if (currentBill && currentBill.billNumber !== "TEMP0000") resetForm();
   }, [currentBill, resetForm]);
 
-  // ── printBill ─────────────────────────────────────────────────────────────
   const printBill = useCallback((bill) => {
     if (!bill) { alert("No bill selected for printing"); return; }
     const printWindow = window.open("", "_blank");
@@ -2384,15 +2342,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       }
     };
 
-    const currentBillTotalUSD = bill.items?.reduce((sum, item) => {
-      if (item.originalCurrency !== "IQD") return sum + ((item.outPriceUSD || item.price || 0) * item.quantity);
-      return sum;
-    }, 0) || 0;
+    const billCurr = bill.currency || "USD";
 
-    const currentBillTotalIQD = bill.items?.reduce((sum, item) => {
-      if (item.originalCurrency === "IQD") return sum + ((item.outPriceIQD || item.price || 0) * item.quantity);
-      return sum;
-    }, 0) || 0;
+    const currentBillTotalUSD = billCurr === "USD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceUSD || item.price || 0) * item.quantity), 0) || 0) : 0;
+    const currentBillTotalIQD = billCurr === "IQD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceIQD || item.price || 0) * item.quantity), 0) || 0) : 0;
 
     const displayBillNumber = bill.billNumber === "TEMP0000" ? "TEMP0000" : formatBillNumber(bill.billNumber);
     const creatorDisplayName = getDisplayName(bill.createdByName || "Unknown User");
@@ -2503,19 +2456,14 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
               </thead>
               <tbody>
                 ${bill.items?.map((item, idx) => {
-                  const price = item.originalCurrency === "IQD"
-                    ? (item.outPriceIQD || item.price || 0)
-                    : (item.outPriceUSD || item.price || 0);
-                  const priceFormatted = item.originalCurrency === "IQD"
-                    ? Math.round(price).toLocaleString() + " IQD" : "$" + price.toFixed(2);
-                  const totalFormatted = item.originalCurrency === "IQD"
-                    ? Math.round(price * item.quantity).toLocaleString() + " IQD" : "$" + (price * item.quantity).toFixed(2);
+                  const price = billCurr === "IQD" ? (item.outPriceIQD || item.price || 0) : (item.outPriceUSD || item.price || 0);
+                  const priceFormatted = billCurr === "IQD" ? Math.round(price).toLocaleString() + " IQD" : "$" + price.toFixed(2);
+                  const totalFormatted = billCurr === "IQD" ? Math.round(price * item.quantity).toLocaleString() + " IQD" : "$" + (price * item.quantity).toFixed(2);
                   return `
                     <tr>
                       <td style="text-align:center;font-weight:600">${idx + 1}</td>
                       <td>
                         <div style="font-weight:600;font-family:'NRT-Bd',sans-serif;font-size:13px;">${item.name}</div>
-                       
                       </td>
                       <td style="text-align:center;font-family:monospace;font-size:13px;">${item.barcode}</td>
                       <td style="text-align:center;font-weight:600">${item.quantity}</td>
@@ -2570,7 +2518,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     }, 500);
   }, [paymentMethod, recentBills, returnBills]);
 
-  // ── fetchItemSalesHistory ─────────────────────────────────────────────────
   const fetchItemSalesHistory = useCallback(async (barcode, pharId) => {
     if (!pharId) { alert("Please select a pharmacy first to view sales history."); return; }
     try {
@@ -2589,16 +2536,13 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     }
   }, []);
 
-  // ── clearFilters ──────────────────────────────────────────────────────────
   const clearFilters = useCallback(() => {
     setFilters({ billNumber: "", itemName: "", paymentStatus: "all", pharmacyName: "", consignment: "all", fromDate: "", toDate: "", globalSearch: "" });
     setItemFilters([]);
   }, []);
 
-  // ── paginate ──────────────────────────────────────────────────────────────
   const paginate = useCallback((pageNumber) => setCurrentPage(pageNumber), []);
 
-  // ── handlePharmacySelect ──────────────────────────────────────────────────
   const handlePharmacySelect = useCallback((pharmacy) => {
     setPharmacyId(pharmacy.id);
     setPharmacyName(pharmacy.name);
@@ -2607,7 +2551,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     setTimeout(() => searchQueryRef.current?.focus(), 100);
   }, []);
 
-  // ── onFocusBorder / onBlurBorder ─────────────────────────────────────────
   const onFocusBorder = useCallback((e) => {
     e.target.style.borderColor = '#3b82f6';
     e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
@@ -2620,9 +2563,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     if (e.target.tagName === 'TEXTAREA' && !e.target.value) { e.target.style.height = '38px'; e.target.style.resize = 'none'; }
   }, []);
 
-  // ── useEffect hooks ──────────────────────────────────────────────────────
-
-  // ✅ Load all pharmacies for dropdown
   useEffect(() => {
     const loadPharmacies = async () => {
       try {
@@ -2635,7 +2575,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     loadPharmacies();
   }, []);
 
-  // Search items (debounced) - FIXED for barcode search
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (searchQuery.trim().length > 0) {
@@ -2643,15 +2582,12 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
           let results = [];
           const searchTerm = searchQuery.trim();
           
-          // Force refresh store items first
           const freshStoreItems = await getStoreItems(true);
           setStoreItems(freshStoreItems);
           
-          // Search by barcode or name
           const searchResults = await searchInitializedItems(searchTerm, "both");
           results = searchResults;
           
-          // Also search in fresh store items directly
           const storeSearchResults = freshStoreItems.filter((item) => {
             if (item.quantity <= 0) return false;
             const nameMatch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -2659,10 +2595,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
             return nameMatch || barcodeMatch;
           });
           
-          // Merge results
           const allResults = [...results, ...storeSearchResults];
           
-          // Remove duplicates
           const uniqueResults = allResults.filter((item, index, self) => 
             index === self.findIndex((i) => i.barcode === item.barcode && i.branch === item.branch)
           );
@@ -2670,7 +2604,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
           setSearchResults(uniqueResults);
         } catch (err) {
           console.error("Search error:", err);
-          // Fallback to store items search
           const freshStoreItems = await getStoreItems(true);
           setStoreItems(freshStoreItems);
           const searchTerm = searchQuery.trim().toLowerCase();
@@ -2688,7 +2621,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Pharmacy search (debounced)
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (pharmacySearch.length > 0) {
@@ -2707,14 +2639,12 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     return () => clearTimeout(timer);
   }, [pharmacySearch]);
 
-  // Load pharmacy filter options
   useEffect(() => {
     searchPharmacies("").then((pharmacies) => {
       setPharmacyFilterOptions(pharmacies.map((p) => ({ value: p.name, label: `${p.name} (${p.code})` })));
     }).catch(console.error);
   }, []);
 
-  // Initial data fetch
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
@@ -2744,7 +2674,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     fetchData();
   }, [loadAllAttachments]);
 
-  // ── Computed values ──────────────────────────────────────────────────────
   const filteredBills = useMemo(() => {
     const filtered = recentBills.filter((bill) => {
       const displayBillNumber = formatBillNumber(bill.billNumber);
@@ -2789,7 +2718,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const currentBills = filteredBills.slice(indexOfFirstBill, indexOfLastBill);
   const totalPages = Math.ceil(filteredBills.length / billsPerPage);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
 
@@ -2815,151 +2743,130 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
         {isEditMode && <div style={styles.editingBillDisplay}>📝 Editing: {editingBillDisplay}</div>}
 
-  {/* Pharmacy search with dropdown list - Case Insensitive */}
-<div style={styles.inputGroup}>
-  <label style={styles.label}>Search Pharmacy (by name or code)</label>
-  <div style={{ position: "relative" }}>
-    <input
-      ref={pharmacySearchRef}
-      type="text"
-      style={{
-        ...styles.input,
-        backgroundColor: '#f0f7ff',
-        border: '2px solid #e2e8f0',
-        borderRadius: '10px',
-        padding: '14px 18px',
-        fontSize: '16px',
-        fontWeight: '500',
-        color: '#1a202c',
-        transition: 'all 0.3s ease',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
-      }}
-      placeholder="🔍 Type pharmacy name or code..."
-      value={pharmacySearch}
-      onChange={(e) => {
-        const value = e.target.value;
-        setPharmacySearch(value);
-        if (!value || value.trim() === "") {
-          setPharmacyId("");
-          setPharmacyName("");
-          // Show all pharmacies when search is cleared
-          setPharmacySuggestions(allPharmacies);
-          setShowPharmacyList(true);
-        } else {
-          // Filter pharmacies based on search (case-insensitive)
-          const searchLower = value.toLowerCase().trim();
-          const filtered = allPharmacies.filter(p => 
-            p.name?.toLowerCase().includes(searchLower) ||
-            p.code?.toString().toLowerCase().includes(searchLower)
-          );
-          setPharmacySuggestions(filtered);
-          setShowPharmacyList(true);
-        }
-      }}
-      onFocus={(e) => {
-        // Show all pharmacies when focused
-        if (allPharmacies.length > 0) {
-          setPharmacySuggestions(allPharmacies);
-          setShowPharmacyList(true);
-        }
-        // Style on focus
-        e.target.style.borderColor = '#4299e1';
-        e.target.style.boxShadow = '0 0 0 4px rgba(66, 153, 225, 0.15)';
-        e.target.style.backgroundColor = '#ffffff';
-      }}
-      onBlur={(e) => {
-        // Delay hiding to allow click on list
-        setTimeout(() => setShowPharmacyList(false), 200);
-        // Reset style
-        e.target.style.borderColor = '#e2e8f0';
-        e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.04)';
-        if (!e.target.value) {
-          e.target.style.backgroundColor = '#f0f7ff';
-        }
-      }}
-    />
-    
-    {showPharmacyList && pharmacySuggestions.length > 0 && (
-      <div style={{
-        ...styles.suggestionsDropdown,
-        maxHeight: "300px",
-        overflowY: "auto",
-        position: "absolute",
-        width: "100%",
-        zIndex: 1000,
-        backgroundColor: "white",
-        border: "2px solid #4299e1",
-        borderRadius: "10px",
-        marginTop: "4px",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-      }}>
-        {pharmacySuggestions.map((pharmacy) => (
-          <div 
-            key={pharmacy.id} 
-            style={{
-              padding: "12px 16px",
-              cursor: "pointer",
-              borderBottom: "1px solid #e8ecef",
-              fontSize: "15px",
-              transition: "all 0.2s ease",
-              fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-            }}
-            onClick={() => {
-              setPharmacyId(pharmacy.id);
-              setPharmacyName(pharmacy.name);
-              setPharmacySearch(`${pharmacy.name} (${pharmacy.code})`);
-              setShowPharmacyList(false);
-              setTimeout(() => searchQueryRef.current?.focus(), 100);
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "#ebf8ff";
-              e.currentTarget.style.borderLeft = "4px solid #4299e1";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "white";
-              e.currentTarget.style.borderLeft = "4px solid transparent";
-            }}
-          >
-            <div style={{ 
-              fontWeight: "600", 
-              color: "#2c3e50", 
-              fontSize: "15px",
-              fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-            }}>
-              {pharmacy.name}
-            </div>
-            <div style={{ 
-              fontSize: "13px", 
-              color: "#718096",
-              display: "flex",
-              gap: "12px",
-              marginTop: "2px",
-            }}>
-              <span>📋 Code: {pharmacy.code}</span>
-              {pharmacy.address && <span>📍 {pharmacy.address}</span>}
-            </div>
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Search Pharmacy (by name or code)</label>
+          <div style={{ position: "relative" }}>
+            <input
+              ref={pharmacySearchRef}
+              type="text"
+              style={{
+                ...styles.input,
+                backgroundColor: '#f0f7ff',
+                border: '2px solid #e2e8f0',
+                borderRadius: '10px',
+                padding: '14px 18px',
+                fontSize: '16px',
+                fontWeight: '500',
+                color: '#1a202c',
+                transition: 'all 0.3s ease',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+              }}
+              placeholder="🔍 Type pharmacy name or code..."
+              value={pharmacySearch}
+              onChange={(e) => {
+                const value = e.target.value;
+                setPharmacySearch(value);
+                if (!value || value.trim() === "") {
+                  setPharmacyId("");
+                  setPharmacyName("");
+                  setPharmacySuggestions(allPharmacies);
+                  setShowPharmacyList(true);
+                } else {
+                  const searchLower = value.toLowerCase().trim();
+                  const filtered = allPharmacies.filter(p => 
+                    p.name?.toLowerCase().includes(searchLower) ||
+                    p.code?.toString().toLowerCase().includes(searchLower)
+                  );
+                  setPharmacySuggestions(filtered);
+                  setShowPharmacyList(true);
+                }
+              }}
+              onFocus={(e) => {
+                if (allPharmacies.length > 0) {
+                  setPharmacySuggestions(allPharmacies);
+                  setShowPharmacyList(true);
+                }
+                e.target.style.borderColor = '#4299e1';
+                e.target.style.boxShadow = '0 0 0 4px rgba(66, 153, 225, 0.15)';
+                e.target.style.backgroundColor = '#ffffff';
+              }}
+              onBlur={(e) => {
+                setTimeout(() => setShowPharmacyList(false), 200);
+                e.target.style.borderColor = '#e2e8f0';
+                e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.04)';
+                if (!e.target.value) {
+                  e.target.style.backgroundColor = '#f0f7ff';
+                }
+              }}
+            />
+            
+            {showPharmacyList && pharmacySuggestions.length > 0 && (
+              <div style={{
+                ...styles.suggestionsDropdown,
+                maxHeight: "300px",
+                overflowY: "auto",
+                position: "absolute",
+                width: "100%",
+                zIndex: 1000,
+                backgroundColor: "white",
+                border: "2px solid #4299e1",
+                borderRadius: "10px",
+                marginTop: "4px",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+              }}>
+                {pharmacySuggestions.map((pharmacy) => (
+                  <div 
+                    key={pharmacy.id} 
+                    style={{
+                      padding: "12px 16px",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #e8ecef",
+                      fontSize: "15px",
+                      transition: "all 0.2s ease",
+                      fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+                    }}
+                    onClick={() => {
+                      setPharmacyId(pharmacy.id);
+                      setPharmacyName(pharmacy.name);
+                      setPharmacySearch(`${pharmacy.name} (${pharmacy.code})`);
+                      setShowPharmacyList(false);
+                      setTimeout(() => searchQueryRef.current?.focus(), 100);
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = "#ebf8ff";
+                      e.currentTarget.style.borderLeft = "4px solid #4299e1";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = "white";
+                      e.currentTarget.style.borderLeft = "4px solid transparent";
+                    }}
+                  >
+                    <div style={{ fontWeight: "600", color: "#2c3e50", fontSize: "15px", fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+                      {pharmacy.name}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#718096", display: "flex", gap: "12px", marginTop: "2px" }}>
+                      <span>📋 Code: {pharmacy.code}</span>
+                      {pharmacy.address && <span>📍 {pharmacy.address}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        ))}
-        {pharmacySuggestions.length === 0 && pharmacySearch.trim() !== "" && (
-          <div style={{
-            padding: "16px",
-            textAlign: "center",
-            color: "#718096",
-            fontSize: "14px",
-          }}>
-            No pharmacies found matching "{pharmacySearch}"
-          </div>
-        )}
-      </div>
-    )}
-  </div>
-</div>
+        </div>
 
-        {/* Date / Payment / Consignment row */}
+        {/* ✅ Date, Bill Currency, Payment, Consignment row */}
         <div style={styles.rowContainer}>
           <div style={styles.dateField}>
             <label style={styles.fieldLabel}>Sale Date</label>
             <input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} style={styles.dateInputField} onFocus={onFocusBorder} onBlur={onBlurBorder} />
+          </div>
+          <div style={styles.dateField}>
+            <label style={styles.fieldLabel}>Bill Currency</label>
+            <select value={billCurrency} onChange={handleBillCurrencyChange} style={styles.selectField} onFocus={onFocusBorder} onBlur={onBlurBorder}>
+              <option value="USD">USD ($)</option>
+              <option value="IQD">IQD</option>
+            </select>
           </div>
           <div style={styles.dateField}>
             <label style={styles.fieldLabel}>Payment Method</label>
@@ -2974,7 +2881,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
           </div>
         </div>
 
-        {/* Bill Note - Full width on its own row */}
         <div style={styles.noteRowContainer}>
           <div style={styles.noteFieldFull}>
             <label style={styles.fieldLabel}>Bill Note</label>
@@ -2989,7 +2895,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
           </div>
         </div>
 
-        {/* Item search */}
         <div style={styles.searchSection}>
           <label style={styles.label}>Search Items</label>
           <input
@@ -3044,7 +2949,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                       </button>
                     )}
                   </div>
-                  {/* Table with horizontal scroll on mobile */}
                   <div style={styles.tableScrollWrapper}>
                     <table style={styles.table}>
                       <thead>
@@ -3107,7 +3011,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
           )}
         </div>
 
-        {/* Selected items list */}
         {selectedItems.length > 0 && (
           <div style={styles.selectedItems}>
             <h3 style={{ marginBottom: "12px", fontSize: "18px", fontWeight: "600", color: "#2c3e50" }}>
@@ -3126,13 +3029,13 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
               )}
             </h3>
             {selectedItems.map((item, index) => {
-              const priceDisplay = item.originalCurrency === "IQD"
-                ? Math.round(item.price).toLocaleString() + " IQD" : "$" + item.price.toFixed(2);
-              const netDisplay = item.originalCurrency === "IQD"
-                ? Math.round(item.netPrice).toLocaleString() + " IQD" : "$" + item.netPrice.toFixed(2);
-              const totalDisplay = item.originalCurrency === "IQD"
-                ? Math.round(item.price * item.quantity).toLocaleString() + " IQD"
-                : "$" + (item.price * item.quantity).toFixed(2);
+              const activePrice = parseFloat(item.price) || 0;
+              const netDisplay = billCurrency === "IQD" 
+                ? Math.round(item.netPriceIQD || item.netPrice).toLocaleString() + " IQD" 
+                : "$" + (item.netPriceUSD || item.netPrice).toFixed(2);
+              const totalDisplay = billCurrency === "IQD"
+                ? Math.round(activePrice * item.quantity).toLocaleString() + " IQD"
+                : "$" + (activePrice * item.quantity).toFixed(2);
 
               const isLocked = item.isLocked || false;
               const returnQty = item.returnQuantity || 0;
@@ -3145,38 +3048,24 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                   position: "relative",
                 }}>
                   {isLocked && (
-                    <div style={{
-                      position: "absolute",
-                      bottom: "0", left: "0", right: "0",
-                      height: "3px",
-                      backgroundColor: "#e74c3c",
-                      borderRadius: "0 0 8px 8px",
-                    }} />
+                    <div style={{ position: "absolute", bottom: "0", left: "0", right: "0", height: "3px", backgroundColor: "#e74c3c", borderRadius: "0 0 8px 8px" }} />
                   )}
 
                   <div style={{ ...styles.itemDetails, position: "relative", zIndex: "1" }}>
                     <div style={styles.itemName}>
                       {item.name}
                       {isLocked && (
-                        <span style={styles.warningBadge}>
-                          🔒 Returned ({returnQty})
-                        </span>
+                        <span style={styles.warningBadge}>🔒 Returned ({returnQty})</span>
                       )}
                     </div>
                     <div style={styles.itemMeta}>
                       {item.barcode} • Exp: {formatExpireDate(item.expireDate)}
                       {isEditMode && ` • Avail: ${item.availableQuantity}`}
-                      <div>Net: {netDisplay} • Currency: {item.originalCurrency || "USD"}</div>
+                      <div>Net: {netDisplay}</div>
                       {isLocked && (
                         <div style={{
-                          color: "#c0392b",
-                          fontWeight: "600",
-                          marginTop: "4px",
-                          padding: "6px 10px",
-                          backgroundColor: "#fff0f0",
-                          borderRadius: "6px",
-                          border: "1px solid #e74c3c",
-                          fontSize: "13px",
+                          color: "#c0392b", fontWeight: "600", marginTop: "4px", padding: "6px 10px",
+                          backgroundColor: "#fff0f0", borderRadius: "6px", border: "1px solid #e74c3c", fontSize: "13px",
                         }}>
                           🔒 Return Invoice: {returnBillNum || "Unknown"} ({returnQty} unit{returnQty !== 1 ? "s" : ""})
                         </div>
@@ -3184,7 +3073,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                     </div>
                   </div>
 
-                  {/* Item controls */}
                   <div style={styles.selectedItemControls}>
                     <div style={styles.itemControlGroup}>
                       <span style={styles.itemControlLabel}>Qty:</span>
@@ -3195,12 +3083,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                         style={{
                           ...styles.quantityInput,
                           width: "60px",
-                          ...(isLocked ? {
-                            backgroundColor: "#f0f0f0",
-                            cursor: "not-allowed",
-                            borderColor: "#e74c3c",
-                            opacity: "0.65",
-                          } : {})
+                          ...(isLocked ? { backgroundColor: "#f0f0f0", cursor: "not-allowed", borderColor: "#e74c3c", opacity: "0.65" } : {})
                         }}
                         value={item.quantity}
                         onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
@@ -3208,12 +3091,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                           e.target.select();
                           if (isLocked) {
                             e.target.blur();
-                            alert(
-                              `🔒 "${item.name}" is locked!\n\n` +
-                              `Return Invoice: ${returnBillNum || "Unknown"}\n` +
-                              `Returned: ${returnQty} unit${returnQty !== 1 ? "s" : ""}\n\n` +
-                              `Use the Return Invoice page to modify this.`
-                            );
+                            alert(`🔒 "${item.name}" is locked!\n\nReturn Invoice: ${returnBillNum || "Unknown"}\nReturned: ${returnQty} unit${returnQty !== 1 ? "s" : ""}\n\nUse the Return Invoice page to modify this.`);
                           }
                         }}
                         readOnly={isLocked}
@@ -3226,52 +3104,34 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                       <span style={styles.itemControlLabel}>Price:</span>
                       <input
                         type="number"
-                        min="0.01"
-                        step="0.01"
+                        min="0"
+                        step={billCurrency === "IQD" ? "100" : "0.01"}
                         style={{
                           ...styles.priceInput,
                           width: "80px",
-                          ...(isLocked ? {
-                            backgroundColor: "#f0f0f0",
-                            cursor: "not-allowed",
-                            borderColor: "#e74c3c",
-                            opacity: "0.65",
-                          } : {})
+                          ...(isLocked ? { backgroundColor: "#f0f0f0", cursor: "not-allowed", borderColor: "#e74c3c", opacity: "0.65" } : {})
                         }}
-                        value={item.price}
+                        value={item.price === "" ? "" : item.price}
+                        placeholder="0"
                         onChange={(e) => handleItemChange(index, "price", e.target.value)}
                         onFocus={(e) => {
                           e.target.select();
-                          if (isLocked) {
-                            e.target.blur();
-                            alert(
-                              `🔒 "${item.name}" is locked!\n\n` +
-                              `Return Invoice: ${returnBillNum || "Unknown"}\n` +
-                              `Returned: ${returnQty} unit${returnQty !== 1 ? "s" : ""}\n\n` +
-                              `Use the Return Invoice page to modify this.`
-                            );
-                          }
+                          if (isLocked) { e.target.blur(); alert(`🔒 Locked.`); }
                         }}
                         onBlur={(e) => {
-                          if (!isLocked && parseFloat(e.target.value) < item.netPrice) {
-                            alert(`Warning: Selling price is below net price.`);
+                          if (!isLocked) {
+                            const val = parseFloat(e.target.value) || 0;
+                            const net = billCurrency === "IQD" ? (item.netPriceIQD || item.netPrice) : (item.netPriceUSD || item.netPrice);
+                            if (val < net) alert(`Warning: Selling price is below net price.`);
                           }
                         }}
                         readOnly={isLocked}
                         inputMode="decimal"
                       />
-                      <span style={{ fontSize: "13px", color: "#7f8c8d" }}>
-                        {item.originalCurrency === "IQD" ? "IQD" : "USD"}
-                      </span>
+                      <span style={{ fontSize: "13px", color: "#7f8c8d" }}>{billCurrency === "IQD" ? "IQD" : "USD"}</span>
                     </div>
 
-                    <div style={{
-                      fontWeight: "600",
-                      minWidth: "80px",
-                      textAlign: "right",
-                      color: "#2c3e50",
-                      fontSize: "15px",
-                    }}>
+                    <div style={{ fontWeight: "600", minWidth: "80px", textAlign: "right", color: "#2c3e50", fontSize: "15px" }}>
                       {totalDisplay}
                     </div>
 
@@ -3280,11 +3140,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                         ...styles.removeButton,
                         padding: "6px 12px",
                         fontSize: "13px",
-                        ...(isLocked ? {
-                          opacity: 0.45,
-                          cursor: "not-allowed",
-                          backgroundColor: "#95a5a6",
-                        } : {})
+                        ...(isLocked ? { opacity: 0.45, cursor: "not-allowed", backgroundColor: "#95a5a6" } : {})
                       }}
                       onClick={() => handleRemoveItem(index)}
                       title={isLocked ? `Locked — returned on ${returnBillNum}` : "Remove item"}
@@ -3297,17 +3153,13 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
             })}
             <div style={styles.total}>
               Total: {(() => {
-                const totalUSD = selectedItems.reduce((sum, item) =>
-                  item.originalCurrency === "USD" ? sum + ((item.outPriceUSD || item.price) * item.quantity) : sum, 0);
-                const totalIQD = selectedItems.reduce((sum, item) =>
-                  item.originalCurrency === "IQD" ? sum + ((item.outPriceIQD || item.price) * item.quantity) : sum, 0);
-                return formatTotalLine(totalUSD, totalIQD);
+                const totalAmount = selectedItems.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * item.quantity), 0);
+                return billCurrency === "IQD" ? Math.round(totalAmount).toLocaleString() + " IQD" : "$" + totalAmount.toFixed(2);
               })()}
             </div>
           </div>
         )}
 
-        {/* Action buttons - Create Sale Bill & Show Bill Preview in one row, Cancel Bill below */}
         <div>
           {isEditMode ? (
             <div style={styles.buttonContainer}>
@@ -3366,7 +3218,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
           <div style={styles.searchFilters}>
             <div style={styles.filterSection}>
               <h4 style={styles.filterSectionTitle}>Search Filters</h4>
-              {/* Global Search - Full width */}
               <div style={styles.filterRow}>
                 <div style={styles.globalSearchGroup}>
                   <label style={styles.filterLabel}>Global Search</label>
@@ -3379,7 +3230,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                   />
                 </div>
               </div>
-              {/* Two columns for PC */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={styles.filterGroup}>
                   <label style={styles.filterLabel}>Bill Number</label>
@@ -3403,7 +3253,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                   />
                 </div>
               </div>
-              {/* Specific Items - Full width */}
               <div style={styles.filterRow}>
                 <div style={styles.specificItemsGroup}>
                   <label style={styles.filterLabel}>Specific Items</label>
@@ -3418,7 +3267,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                   />
                 </div>
               </div>
-              {/* Four columns for PC */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px' }}>
                 <div style={styles.filterGroup}>
                   <label style={styles.filterLabel}>Payment Status</label>
@@ -3481,8 +3329,9 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                 </thead>
                 <tbody>
                   {currentBills.map((bill, index) => {
-                    const totalAmountUSD = bill.items?.reduce((sum, item) => sum + ((item.outPriceUSD || 0) * item.quantity), 0) || 0;
-                    const totalAmountIQD = bill.items?.reduce((sum, item) => sum + ((item.outPriceIQD || 0) * item.quantity), 0) || 0;
+                    const billCurr = bill.currency || "USD";
+                    const totalAmountUSD = billCurr === "USD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceUSD || item.price || 0) * item.quantity), 0) || 0) : 0;
+                    const totalAmountIQD = billCurr === "IQD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceIQD || item.price || 0) * item.quantity), 0) || 0) : 0;
 
                     return (
                       <React.Fragment key={bill.id || `${bill.billNumber}-${index}`}>
@@ -3635,11 +3484,12 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                     </thead>
                                     <tbody>
                                       {bill.items?.map((item, idx) => {
-                                        const price = item.originalCurrency === "IQD" ? (item.outPriceIQD || 0) : (item.outPriceUSD || 0);
-                                        const priceDisplay = item.originalCurrency === "IQD"
+                                        const cCurrency = bill.currency || "USD";
+                                        const price = cCurrency === "IQD" ? (item.outPriceIQD || item.price || 0) : (item.outPriceUSD || item.price || 0);
+                                        const priceDisplay = cCurrency === "IQD"
                                           ? Math.round(price).toLocaleString() + " IQD"
                                           : "$" + price.toFixed(2);
-                                        const totalDisplayItem = item.originalCurrency === "IQD"
+                                        const totalDisplayItem = cCurrency === "IQD"
                                           ? Math.round(price * item.quantity).toLocaleString() + " IQD"
                                           : "$" + (price * item.quantity).toFixed(2);
 
@@ -3660,7 +3510,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                               </div>
                                               <div style={{ fontSize: "15px", color: "#7f8c8d" }}>
                                                 Exp: {formatExpireDate(item.expireDate)}
-                                                {item.originalCurrency && ` • Currency: ${item.originalCurrency}`}
                                               </div>
                                             </td>
                                             <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontFamily: "'NRT-Reg', monospace" }}>
@@ -3809,13 +3658,14 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                     </thead>
                     <tbody>
                       ${currentBill.items?.map((item, idx) => {
-                        const price = item.originalCurrency === "IQD"
+                        const cb = currentBill.currency || "USD";
+                        const price = cb === "IQD"
                           ? (item.outPriceIQD || item.price || 0)
                           : (item.outPriceUSD || item.price || 0);
-                        const priceFormatted = item.originalCurrency === "IQD"
+                        const priceFormatted = cb === "IQD"
                           ? Math.round(price).toLocaleString() + " IQD"
                           : "$" + price.toFixed(2);
-                        const totalFormatted = item.originalCurrency === "IQD"
+                        const totalFormatted = cb === "IQD"
                           ? Math.round(price * item.quantity).toLocaleString() + " IQD"
                           : "$" + (price * item.quantity).toFixed(2);
                         return `
@@ -3837,11 +3687,11 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                         <td style="padding: 10px; text-align: right; color: white; font-family: 'NRT-Bd', sans-serif; font-size: 16px;">
                           ${formatTotalLine(
                             currentBill.items?.reduce((sum, item) => {
-                              if (item.originalCurrency !== "IQD") return sum + ((item.outPriceUSD || item.price || 0) * item.quantity);
+                              if (currentBill.currency === "USD") return sum + ((item.outPriceUSD || item.price || 0) * item.quantity);
                               return sum;
                             }, 0) || 0,
                             currentBill.items?.reduce((sum, item) => {
-                              if (item.originalCurrency === "IQD") return sum + ((item.outPriceIQD || item.price || 0) * item.quantity);
+                              if (currentBill.currency === "IQD") return sum + ((item.outPriceIQD || item.price || 0) * item.quantity);
                               return sum;
                             }, 0) || 0
                           )}
