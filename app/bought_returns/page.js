@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import React from "react";
 import { 
   getReturnsForCompany, 
@@ -16,6 +16,21 @@ import {
 import { useRouter } from "next/navigation";
 import Select from "react-select";
 import * as XLSX from 'xlsx';
+import { Filter, Search } from "lucide-react";
+
+// --- Advanced Filter Operators ---
+const STRING_OPERATORS = [
+  { value: "contains", label: "Contains" },
+  { value: "equals", label: "Equals" },
+  { value: "startsWith", label: "Starts with" },
+  { value: "endsWith", label: "Ends with" }
+];
+
+const NUMBER_OPERATORS = [
+  { value: "equals", label: "Equals" },
+  { value: "greaterThan", label: "> Greater than" },
+  { value: "lessThan", label: "< Less than" }
+];
 
 export default function BoughtReturnHistory() {
   const [returns, setReturns] = useState([]);
@@ -23,21 +38,21 @@ export default function BoughtReturnHistory() {
   const [companies, setCompanies] = useState([]);
   const [boughtBills, setBoughtBills] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [storeItems, setStoreItems] = useState([]);
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedBill, setSelectedBill] = useState(null);
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [editingReturn, setEditingReturn] = useState(null);
   const [editItems, setEditItems] = useState([]);
   const [editNote, setEditNote] = useState("");
+  const [maxEditQty, setMaxEditQty] = useState(0);
+  
   const [filters, setFilters] = useState({
-    billNumber: "",
-    itemName: "",
-    barcode: "",
     paymentStatus: "all",
-    returnBillNumber: "",
     startDate: "",
     endDate: ""
   });
+  
   const [returnItems, setReturnItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,7 +63,27 @@ export default function BoughtReturnHistory() {
   const [companySelectValue, setCompanySelectValue] = useState(null);
   const [returnNote, setReturnNote] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+  // Column Filters State
+  const [columnFilters, setColumnFilters] = useState({});
+  const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+
   const router = useRouter();
+
+  // Handle outside click for filter dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.filter-dropdown-container')) {
+        setActiveFilterDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, []);
 
   // Currency formatting function
   const formatCurrency = (amount, currency = "USD") => {
@@ -64,13 +99,8 @@ export default function BoughtReturnHistory() {
     }).format(amount || 0);
   };
 
-  const getCurrencySymbol = (currency) => {
-    return currency === "IQD" ? "IQD" : "$";
-  };
-
-  const getCurrencyColor = (currency) => {
-    return currency === "IQD" ? "#f59e0b" : "#3b82f6";
-  };
+  const getCurrencySymbol = (currency) => currency === "IQD" ? "IQD" : "$";
+  const getCurrencyColor = (currency) => currency === "IQD" ? "#f59e0b" : "#3b82f6";
 
   const styles = {
     container: {
@@ -359,10 +389,6 @@ export default function BoughtReturnHistory() {
       color: "#6366f1",
       fontWeight: "600",
     },
-    sortIcon: {
-      marginLeft: "0.25rem",
-      fontSize: "0.7rem",
-    },
     alertError: {
       padding: "0.75rem 1rem",
       background: "#fef2f2",
@@ -399,9 +425,6 @@ export default function BoughtReturnHistory() {
       borderRadius: "50%",
       animation: "spin 0.8s linear infinite",
     },
-    rowHover: {
-      transition: "all 0.15s ease",
-    },
     sectionTitle: {
       fontSize: "1.1rem",
       fontWeight: "600",
@@ -414,9 +437,6 @@ export default function BoughtReturnHistory() {
     billSelectRow: {
       cursor: "pointer",
       transition: "all 0.15s ease",
-    },
-    selectedRow: {
-      background: "#eef2ff",
     },
     detailsPanel: {
       padding: "1.5rem",
@@ -448,10 +468,7 @@ export default function BoughtReturnHistory() {
       alignItems: "center",
       flexWrap: "wrap",
       gap: "0.5rem",
-    },
-    gap: {
-      gap: "0.5rem",
-    },
+    }
   };
 
   const formatDate = (date) => {
@@ -560,10 +577,11 @@ export default function BoughtReturnHistory() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [companiesData, boughtBillsData, paymentsData] = await Promise.all([
+        const [companiesData, boughtBillsData, paymentsData, storeItemsData] = await Promise.all([
           getCompanies(),
           getBoughtBills(),
-          getPayments()
+          getPayments(),
+          getStoreItems(true)
         ]);
         
         const validCompanies = companiesData.filter(company => company && company.id);
@@ -573,6 +591,7 @@ export default function BoughtReturnHistory() {
         setBoughtBills(validBoughtBills);
         
         setPayments(paymentsData);
+        setStoreItems(storeItemsData);
 
         const items = new Set();
         validBoughtBills.forEach((bill) => {
@@ -675,92 +694,83 @@ export default function BoughtReturnHistory() {
     setFilters({ ...filters, [field]: value });
   };
 
-const handleBillSelect = async (bill) => {
-  if (selectedBill?.id === bill.id) {
-    setSelectedBill(null);
-    setReturnItems([]);
+  const handleBillSelect = (bill) => {
+    if (selectedBill?.id === bill.id) {
+      setSelectedBill(null);
+      setReturnItems([]);
+      setReturnNote("");
+      return;
+    }
+
+    if (!bill || !bill.items || !Array.isArray(bill.items)) {
+      setError("Invalid bill selected");
+      return;
+    }
+
+    setSelectedBill(bill);
     setReturnNote("");
-    return;
-  }
 
-  if (!bill || !bill.items || !Array.isArray(bill.items)) {
-    setError("Invalid bill selected");
-    return;
-  }
+    try {
+      const existingReturns = allReturns.filter(item =>
+        item && String(item.billNumber) === String(bill.billNumber)
+      );
 
-  setSelectedBill(bill);
-  setReturnNote("");
-  setIsLoading(true);
+      const validReturnItems = bill.items
+        .filter(item => item && item.barcode)
+        .map((item) => {
+          const originalQuantity = item.quantity || 0;
 
-  try {
-    const storeItems = await getStoreItems(true); // live, current stock
+          const actualReturned = existingReturns
+            .filter(r => r && String(r.barcode) === String(item.barcode))
+            .reduce((sum, r) => sum + (r.returnQuantity || 0), 0);
 
-    // Actual returns already made to the supplier for this bill
-    const existingReturns = allReturns.filter(item =>
-      item && String(item.billNumber) === String(bill.billNumber)
-    );
+          const matchingStoreItems = storeItems.filter(si =>
+            String(si.barcode) === String(item.barcode) &&
+            String(si.boughtBillNumber) === String(bill.billNumber)
+          );
+          const availableQuantity = matchingStoreItems.reduce(
+            (sum, si) => sum + (Number(si.quantity) || 0), 0
+          );
 
-    const validReturnItems = bill.items
-      .filter(item => item && item.barcode)
-      .map((item) => {
-        const originalQuantity = item.quantity || 0;
+          const soldQuantity = Math.max(0, originalQuantity - availableQuantity - actualReturned);
 
-        // Real quantity returned to supplier (not sold!) for this item
-        const actualReturned = existingReturns
-          .filter(r => r && String(r.barcode) === String(item.barcode))
-          .reduce((sum, r) => sum + (r.returnQuantity || 0), 0);
+          let basePrice = 0;
+          if (bill.currency === "IQD") {
+            basePrice = item.basePriceIQD || item.netPriceIQD || item.netPrice || item.outPriceIQD || 0;
+          } else {
+            basePrice = item.basePriceUSD || item.netPriceUSD || item.netPrice || item.outPriceUSD || 0;
+          }
 
-        // What's still physically in store from THIS bought bill's batch
-        const matchingStoreItems = storeItems.filter(si =>
-          String(si.barcode) === String(item.barcode) &&
-          String(si.boughtBillNumber) === String(bill.billNumber)
-        );
-        const availableQuantity = matchingStoreItems.reduce(
-          (sum, si) => sum + (Number(si.quantity) || 0), 0
-        );
+          return {
+            id: item.barcode,
+            barcode: item.barcode,
+            name: item.name,
+            returnQuantity: 0,
+            returnPrice: basePrice,
+            returnPriceUSD: item.outPriceUSD || 0,
+            returnPriceIQD: item.outPriceIQD || 0,
+            availableQuantity: Math.max(0, availableQuantity),
+            originalQuantity,
+            previouslyReturned: actualReturned, 
+            soldQuantity, 
+            netPrice: item.netPrice || 0,
+            outPrice: item.outPrice || 0,
+            basePriceUSD: item.basePriceUSD || 0,
+            basePriceIQD: item.basePriceIQD || 0,
+            isConsignment: item.isConsignment || false,
+            consignmentOwnerId: item.consignmentOwnerId || null,
+            expireDate: item.expireDate ? formatDate(item.expireDate) : 'N/A',
+            currency: bill.currency || "USD",
+            branch: item.branch || "Slemany",
+          };
+        });
 
-        // Whatever isn't "still in store" or "returned to supplier" was sold
-        const soldQuantity = Math.max(0, originalQuantity - availableQuantity - actualReturned);
-
-        let basePrice = 0;
-        if (bill.currency === "IQD") {
-          basePrice = item.basePriceIQD || item.netPriceIQD || item.netPrice || item.outPriceIQD || 0;
-        } else {
-          basePrice = item.basePriceUSD || item.netPriceUSD || item.netPrice || item.outPriceUSD || 0;
-        }
-
-        return {
-          id: item.barcode,
-          barcode: item.barcode,
-          name: item.name,
-          returnQuantity: 0,
-          returnPrice: basePrice,
-          returnPriceUSD: item.outPriceUSD || 0,
-          returnPriceIQD: item.outPriceIQD || 0,
-          availableQuantity: Math.max(0, availableQuantity),
-          originalQuantity,
-          previouslyReturned: actualReturned,   // real supplier returns only
-          soldQuantity,                          // NEW
-          netPrice: item.netPrice || 0,
-          outPrice: item.outPrice || 0,
-          basePriceUSD: item.basePriceUSD || 0,
-          basePriceIQD: item.basePriceIQD || 0,
-          isConsignment: item.isConsignment || false,
-          consignmentOwnerId: item.consignmentOwnerId || null,
-          expireDate: item.expireDate ? formatDate(item.expireDate) : 'N/A',
-          currency: bill.currency || "USD",
-          branch: item.branch || "Slemany",
-        };
-      });
-
-    setReturnItems(validReturnItems);
-  } catch (err) {
-    console.error("Error fetching store stock for return:", err);
-    setError("Failed to load available quantities");
-  } finally {
-    setIsLoading(false);
-  }
-};
+      setReturnItems(validReturnItems);
+    } catch (err) {
+      console.error("Error calculating stock for return:", err);
+      setError("Failed to load available quantities");
+    }
+  };
 
   const handleReturnQuantityChange = (index, value) => {
     const newReturnItems = [...returnItems];
@@ -799,27 +809,40 @@ const handleBillSelect = async (bill) => {
       return;
     }
     
-    let returnPriceValue = 0;
-    if (returnItem.currency === "IQD") {
-      returnPriceValue = returnItem.returnPriceIQD || returnItem.returnPrice || 0;
-    } else {
-      returnPriceValue = returnItem.returnPriceUSD || returnItem.returnPrice || 0;
+    try {
+      const matchingStore = storeItems.filter(si => 
+        String(si.barcode) === String(returnItem.barcode) && 
+        String(si.boughtBillNumber) === String(returnItem.billNumber)
+      );
+      const currentAvail = matchingStore.reduce((sum, si) => sum + (Number(si.quantity) || 0), 0);
+      const calculatedMax = currentAvail + (Number(returnItem.returnQuantity) || 0);
+      setMaxEditQty(calculatedMax);
+
+      let returnPriceValue = 0;
+      if (returnItem.currency === "IQD") {
+        returnPriceValue = returnItem.returnPriceIQD || returnItem.returnPrice || 0;
+      } else {
+        returnPriceValue = returnItem.returnPriceUSD || returnItem.returnPrice || 0;
+      }
+      
+      setEditingReturn(returnItem);
+      setEditItems([{ 
+        ...returnItem, // Retain ALL hidden fields
+        returnPriceValue: returnPriceValue,
+        originalCurrency: returnItem.currency,
+        originalQuantity: returnItem.returnQuantity
+      }]);
+      setEditNote(returnItem.returnNote || "");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to setup edit interface.");
     }
-    
-    setEditingReturn(returnItem);
-    setEditItems([{ 
-      ...returnItem,
-      returnPriceValue: returnPriceValue,
-      originalCurrency: returnItem.currency,
-      originalQuantity: returnItem.returnQuantity
-    }]);
-    setEditNote(returnItem.returnNote || "");
   };
 
   const handleEditQuantityChange = (value) => {
     const newItems = [...editItems];
     if (!newItems[0]) return;
-    const newQuantity = Math.max(0, parseInt(value) || 0);
+    const newQuantity = Math.min(Math.max(0, parseInt(value) || 0), maxEditQty);
     
     const updatedItem = { 
       ...newItems[0],
@@ -894,55 +917,24 @@ const handleBillSelect = async (bill) => {
       const updatedItems = allItemsInReturn.map(item => {
         if (String(item.barcode) === String(editingReturn.barcode)) {
           return {
-            barcode: String(editingReturn.barcode),
-            name: String(editingReturn.name),
+            ...item, 
             returnQuantity: Number(editedItem.returnQuantity),
             returnPrice: priceValue,
             returnPriceUSD,
             returnPriceIQD,
             returnNote: editNote,
-            billNumber: String(editingReturn.billNumber),
-            quantity: Number(editingReturn.quantity || 0),
-            netPrice: Number(editingReturn.netPrice || 0),
-            outPrice: Number(editingReturn.outPrice || 0),
-            originalPrice: Number(editingReturn.originalPrice || 0),
-            expireDate: editingReturn.expireDate === 'N/A' ? null : editingReturn.expireDate,
-            isConsignment: Boolean(editingReturn.isConsignment),
-            consignmentOwnerId: editingReturn.consignmentOwnerId || null,
-            currency,
-            branch: editingReturn.branch || "Slemany",
           };
         }
-        const otherCurrency = item.currency || "USD";
-        return {
-          barcode: String(item.barcode),
-          name: String(item.name),
-          returnQuantity: Number(item.returnQuantity),
-          returnPrice: otherCurrency === "IQD" ? (item.returnPriceIQD || item.returnPrice || 0) : (item.returnPriceUSD || item.returnPrice || 0),
-          returnPriceUSD: item.returnPriceUSD || 0,
-          returnPriceIQD: item.returnPriceIQD || 0,
-          returnNote: item.returnNote || "",
-          billNumber: String(item.billNumber),
-          quantity: Number(item.quantity),
-          netPrice: Number(item.netPrice),
-          outPrice: Number(item.outPrice),
-          originalPrice: Number(item.originalPrice || 0),
-          expireDate: item.expireDate,
-          isConsignment: Boolean(item.isConsignment),
-          consignmentOwnerId: item.consignmentOwnerId || null,
-          currency: otherCurrency,
-          branch: item.branch || "Slemany",
-        };
+        return item;
       });
 
       await updateBoughtReturnBill(editingReturn.id, updatedItems, editNote);
 
       setSuccessMessage("Return updated successfully!");
       setTimeout(() => setSuccessMessage(null), 3000);
-      setEditingReturn(null);
-      setEditItems([]);
-      setEditNote("");
+      handleCancelEdit();
       await fetchAllReturns();
+      getStoreItems(true).then(setStoreItems); 
     } catch (error) {
       console.error("Error updating return:", error);
       setError(`Failed to update return: ${error.message}`);
@@ -961,7 +953,7 @@ const handleBillSelect = async (bill) => {
     }
     if (confirm(`Are you sure you want to delete return for "${returnItem.name}"? This will restore ${returnItem.returnQuantity} items to store.`)) {
       try {
-        await deleteBoughtReturnItem(returnItem.id, returnItem.barcode);
+        await deleteBoughtReturnItem(returnItem.id, returnItem.barcode, returnItem.returnQuantity, returnItem);
 
         const matchesRow = (r) =>
           r.id === returnItem.id &&
@@ -973,6 +965,7 @@ const handleBillSelect = async (bill) => {
         
         setSuccessMessage(`Return for "${returnItem.name}" deleted successfully!`);
         setTimeout(() => setSuccessMessage(null), 3000);
+        getStoreItems(true).then(setStoreItems);
       } catch (error) {
         console.error("Error deleting return:", error);
         setError(`Failed to delete return: ${error.message}`);
@@ -1038,10 +1031,7 @@ const handleBillSelect = async (bill) => {
       
       const preparedItems = itemsToReturn.map(item => {
         const returnQuantity = Number(item.returnQuantity) || 0;
-        
-        // ✅ Use base price (purchase price) for return
         let basePrice = Number(item.returnPrice) || 0;
-        
         let returnPriceUSD = 0;
         let returnPriceIQD = 0;
         
@@ -1127,6 +1117,7 @@ const handleBillSelect = async (bill) => {
       setReturnItems([]);
       setReturnNote("");
       await fetchAllReturns();
+      getStoreItems(true).then(setStoreItems); 
       
     } catch (error) {
       console.error("Error processing return:", error);
@@ -1136,6 +1127,118 @@ const handleBillSelect = async (bill) => {
       setIsSubmitting(false);
     }
   };
+
+  // --- Excel-Style Column Filters Logic ---
+  const handleUpdateColumnFilter = (columnKey, updates) => {
+    setColumnFilters(prev => {
+      const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
+      const next = { ...current, ...updates };
+      if (!next.operator && !next.textValue && (!next.selectedValues || next.selectedValues.length === 0)) {
+        const newFilters = { ...prev };
+        delete newFilters[columnKey];
+        return newFilters;
+      }
+      return { ...prev, [columnKey]: next };
+    });
+  };
+
+  const evaluateFilter = (itemValue, filterData, type = "string") => {
+    if (!filterData) return true;
+    const { operator, textValue, selectedValues } = filterData;
+    
+    if (selectedValues && selectedValues.length > 0) {
+      if (!selectedValues.includes(String(itemValue))) return false;
+    }
+
+    if (operator && textValue !== "") {
+      const valStr = String(itemValue || '').toLowerCase();
+      const searchStr = String(textValue).toLowerCase();
+      const valNum = Number(itemValue);
+      const searchNum = Number(textValue);
+
+      switch (operator) {
+        case 'contains': return valStr.includes(searchStr);
+        case 'equals': return type === 'number' ? valNum === searchNum : valStr === searchStr;
+        case 'startsWith': return valStr.startsWith(searchStr);
+        case 'endsWith': return valStr.endsWith(searchStr);
+        case 'greaterThan': return valNum > searchNum;
+        case 'lessThan': return valNum < searchNum;
+        default: return true;
+      }
+    }
+    return true;
+  };
+
+  // Combine Global Filters and Column Filters Instantly
+  const filteredSortedReturns = useMemo(() => {
+    let filtered = returns.filter((returnItem) => {
+      if (!returnItem) return false;
+      
+      // Global Dates
+      if (filters.startDate && returnItem.returnDate) {
+        if (new Date(returnItem.returnDate) < new Date(filters.startDate)) return false;
+      }
+      if (filters.endDate && returnItem.returnDate) {
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59);
+        if (new Date(returnItem.returnDate) > endDate) return false;
+      }
+      
+      // Global Payment Status
+      if (filters.paymentStatus !== "all" && returnItem.paymentStatus !== filters.paymentStatus) return false;
+      
+      // Global Specific Items
+      if (itemFilters.length > 0 && returnItem.name && !itemFilters.includes(returnItem.name)) return false;
+      
+      // EXCEL Column Filters
+      for (const [columnKey, filterData] of Object.entries(columnFilters)) {
+        let itemValue = "";
+        if (columnKey === 'companyName') itemValue = returnItem.companyName;
+        if (columnKey === 'returnNumber') itemValue = returnItem.returnNumber || returnItem.id?.slice(-6);
+        if (columnKey === 'returnDate') itemValue = formatDate(returnItem.returnDate);
+        if (columnKey === 'billNumber') itemValue = returnItem.billNumber;
+        if (columnKey === 'name') itemValue = returnItem.name;
+        if (columnKey === 'barcode') itemValue = returnItem.barcode;
+        if (columnKey === 'returnQuantity') itemValue = returnItem.returnQuantity;
+        if (columnKey === 'currency') itemValue = returnItem.currency;
+        if (columnKey === 'returnPrice') itemValue = returnItem.currency === "IQD" ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0) : (returnItem.returnPriceUSD || returnItem.returnPrice || 0);
+        if (columnKey === 'returnTotal') itemValue = (returnItem.currency === "IQD" ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0) : (returnItem.returnPriceUSD || returnItem.returnPrice || 0)) * (returnItem.returnQuantity || 0);
+        if (columnKey === 'expireDate') itemValue = returnItem.expireDate;
+        if (columnKey === 'paymentStatus') itemValue = returnItem.paymentStatus;
+
+        const isNum = ['returnQuantity', 'returnPrice', 'returnTotal'].includes(columnKey);
+
+        if (!evaluateFilter(itemValue, filterData, isNum ? "number" : "string")) return false;
+      }
+      
+      return true;
+    });
+
+    if (sortConfig.key) {
+      filtered.sort((a, b) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+        
+        if (sortConfig.key === 'returnTotal' || sortConfig.key === 'returnQuantity') {
+          aVal = Number(aVal) || 0; bVal = Number(bVal) || 0;
+        } else if (sortConfig.key === 'returnDate') {
+          aVal = new Date(aVal); bVal = new Date(bVal);
+        } else if (typeof aVal === 'string') {
+          aVal = (aVal || '').toLowerCase(); bVal = (bVal || '').toLowerCase();
+        }
+        
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return filtered;
+  }, [returns, filters, itemFilters, columnFilters, sortConfig]);
+
+  const filteredBills = boughtBills.filter((bill) => {
+    if (!selectedCompany?.id || !bill) return false;
+    return bill.companyId === selectedCompany.id;
+  });
 
   const exportToExcel = () => {
     const exportData = filteredSortedReturns.map(returnItem => ({
@@ -1147,18 +1250,8 @@ const handleBillSelect = async (bill) => {
       'Barcode': returnItem.barcode || 'N/A',
       'Return Quantity': returnItem.returnQuantity || 0,
       'Currency': returnItem.currency || 'USD',
-      'Return Price': `${getCurrencySymbol(returnItem.currency)} ${formatCurrency(
-        returnItem.currency === "IQD" 
-          ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0)
-          : (returnItem.returnPriceUSD || returnItem.returnPrice || 0),
-        returnItem.currency
-      )}`,
-      'Total': `${getCurrencySymbol(returnItem.currency)} ${formatCurrency(
-        (returnItem.currency === "IQD" 
-          ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0)
-          : (returnItem.returnPriceUSD || returnItem.returnPrice || 0)) * (returnItem.returnQuantity || 0),
-        returnItem.currency
-      )}`,
+      'Return Price': `${getCurrencySymbol(returnItem.currency)} ${formatCurrency(returnItem.currency === "IQD" ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0) : (returnItem.returnPriceUSD || returnItem.returnPrice || 0), returnItem.currency)}`,
+      'Total': `${getCurrencySymbol(returnItem.currency)} ${formatCurrency((returnItem.currency === "IQD" ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0) : (returnItem.returnPriceUSD || returnItem.returnPrice || 0)) * (returnItem.returnQuantity || 0), returnItem.currency)}`,
       'Expire Date': returnItem.expireDate || 'N/A',
       'Note': returnItem.returnNote || '-',
       'Payment Status': returnItem.paymentStatus
@@ -1170,124 +1263,127 @@ const handleBillSelect = async (bill) => {
     XLSX.writeFile(wb, `bought_returns_${formatDate(new Date())}.xlsx`);
   };
 
-  const filteredSortedReturns = (() => {
-    let filtered = returns.filter((returnItem) => {
-      if (!returnItem) return false;
-      
-      let matchesBillNumber = true;
-      if (filters.billNumber && returnItem.billNumber) {
-        matchesBillNumber = String(returnItem.billNumber).includes(filters.billNumber);
-      }
-      
-      let matchesItemName = true;
-      if (filters.itemName && returnItem.name) {
-        matchesItemName = returnItem.name.toLowerCase().includes(filters.itemName.toLowerCase());
-      }
-      
-      let matchesBarcode = true;
-      if (filters.barcode && returnItem.barcode) {
-        matchesBarcode = String(returnItem.barcode).toLowerCase().includes(filters.barcode.toLowerCase());
-      }
-      
-      let matchesPaymentStatus = true;
-      if (filters.paymentStatus !== "all" && returnItem.paymentStatus) {
-        matchesPaymentStatus = returnItem.paymentStatus === filters.paymentStatus;
-      }
-      
-      let matchesReturnBillNumber = true;
-      if (filters.returnBillNumber && returnItem.returnNumber) {
-        matchesReturnBillNumber = String(returnItem.returnNumber).toLowerCase().includes(filters.returnBillNumber.toLowerCase());
-      }
-      
-      let matchesDateRange = true;
-      if (filters.startDate && returnItem.returnDate) {
-        const returnDate = new Date(returnItem.returnDate);
-        const startDate = new Date(filters.startDate);
-        if (returnDate < startDate) matchesDateRange = false;
-      }
-      if (filters.endDate && returnItem.returnDate && matchesDateRange) {
-        const returnDate = new Date(returnItem.returnDate);
-        const endDate = new Date(filters.endDate);
-        endDate.setHours(23, 59, 59);
-        if (returnDate > endDate) matchesDateRange = false;
-      }
-      
-      const matchesItemFilters = itemFilters.length === 0 || (returnItem.name && itemFilters.includes(returnItem.name));
-      
-      return matchesBillNumber && matchesItemName && matchesBarcode && matchesPaymentStatus && matchesItemFilters && matchesReturnBillNumber && matchesDateRange;
-    });
+  const handleInputFocus = (e) => e.target.select();
 
-    if (sortConfig.key) {
-      filtered.sort((a, b) => {
-        let aVal = a[sortConfig.key];
-        let bVal = b[sortConfig.key];
-        
-        if (sortConfig.key === 'returnTotal' || sortConfig.key === 'returnQuantity') {
-          aVal = Number(aVal) || 0;
-          bVal = Number(bVal) || 0;
-        } else if (sortConfig.key === 'returnDate') {
-          aVal = new Date(aVal);
-          bVal = new Date(bVal);
-        } else if (typeof aVal === 'string') {
-          aVal = (aVal || '').toLowerCase();
-          bVal = (bVal || '').toLowerCase();
-        }
-        
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
+  // Excel Dropdown UI Component
+  const ExcelFilterDropdown = ({ columnKey, type = "string" }) => {
+    const [search, setSearch] = useState("");
+    const isOpen = activeFilterDropdown === columnKey;
+    const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
+    
+    const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
+    const { operator, textValue, selectedValues } = filterState;
+
+    const uniqueValues = useMemo(() => {
+      const vals = new Set();
+      returns.forEach(returnItem => {
+        let val = "";
+        if (columnKey === 'companyName') val = returnItem.companyName;
+        if (columnKey === 'returnNumber') val = returnItem.returnNumber || returnItem.id?.slice(-6);
+        if (columnKey === 'returnDate') val = formatDate(returnItem.returnDate);
+        if (columnKey === 'billNumber') val = returnItem.billNumber;
+        if (columnKey === 'name') val = returnItem.name;
+        if (columnKey === 'barcode') val = returnItem.barcode;
+        if (columnKey === 'returnQuantity') val = returnItem.returnQuantity;
+        if (columnKey === 'currency') val = returnItem.currency;
+        if (columnKey === 'returnPrice') val = returnItem.currency === "IQD" ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0) : (returnItem.returnPriceUSD || returnItem.returnPrice || 0);
+        if (columnKey === 'returnTotal') val = (returnItem.currency === "IQD" ? (returnItem.returnPriceIQD || returnItem.returnPrice || 0) : (returnItem.returnPriceUSD || returnItem.returnPrice || 0)) * (returnItem.returnQuantity || 0);
+        if (columnKey === 'expireDate') val = returnItem.expireDate;
+        if (columnKey === 'paymentStatus') val = returnItem.paymentStatus;
+        vals.add(String(val || ""));
       });
-    }
-    
-    return filtered;
-  })();
+      return Array.from(vals).sort();
+    }, [returns, columnKey]);
 
-  const filteredBills = boughtBills.filter((bill) => {
-    if (!selectedCompany?.id) return false;
-    if (!bill) return false;
-    
-    const belongsToCompany = bill.companyId === selectedCompany.id;
-    if (!belongsToCompany) return false;
-    
-    let matchesBillNumber = true;
-    if (filters.billNumber && bill.billNumber) {
-      matchesBillNumber = String(bill.billNumber).includes(filters.billNumber);
-    }
-    
-    let matchesItemName = true;
-    if (filters.itemName && bill.items) {
-      matchesItemName = bill.items.some(item =>
-        item && item.name && item.name.toLowerCase().includes(filters.itemName.toLowerCase())
-      );
-    }
-    
-    let matchesBarcode = true;
-    if (filters.barcode && bill.items) {
-      matchesBarcode = bill.items.some(item =>
-        item && item.barcode && String(item.barcode).toLowerCase().includes(filters.barcode.toLowerCase())
-      );
-    }
-    
-    let matchesItemFilters = true;
-    if (itemFilters.length > 0 && bill.items) {
-      matchesItemFilters = bill.items.some(item =>
-        item && item.name && itemFilters.includes(item.name)
-      );
-    }
-    
-    return matchesBillNumber && matchesItemName && matchesBarcode && matchesItemFilters;
-  });
+    const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+    const isActive = !!(textValue || (selectedValues && selectedValues.length > 0));
+
+    return (
+      <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
+        <div 
+          onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
+          style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.25rem", borderRadius: "0.375rem", background: isActive ? "#dbeafe" : "transparent", color: isActive ? "#2563eb" : "#94a3b8" }}
+        >
+          <Filter size={14} />
+        </div>
+
+        {isOpen && (
+          <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "0.5rem", background: "white", border: "1px solid #cbd5e1", borderRadius: "0.5rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)", zIndex: 9999, width: "240px", display: "flex", flexDirection: "column", cursor: "default", overflow: "hidden", color: "#2c3e50" }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc" }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {/* Value Input Placed ABOVE the Select per request */}
+                  {/* Select Operator */}
+                <select 
+                  value={operator || operators[0].value} 
+                  onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
+                  style={{ width: "100%", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
+                >
+                  {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                </select>
+                {operator !== 'isEmpty' && operator !== 'isNotEmpty' && (
+                  <input 
+                    type={type === "number" ? "number" : "text"} 
+                    placeholder="Value..." 
+                    value={textValue || ""} 
+                    onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
+                    style={{ width: "100%", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", boxSizing: "border-box", marginTop: "0.5rem" }}
+                  />
+                )}
+              
+              </div>
+            </div>
+            
+            {/* Search list values */}
+            <div style={{ padding: "0.75rem", flex: 1 }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
+              <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem" }}>
+                <Search size={14} color="#94a3b8" />
+                <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem", marginLeft: "0.5rem" }} />
+              </div>
+              <div style={{ maxHeight: "160px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}>
+                  <input type="checkbox" checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0} onChange={(e) => handleUpdateColumnFilter(columnKey, { selectedValues: e.target.checked ? [...uniqueValues] : [] })} style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}/>
+                  <span>(Select All)</span>
+                </label>
+                {displayValues.map(val => (
+                  <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
+                    <input type="checkbox" checked={selectedValues.includes(val)} onChange={(e) => {
+                      const updated = e.target.checked ? [...selectedValues, val] : selectedValues.filter(v => v !== val);
+                      handleUpdateColumnFilter(columnKey, { selectedValues: updated });
+                    }} style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}/>
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "" ? "(Blank)" : val}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc" }}>
+              <button onClick={() => { const u = {...columnFilters}; delete u[columnKey]; setColumnFilters(u); }} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
+              <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const TableHeader = ({ title, columnKey, type = "string" }) => (
+    <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0", borderRight: "1px solid #e2e8f0", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 5 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+        <div onClick={() => handleSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
+          {title} <span style={{ fontSize: "11px", color: "#94a3b8" }}>{getSortIcon(columnKey)}</span>
+        </div>
+        <ExcelFilterDropdown columnKey={columnKey} type={type} />
+      </div>
+    </th>
+  );
 
   const PaymentStatusBadge = ({ status }) => {
     let style = {};
-    let label = status;
-    if (status === "Paid") {
-      style = styles.badgePaid;
-    } else if (status === "Unpaid") {
-      style = styles.badgeUnpaid;
-    } else {
-      style = styles.badgeProcessed;
-    }
+    if (status === "Paid") style = styles.badgePaid;
+    else if (status === "Unpaid") style = styles.badgeUnpaid;
+    else style = styles.badgeProcessed;
     return (
       <span style={{ ...styles.badge, ...style }}>
         {status === "Paid" ? "✓" : status === "Unpaid" ? "⏳" : "🔄"} {status}
@@ -1300,11 +1396,7 @@ const handleBillSelect = async (bill) => {
     label: item,
   }));
 
-  const handleInputFocus = (e) => {
-    e.target.select();
-  };
-
-  if (isLoading) {
+  if (isLoading && returns.length === 0) {
     return (
       <div style={styles.container}>
         <div style={styles.wrapper}>
@@ -1319,99 +1411,44 @@ const handleBillSelect = async (bill) => {
             <p style={{ marginTop: "1rem", color: "#64748b" }}>Loading return history...</p>
           </div>
         </div>
-        <style jsx>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <style dangerouslySetInnerHTML={{__html: `@keyframes spin { to { transform: rotate(360deg); } }`}} />
       </div>
     );
   }
 
   return (
     <div style={styles.container}>
-      <style jsx>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .fade-in {
-          animation: fadeIn 0.3s ease-out;
-        }
-        .hover-row:hover {
-          background: #f8fafc !important;
-        }
-        .hover-button:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 12px rgba(0,0,0,0.15) !important;
-        }
-        .hover-button:active {
-          transform: translateY(0px);
-        }
-        .input-focus:focus {
-          border-color: #6366f1 !important;
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
-        }
-        input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button {
-          -webkit-appearance: none;
-          margin: 0;
-        }
-        input[type=number] {
-          -moz-appearance: textfield;
-        }
-        .scrollable-table {
-          overflow-x: auto;
-          border-radius: 12px;
-        }
-        .scrollable-table::-webkit-scrollbar {
-          height: 8px;
-        }
-        .scrollable-table::-webkit-scrollbar-track {
-          background: #f1f5f9;
-          border-radius: 4px;
-        }
-        .scrollable-table::-webkit-scrollbar-thumb {
-          background: #cbd5e1;
-          border-radius: 4px;
-        }
-        .scrollable-table::-webkit-scrollbar-thumb:hover {
-          background: #94a3b8;
-        }
-      `}</style>
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        .hover-row:hover { background: #f8fafc !important; }
+        .hover-button:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15) !important; }
+        .hover-button:active { transform: translateY(0px); }
+        .input-focus:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .scrollable-table { overflow-x: auto; border-radius: 12px; }
+        .scrollable-table::-webkit-scrollbar { height: 8px; }
+        .scrollable-table::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .scrollable-table::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .scrollable-table::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}} />
 
       <div style={styles.wrapper}>
-        {/* Header */}
         <div style={styles.header}>
           <div>
             <h1 style={styles.headerTitle}>📦 Bought Return History</h1>
             <p style={styles.headerSubtitle}>Manage product returns from suppliers</p>
           </div>
-          <button 
-            onClick={exportToExcel} 
-            style={styles.buttonExport} 
-            className="hover-button"
-          >
+          <button onClick={exportToExcel} style={styles.buttonExport} className="hover-button">
             📊 Export to Excel
           </button>
         </div>
 
-        {/* Messages */}
-        {error && (
-          <div style={styles.alertError} className="fade-in">
-            ⚠️ {error}
-          </div>
-        )}
-        {successMessage && (
-          <div style={styles.alertSuccess} className="fade-in">
-            ✅ {successMessage}
-          </div>
-        )}
+        {error && <div style={styles.alertError} className="fade-in">⚠️ {error}</div>}
+        {successMessage && <div style={styles.alertSuccess} className="fade-in">✅ {successMessage}</div>}
 
-        {/* Main Card */}
         <div style={styles.mainCard}>
           <div style={styles.cardHeader}>
             <h3 style={styles.cardHeaderTitle}>🔍 Filter Returns</h3>
@@ -1420,7 +1457,6 @@ const handleBillSelect = async (bill) => {
             </span>
           </div>
           <div style={styles.cardBody}>
-            {/* Filters */}
             <div style={styles.filterGrid}>
               <div style={styles.filterItem}>
                 <label style={styles.label}>Company</label>
@@ -1431,62 +1467,13 @@ const handleBillSelect = async (bill) => {
                   placeholder="All Companies"
                   isSearchable
                   isClearable
-                  styles={{
-                    control: (base) => ({
-                      ...base,
-                      borderRadius: '10px',
-                      borderColor: '#e2e8f0',
-                      boxShadow: 'none',
-                      '&:hover': { borderColor: '#6366f1' }
-                    })
-                  }}
-                />
-              </div>
-             
-              <div style={styles.filterItem}>
-                <label style={styles.label}>Return Bill #</label>
-                <input
-                  style={styles.input}
-                  placeholder="Search by return #..."
-                  value={filters.returnBillNumber}
-                  onChange={(e) => handleFilterChange("returnBillNumber", e.target.value)}
-                  className="input-focus"
-                  onFocus={handleInputFocus}
-                />
-              </div>
-
-              <div style={styles.filterItem}>
-                <label style={styles.label}>Item Name</label>
-                <input
-                  style={styles.input}
-                  placeholder="Search by item name..."
-                  value={filters.itemName}
-                  onChange={(e) => handleFilterChange("itemName", e.target.value)}
-                  className="input-focus"
-                  onFocus={handleInputFocus}
-                />
-              </div>
-
-              <div style={styles.filterItem}>
-                <label style={styles.label}>Barcode</label>
-                <input
-                  style={styles.input}
-                  placeholder="Search by barcode..."
-                  value={filters.barcode}
-                  onChange={(e) => handleFilterChange("barcode", e.target.value)}
-                  className="input-focus"
-                  onFocus={handleInputFocus}
+                  styles={{ control: (base) => ({ ...base, borderRadius: '10px', borderColor: '#e2e8f0', boxShadow: 'none', '&:hover': { borderColor: '#6366f1' }}) }}
                 />
               </div>
 
               <div style={styles.filterItem}>
                 <label style={styles.label}>Payment Status</label>
-                <select
-                  style={styles.input}
-                  value={filters.paymentStatus}
-                  onChange={(e) => handleFilterChange("paymentStatus", e.target.value)}
-                  className="input-focus"
-                >
+                <select style={styles.input} value={filters.paymentStatus} onChange={(e) => handleFilterChange("paymentStatus", e.target.value)} className="input-focus">
                   <option value="all">All Status</option>
                   <option value="Paid">Paid</option>
                   <option value="Unpaid">Unpaid</option>
@@ -1494,114 +1481,54 @@ const handleBillSelect = async (bill) => {
               </div>
 
               <div style={styles.filterItem}>
-                <label style={styles.label}>Bill #</label>
-                <input
-                  style={styles.input}
-                  placeholder="Search by bill #..."
-                  value={filters.billNumber}
-                  onChange={(e) => handleFilterChange("billNumber", e.target.value)}
-                  className="input-focus"
-                  onFocus={handleInputFocus}
-                />
-              </div>
-
-              <div style={styles.filterItem}>
                 <label style={styles.label}>Start Date</label>
-                <input
-                  type="date"
-                  style={styles.input}
-                  value={filters.startDate}
-                  onChange={(e) => handleFilterChange("startDate", e.target.value)}
-                  className="input-focus"
-                />
+                <input type="date" style={styles.input} value={filters.startDate} onChange={(e) => handleFilterChange("startDate", e.target.value)} className="input-focus" />
               </div>
 
               <div style={styles.filterItem}>
                 <label style={styles.label}>End Date</label>
-                <input
-                  type="date"
-                  style={styles.input}
-                  value={filters.endDate}
-                  onChange={(e) => handleFilterChange("endDate", e.target.value)}
-                  className="input-focus"
-                />
+                <input type="date" style={styles.input} value={filters.endDate} onChange={(e) => handleFilterChange("endDate", e.target.value)} className="input-focus" />
               </div>
             </div>
 
             <div style={styles.filterBox}>
               <div style={styles.flexBetween}>
                 <span style={{ fontWeight: "600", color: "#1e293b" }}>🏷️ Filter by Items:</span>
-                <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                  Applies to both history and new return sections
-                </span>
+                <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Applies to both history and new return sections</span>
               </div>
               <Select
                 isMulti
                 options={itemOptions}
                 onChange={(selected) => setItemFilters(selected ? selected.map((option) => option.value) : [])}
                 placeholder="Select items to filter..."
-                styles={{
-                  control: (base) => ({
-                    ...base,
-                    borderRadius: '10px',
-                    borderColor: '#e2e8f0',
-                    marginTop: '0.5rem',
-                  })
-                }}
+                styles={{ control: (base) => ({ ...base, borderRadius: '10px', borderColor: '#e2e8f0', marginTop: '0.5rem' }) }}
               />
             </div>
 
-            {/* Returns Table */}
             <div style={styles.sectionTitle}>
               📋 Return History
-              <span style={{ marginLeft: "auto", fontSize: "0.85rem", color: "#94a3b8" }}>
-                Click column headers to sort
-              </span>
+              <span style={{ marginLeft: "auto", fontSize: "0.85rem", color: "#94a3b8" }}>Click column headers to sort</span>
             </div>
 
             <div style={styles.tableContainer}>
-              <div className="scrollable-table">
+              <div className="scrollable-table" style={{ minHeight: "450px", maxHeight: "60vh", overflowY: "auto", overflowX: "auto" }}>
                 <table style={styles.table}>
-                  <thead>
+                  <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                     <tr>
-                      <th style={styles.th} onClick={() => handleSort('companyName')}>
-                        Company {getSortIcon('companyName')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('returnNumber')}>
-                        Return # {getSortIcon('returnNumber')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('returnDate')}>
-                        Date {getSortIcon('returnDate')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('billNumber')}>
-                        Bill # {getSortIcon('billNumber')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('name')}>
-                        Item {getSortIcon('name')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('barcode')}>
-                        Barcode {getSortIcon('barcode')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('returnQuantity')}>
-                        Qty {getSortIcon('returnQuantity')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('currency')}>
-                        Currency {getSortIcon('currency')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('returnPrice')}>
-                        Price {getSortIcon('returnPrice')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('returnTotal')}>
-                        Total {getSortIcon('returnTotal')}
-                      </th>
-                      <th style={styles.th} onClick={() => handleSort('expireDate')}>
-                        Expiry {getSortIcon('expireDate')}
-                      </th>
-                      <th style={styles.th}>Note</th>
-                      <th style={styles.th} onClick={() => handleSort('paymentStatus')}>
-                        Status {getSortIcon('paymentStatus')}
-                      </th>
-                      <th style={styles.th}>Actions</th>
+                      <TableHeader title="Company" columnKey="companyName" />
+                      <TableHeader title="Return #" columnKey="returnNumber" />
+                      <TableHeader title="Date" columnKey="returnDate" />
+                      <TableHeader title="Bill #" columnKey="billNumber" />
+                      <TableHeader title="Item" columnKey="name" />
+                      <TableHeader title="Barcode" columnKey="barcode" />
+                      <TableHeader title="Qty" columnKey="returnQuantity" type="number" />
+                      <TableHeader title="Currency" columnKey="currency" />
+                      <TableHeader title="Price" columnKey="returnPrice" type="number" />
+                      <TableHeader title="Total" columnKey="returnTotal" type="number" />
+                      <TableHeader title="Expiry" columnKey="expireDate" />
+                      <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0", borderRight: "1px solid #e2e8f0", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 5 }}>Note</th>
+                      <TableHeader title="Status" columnKey="paymentStatus" />
+                      <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 5 }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1625,7 +1552,7 @@ const handleBillSelect = async (bill) => {
                                 {returnItem.billNumber || 'N/A'}
                               </span>
                             </td>
-                            <td style={{...styles.td, fontWeight: "500"}}>{returnItem.name || 'N/A'}</td>
+                            <td style={{...styles.td, fontWeight: "500", whiteSpace: "normal", wordBreak: "break-word"}}>{returnItem.name || 'N/A'}</td>
                             <td style={styles.td}>
                               <code style={{ background: "#f1f5f9", padding: "0.2rem 0.4rem", borderRadius: "4px", fontSize: "0.75rem" }}>
                                 {returnItem.barcode || 'N/A'}
@@ -1635,13 +1562,7 @@ const handleBillSelect = async (bill) => {
                               <span style={styles.quantityBadge}>{returnItem.returnQuantity || 0}</span>
                             </td>
                             <td style={styles.td}>
-                              <span style={{ 
-                                background: returnItem.currency === "IQD" ? "#fef3c7" : "#dbeafe", 
-                                padding: "0.2rem 0.6rem", 
-                                borderRadius: "12px", 
-                                fontSize: "0.75rem", 
-                                color: returnItem.currency === "IQD" ? "#d97706" : "#2563eb" 
-                              }}>
+                              <span style={{ background: returnItem.currency === "IQD" ? "#fef3c7" : "#dbeafe", padding: "0.2rem 0.6rem", borderRadius: "12px", fontSize: "0.75rem", color: returnItem.currency === "IQD" ? "#d97706" : "#2563eb" }}>
                                 {returnItem.currency || "USD"}
                               </span>
                             </td>
@@ -1652,13 +1573,7 @@ const handleBillSelect = async (bill) => {
                               {getCurrencySymbol(returnItem.currency)}{formatCurrency(itemTotal, returnItem.currency)}
                             </td>
                             <td style={styles.td}>
-                              <span style={{ 
-                                background: returnItem.expireDate === 'N/A' ? '#f1f5f9' : '#fef9c3',
-                                padding: "0.2rem 0.6rem",
-                                borderRadius: "12px",
-                                fontSize: "0.75rem",
-                                color: returnItem.expireDate === 'N/A' ? '#94a3b8' : '#854d0e'
-                              }}>
+                              <span style={{ background: returnItem.expireDate === 'N/A' ? '#f1f5f9' : '#fef9c3', padding: "0.2rem 0.6rem", borderRadius: "12px", fontSize: "0.75rem", color: returnItem.expireDate === 'N/A' ? '#94a3b8' : '#854d0e' }}>
                                 {returnItem.expireDate || 'N/A'}
                               </span>
                             </td>
@@ -1671,27 +1586,12 @@ const handleBillSelect = async (bill) => {
                               <PaymentStatusBadge status={returnItem.paymentStatus} />
                             </td>
                             <td style={styles.td}>
-                              {returnItem.paymentStatus === "Unpaid" && (
+                              {returnItem.paymentStatus === "Unpaid" ? (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                                  <button 
-                                    style={styles.buttonPrimary} 
-                                    className="hover-button" 
-                                    onClick={() => handleEditReturn(returnItem)}
-                                  >
-                                    ✏️ Edit
-                                  </button>
-                                  <button 
-                                    style={styles.buttonDanger} 
-                                    className="hover-button" 
-                                    onClick={() => handleDeleteReturnItem(returnItem)}
-                                  >
-                                    🗑️ Delete
-                                  </button>
+                                  <button style={styles.buttonPrimary} className="hover-button" onClick={() => handleEditReturn(returnItem)}>✏️ Edit</button>
+                                  <button style={styles.buttonDanger} className="hover-button" onClick={() => handleDeleteReturnItem(returnItem)}>🗑️ Delete</button>
                                 </div>
-                              )}
-                              {returnItem.paymentStatus === "Paid" && (
-                                <span style={{ color: "#94a3b8", fontStyle: "italic", fontSize: "0.8rem" }}>Locked</span>
-                              )}
+                              ) : <span style={{ color: "#94a3b8", fontStyle: "italic", fontSize: "0.8rem" }}>Locked</span>}
                             </td>
                           </tr>
                         );
@@ -1699,7 +1599,7 @@ const handleBillSelect = async (bill) => {
                     ) : (
                       <tr>
                         <td colSpan="14" style={styles.emptyState}>
-                          <div style={styles.emptyStateIcon}>📦</div>
+                          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📦</div>
                           <p style={{ fontSize: "1.1rem", fontWeight: "500", color: "#64748b" }}>No returns found</p>
                           <p style={{ fontSize: "0.9rem", color: "#94a3b8", marginTop: "0.25rem" }}>Try adjusting your filters</p>
                         </td>
@@ -1712,9 +1612,7 @@ const handleBillSelect = async (bill) => {
 
             {/* Edit Modal */}
             {editingReturn && (
-              <div style={styles.modal} onClick={(e) => {
-                if (e.target === e.currentTarget) handleCancelEdit();
-              }}>
+              <div style={styles.modal} onClick={(e) => { if (e.target === e.currentTarget) handleCancelEdit(); }}>
                 <div style={styles.modalContent} className="fade-in">
                   <div style={styles.modalHeader}>
                     <h3 style={{ fontSize: "1.1rem", fontWeight: "600", color: "#1e293b", margin: 0 }}>
@@ -1728,59 +1626,36 @@ const handleBillSelect = async (bill) => {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                       <div>
                         <label style={styles.label}>Barcode</label>
-                        <input 
-                          type="text" 
-                          value={editingReturn.barcode || ''} 
-                          disabled 
-                          style={{...styles.input, background: "#f1f5f9"}} 
-                        />
+                        <input type="text" value={editingReturn.barcode || ''} disabled style={{...styles.input, background: "#f1f5f9"}} />
                       </div>
                       <div>
                         <label style={styles.label}>Item Name</label>
-                        <input 
-                          type="text" 
-                          value={editingReturn.name || ''} 
-                          disabled 
-                          style={{...styles.input, background: "#f1f5f9"}} 
-                        />
+                        <input type="text" value={editingReturn.name || ''} disabled style={{...styles.input, background: "#f1f5f9"}} />
                       </div>
                       <div>
                         <label style={styles.label}>Return Quantity</label>
                         <input 
-                          type="number" 
-                          min="1" 
-                          inputMode="numeric"
-                          pattern="[0-9]*"
+                          type="number" min="1" max={maxEditQty} inputMode="numeric" pattern="[0-9]*"
                           value={editItems[0]?.returnQuantity || 0} 
                           onChange={(e) => handleEditQuantityChange(e.target.value)} 
-                          style={styles.input} 
-                          className="input-focus"
-                          onFocus={handleInputFocus}
+                          style={styles.input} className="input-focus" onFocus={handleInputFocus}
                         />
+                        <span style={{ fontSize: "0.75rem", color: "#e74c3c", display: "block", marginTop: "4px" }}>Max Allowed: {maxEditQty}</span>
                       </div>
                       <div>
                         <label style={styles.label}>Return Price ({getCurrencySymbol(editingReturn.currency)})</label>
                         <input 
-                          type="number" 
-                          min="0.01" 
-                          step={editingReturn.currency === "IQD" ? "100" : "0.01"} 
-                          inputMode="decimal"
+                          type="number" min="0.01" step={editingReturn.currency === "IQD" ? "100" : "0.01"} inputMode="decimal"
                           value={editItems[0]?.returnPriceValue || 0} 
                           onChange={(e) => handleEditPriceChange(e.target.value)} 
-                          style={styles.input} 
-                          className="input-focus"
-                          onFocus={handleInputFocus}
+                          style={styles.input} className="input-focus" onFocus={handleInputFocus}
                         />
                       </div>
                       <div style={{ gridColumn: "span 2" }}>
                         <label style={styles.label}>Return Note</label>
                         <textarea 
-                          value={editNote} 
-                          onChange={(e) => setEditNote(e.target.value)} 
-                          rows="2" 
-                          style={{...styles.input, resize: "vertical"}} 
-                          className="input-focus"
-                          placeholder="Add a note..."
+                          value={editNote} onChange={(e) => setEditNote(e.target.value)} rows="2" 
+                          style={{...styles.input, resize: "vertical"}} className="input-focus" placeholder="Add a note..." 
                         />
                       </div>
                     </div>
@@ -1791,20 +1666,8 @@ const handleBillSelect = async (bill) => {
                     )}
                   </div>
                   <div style={styles.modalFooter}>
-                    <button 
-                      onClick={handleCancelEdit} 
-                      style={{...styles.buttonPrimary, background: "#94a3b8", boxShadow: "none"}} 
-                      className="hover-button"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={handleSubmitEdit} 
-                      style={styles.buttonSuccess} 
-                      className="hover-button"
-                    >
-                      ✅ Update Return
-                    </button>
+                    <button onClick={handleCancelEdit} style={{...styles.buttonPrimary, background: "#94a3b8", boxShadow: "none"}} className="hover-button">Cancel</button>
+                    <button onClick={handleSubmitEdit} style={styles.buttonSuccess} className="hover-button">✅ Update Return</button>
                   </div>
                 </div>
               </div>
@@ -1825,12 +1688,12 @@ const handleBillSelect = async (bill) => {
                     <table style={styles.table}>
                       <thead>
                         <tr>
-                          <th style={styles.th}>Bill #</th>
-                          <th style={styles.th}>Date</th>
-                          <th style={styles.th}>Total Amount</th>
-                          <th style={styles.th}>Currency</th>
-                          <th style={styles.th}>Bill Note</th>
-                          <th style={styles.th}>Action</th>
+                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Bill #</th>
+                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Date</th>
+                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Total Amount</th>
+                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Currency</th>
+                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Bill Note</th>
+                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1859,13 +1722,7 @@ const handleBillSelect = async (bill) => {
                                     {getCurrencySymbol(bill.currency)}{formatCurrency(billTotal, bill.currency)}
                                   </td>
                                   <td style={styles.td}>
-                                    <span style={{ 
-                                      background: bill.currency === "IQD" ? "#fef3c7" : "#dbeafe", 
-                                      padding: "0.2rem 0.6rem", 
-                                      borderRadius: "12px", 
-                                      fontSize: "0.75rem", 
-                                      color: bill.currency === "IQD" ? "#d97706" : "#2563eb" 
-                                    }}>
+                                    <span style={{ background: bill.currency === "IQD" ? "#fef3c7" : "#dbeafe", padding: "0.2rem 0.6rem", borderRadius: "12px", fontSize: "0.75rem", color: bill.currency === "IQD" ? "#d97706" : "#2563eb" }}>
                                       {bill.currency || "USD"}
                                     </span>
                                   </td>
@@ -1938,11 +1795,11 @@ const handleBillSelect = async (bill) => {
                                                         {item.previouslyReturned || 0}
                                                       </span>
                                                     </td>
-                                                        <td style={{ padding: "0.5rem", textAlign: "center" }}>
-                                                        <span style={{ background: "#ede9fe", padding: "0.2rem 0.6rem", borderRadius: "12px", fontSize: "0.8rem", color: "#6d28d9" }}>
-                                                          {item.soldQuantity || 0}
-                                                        </span>
-                                                      </td>
+                                                    <td style={{ padding: "0.5rem", textAlign: "center" }}>
+                                                      <span style={{ background: "#ede9fe", padding: "0.2rem 0.6rem", borderRadius: "12px", fontSize: "0.8rem", color: "#6d28d9" }}>
+                                                        {item.soldQuantity || 0}
+                                                      </span>
+                                                    </td>
                                                     <td style={{ padding: "0.5rem", textAlign: "center" }}>
                                                       <span style={{ background: "#dcfce7", padding: "0.2rem 0.6rem", borderRadius: "12px", fontSize: "0.8rem", color: "#166534", fontWeight: "600" }}>
                                                         {item.availableQuantity || 0}

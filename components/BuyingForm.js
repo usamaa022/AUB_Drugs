@@ -1233,14 +1233,14 @@ export default function BuyingForm({ onBillCreated }) {
                 </table>
               </div>
 
-              <button
+              {/* <button
                 type="button"
                 onClick={addItem}
                 className="bf-btn bf-btn-secondary"
                 style={{ marginTop: "0.75rem", width: "100%", justifyContent: "center" }}
               >
                 <FiPlus size={16} /> Add Empty Line Row
-              </button>
+              </button> */}
             </div>
 
             {/* Section 3: Overhead & Notes */}

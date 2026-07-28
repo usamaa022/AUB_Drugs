@@ -12,6 +12,7 @@ import {
   getBoughtPayments,
   getBoughtBills,
 } from "@/lib/data";
+import Select from "react-select";
 
 export default function BoughtPaymentManagementPage() {
   const { user } = useAuth();
@@ -42,6 +43,14 @@ export default function BoughtPaymentManagementPage() {
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [paymentDetails, setPaymentDetails] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // ✅ FIXED: Restored missing filters state
+  const [filters, setFilters] = useState({
+    paymentStatus: "all",
+    startDate: "",
+    endDate: ""
+  });
+
   const [advancedSearch, setAdvancedSearch] = useState({
     companyName: "",
     hardcopyBillNumber: "",
@@ -55,16 +64,16 @@ export default function BoughtPaymentManagementPage() {
     amountMinIQD: "",
     amountMaxIQD: "",
   });
+  
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-  // IMAGE STATE - base64 approach with proper edit tracking
+  // IMAGE STATE
   const [billImageData, setBillImageData] = useState(null);
   const [originalImageData, setOriginalImageData] = useState(null);
   const [imageHasChanged, setImageHasChanged] = useState(false);
   const [imageProcessing, setImageProcessing] = useState(false);
   const fileInputRef = useRef(null);
-  // Camera capture ref - using capture attribute to open camera directly
   const cameraInputRef = useRef(null);
 
   const [currencyTotals, setCurrencyTotals] = useState({ boughtUSD: 0, boughtIQD: 0, returnUSD: 0, returnIQD: 0, netUSD: 0, netIQD: 0 });
@@ -73,7 +82,6 @@ export default function BoughtPaymentManagementPage() {
   const [printLoading, setPrintLoading] = useState(false);
   const [consignmentWarnings, setConsignmentWarnings] = useState([]);
 
-  const companyInputRef = useRef(null);
   const hardcopyBillNumberRef = useRef(null);
   const companyDropdownRef = useRef(null);
 
@@ -99,7 +107,6 @@ export default function BoughtPaymentManagementPage() {
     }
   }, [user, router]);
 
-  // Format date to DD/MM/YYYY
   const formatDateToDMY = (date) => {
     if (!date) return "";
     const d = date.toDate ? date.toDate() : new Date(date);
@@ -109,7 +116,6 @@ export default function BoughtPaymentManagementPage() {
     return `${day}/${month}/${year}`;
   };
 
-  // Format date to YYYY-MM-DD for input fields
   const formatDateToYMD = (date) => {
     if (!date) return "";
     const d = date.toDate ? date.toDate() : new Date(date);
@@ -119,10 +125,13 @@ export default function BoughtPaymentManagementPage() {
     return `${year}-${month}-${day}`;
   };
 
-  // Generate sequential payment number: BPAY-currentYear-sequentialNumber (starts from 1 per year)
+  // ✅ FIXED: Restored missing handleFilterChange function
+  const handleFilterChange = (field, value) => {
+    setFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
   const generateSequentialPaymentNumber = async () => {
     const currentYear = new Date().getFullYear();
-    
     const allPayments = await getBoughtPayments();
     
     const currentYearPayments = allPayments.filter(payment => {
@@ -143,7 +152,6 @@ export default function BoughtPaymentManagementPage() {
     return `BPAY-${currentYear}-${newNumber}`;
   };
 
-  // Currency Formatters
   const formatCurrency = (amount) => {
     if (amount === undefined || amount === null || amount === 0) return "0 IQD";
     return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " IQD";
@@ -168,7 +176,6 @@ export default function BoughtPaymentManagementPage() {
     return namePart.split(" ")[0];
   };
 
-  // Process image from any source (gallery or camera)
   const processImageFile = (file) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -193,7 +200,6 @@ export default function BoughtPaymentManagementPage() {
         canvas.height = height;
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Grayscale conversion
         const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
@@ -222,14 +228,8 @@ export default function BoughtPaymentManagementPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleImageChange = (e) => {
-    processImageFile(e.target.files[0]);
-  };
-
-  const handleCameraChange = (e) => {
-    processImageFile(e.target.files[0]);
-  };
-
+  const handleImageChange = (e) => processImageFile(e.target.files[0]);
+  const handleCameraChange = (e) => processImageFile(e.target.files[0]);
   const triggerFileInput = () => fileInputRef.current?.click();
   const triggerCameraInput = () => cameraInputRef.current?.click();
 
@@ -240,14 +240,42 @@ export default function BoughtPaymentManagementPage() {
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
-  // Company dropdown handlers
-  const filteredCompanies = companies.filter(
-    (company) =>
-      company.name.toLowerCase().includes(companySearchTerm.toLowerCase()) ||
-      company.code?.toLowerCase().includes(companySearchTerm.toLowerCase())
-  );
+  const normalizeForSearch = (str) => {
+    if (!str) return "";
+    return str.toString().toLowerCase()
+      .replace(/ي/g, "ی")
+      .replace(/ك/g, "ک")
+      .replace(/ه/g, "ە")
+      .trim();
+  };
+
+  const filteredCompanies = companies.filter((company) => {
+    const search = normalizeForSearch(companySearchTerm);
+    if (!search) return true; 
+    return (
+      normalizeForSearch(company.name).includes(search) ||
+      normalizeForSearch(company.code).includes(search)
+    );
+  });
 
   const handleSelectCompany = (company) => {
+    if (!company) {
+      setSelectedCompany("");
+      setCompanySearchTerm("");
+      setSelectedBoughtBills([]);
+      setSelectedBoughtReturns([]);
+      setBoughtBills([]);
+      setReturns([]);
+      setError(null);
+      if (!isEditMode) {
+        setHardcopyBillNumber("");
+        setBillImageData(null);
+        setOriginalImageData(null);
+        setImageHasChanged(false);
+      }
+      return;
+    }
+    
     setSelectedCompany(company.id);
     setCompanySearchTerm(company.name);
     setShowCompanyDropdown(false);
@@ -256,7 +284,9 @@ export default function BoughtPaymentManagementPage() {
   const handleCompanyInputChange = (e) => {
     setCompanySearchTerm(e.target.value);
     setShowCompanyDropdown(true);
-    if (e.target.value === "") setSelectedCompany("");
+    if (e.target.value === "") {
+      setSelectedCompany("");
+    }
   };
 
   useEffect(() => {
@@ -269,7 +299,6 @@ export default function BoughtPaymentManagementPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Data loading functions
   const refreshPayments = async () => {
     try {
       setHistoryLoading(true);
@@ -305,17 +334,16 @@ export default function BoughtPaymentManagementPage() {
   const loadCompanies = async () => {
     try {
       const companiesData = await getCompanies();
-      setCompanies(companiesData);
+      setCompanies(companiesData.filter(c => c && c.id));
     } catch (err) {
       console.error("Error loading companies:", err);
       setError("Failed to load companies");
     }
   };
 
-  // Load payment for edit mode with proper image tracking
   useEffect(() => {
     const loadPaymentForEdit = async () => {
-      if (!isEditMode || !editPaymentId) return;
+      if (!isEditMode || !editPaymentId || companies.length === 0) return;
       try {
         setLoading(true);
         setError(null);
@@ -358,12 +386,6 @@ export default function BoughtPaymentManagementPage() {
     if (!selectedCompany) {
       setBoughtBills([]);
       setReturns([]);
-      if (!isEditMode) {
-        setHardcopyBillNumber("");
-        setBillImageData(null);
-        setOriginalImageData(null);
-        setImageHasChanged(false);
-      }
       return;
     }
     const loadCompanyData = async () => {
@@ -417,7 +439,6 @@ export default function BoughtPaymentManagementPage() {
     loadCompanyData();
   }, [selectedCompany, isEditMode, initialLoadComplete]);
 
-  // Currency totals calculation
   useEffect(() => {
     let boughtUSD = 0, boughtIQD = 0, returnUSD = 0, returnIQD = 0;
     selectedBoughtBills.forEach((billId) => {
@@ -448,7 +469,6 @@ export default function BoughtPaymentManagementPage() {
     setCurrencyTotals({ boughtUSD, boughtIQD, returnUSD, returnIQD, netUSD: boughtUSD - returnUSD, netIQD: boughtIQD - returnIQD });
   }, [selectedBoughtBills, selectedBoughtReturns, boughtBills, returns]);
 
-  // Consignment warnings
   useEffect(() => {
     const warnings = [];
     selectedBoughtBills.forEach((billId) => {
@@ -464,20 +484,11 @@ export default function BoughtPaymentManagementPage() {
     setConsignmentWarnings(warnings);
   }, [selectedBoughtBills, boughtBills]);
 
-  // Bill/return toggle helpers
-  const toggleBoughtBill = (billId) =>
-    setSelectedBoughtBills((prev) => prev.includes(billId) ? prev.filter((id) => id !== billId) : [...prev, billId]);
+  const toggleBoughtBill = (billId) => setSelectedBoughtBills((prev) => prev.includes(billId) ? prev.filter((id) => id !== billId) : [...prev, billId]);
+  const toggleBoughtReturn = (returnId) => setSelectedBoughtReturns((prev) => prev.includes(returnId) ? prev.filter((id) => id !== returnId) : [...prev, returnId]);
+  const selectAllBoughtBills = () => setSelectedBoughtBills(selectedBoughtBills.length === boughtBills.length ? [] : boughtBills.map((b) => b.id));
+  const selectAllBoughtReturns = () => setSelectedBoughtReturns(selectedBoughtReturns.length === returns.length ? [] : returns.map((r) => r.id));
 
-  const toggleBoughtReturn = (returnId) =>
-    setSelectedBoughtReturns((prev) => prev.includes(returnId) ? prev.filter((id) => id !== returnId) : [...prev, returnId]);
-
-  const selectAllBoughtBills = () =>
-    setSelectedBoughtBills(selectedBoughtBills.length === boughtBills.length ? [] : boughtBills.map((b) => b.id));
-
-  const selectAllBoughtReturns = () =>
-    setSelectedBoughtReturns(selectedBoughtReturns.length === returns.length ? [] : returns.map((r) => r.id));
-
-  // Reset form function
   const resetForm = () => {
     setSelectedBoughtBills([]);
     setSelectedBoughtReturns([]);
@@ -493,7 +504,6 @@ export default function BoughtPaymentManagementPage() {
     setPaymentDate(new Date().toISOString().split("T")[0]);
   };
 
-  // handleSubmit function
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -502,7 +512,6 @@ export default function BoughtPaymentManagementPage() {
     let hasError = false;
     if (!selectedCompany) {
       setError("Please select a company");
-      companyInputRef.current?.focus();
       hasError = true;
     }
     if (!hardcopyBillNumber.trim()) {
@@ -538,16 +547,7 @@ export default function BoughtPaymentManagementPage() {
         paymentNumber = await generateSequentialPaymentNumber();
       }
 
-      let imageToSave;
-      if (isEditMode) {
-        if (imageHasChanged) {
-          imageToSave = billImageData || null;
-        } else {
-          imageToSave = originalImageData || null;
-        }
-      } else {
-        imageToSave = billImageData || null;
-      }
+      let imageToSave = isEditMode ? (imageHasChanged ? (billImageData || null) : (originalImageData || null)) : (billImageData || null);
 
       const paymentData = {
         paymentNumber,
@@ -869,7 +869,24 @@ export default function BoughtPaymentManagementPage() {
         String(payment.netAmountIQD || "").includes(s);
       if (!basicMatch) return false;
     }
-    if (!showAdvancedSearch) return true;
+    if (!showAdvancedSearch) {
+        // Quick Filters check (only when advanced search is hidden)
+        if (filters.startDate) {
+            const start = new Date(filters.startDate);
+            start.setHours(0, 0, 0, 0);
+            const pDate = payment.paymentDate?.toDate ? payment.paymentDate.toDate() : new Date(payment.paymentDate);
+            if (pDate < start) return false;
+        }
+        if (filters.endDate) {
+            const end = new Date(filters.endDate);
+            end.setHours(23, 59, 59, 999);
+            const pDate = payment.paymentDate?.toDate ? payment.paymentDate.toDate() : new Date(payment.paymentDate);
+            if (pDate > end) return false;
+        }
+        return true;
+    }
+    
+    // Advanced search logic
     if (advancedSearch.companyName && !payment.companyName?.toLowerCase().includes(advancedSearch.companyName.toLowerCase())) return false;
     if (advancedSearch.hardcopyBillNumber && !payment.hardcopyBillNumber?.toLowerCase().includes(advancedSearch.hardcopyBillNumber.toLowerCase())) return false;
     if (advancedSearch.paymentNumber && !payment.paymentNumber?.toLowerCase().includes(advancedSearch.paymentNumber.toLowerCase())) return false;
@@ -909,18 +926,20 @@ export default function BoughtPaymentManagementPage() {
     return payment.paymentNumber;
   };
 
-  const inputStyle = { width: "100%", padding: "0.75rem", border: "1px solid #D1D5DB", borderRadius: "0.75rem", fontSize: "0.875rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
+  const inputStyle = { width: "100%", padding: "0.75rem", border: "1px solid #D1D5DB", borderRadius: "0.75rem", fontSize: "0.875rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box", transition: "all 0.2s" };
   const labelStyle = { display: "block", fontSize: "0.8rem", fontWeight: "600", marginBottom: "0.4rem", color: colorScheme.text };
 
   const getPaymentImage = (payment) => payment.billImageBase64 || payment.billImageUrl || null;
 
   if (!user || isLoading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)" }}>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ width: "3rem", height: "3rem", border: "3px solid #F3F4F6", borderTop: "3px solid #8B5CF6", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto" }}></div>
-          <p style={{ marginTop: "1rem", color: "#6B7280" }}>Loading...</p>
-        </div>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)" }}>
+        <div className="modern-spinner"></div>
+        <p style={{ marginTop: "1.5rem", color: "#64748b", fontSize: "1.1rem", fontWeight: "500", letterSpacing: "0.5px" }}>Loading data...</p>
+        <style dangerouslySetInnerHTML={{__html: `
+          .modern-spinner { width: 48px; height: 48px; border-radius: 50%; border: 4px solid #E5E7EB; border-top-color: #8B5CF6; animation: spin 1s linear infinite; }
+          @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+        `}} />
       </div>
     );
   }
@@ -932,31 +951,30 @@ export default function BoughtPaymentManagementPage() {
         @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
         @keyframes shake { 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-6px);} 40%,80%{transform:translateX(6px);} }
         @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+        .modern-spinner-small { width: 32px; height: 32px; border-radius: 50%; border: 3px solid #E5E7EB; border-top-color: #8B5CF6; animation: spin 1s linear infinite; margin: 0 auto; }
         .hardcopy-error-shake { animation: shake 0.4s ease; }
         input:focus, textarea:focus, select:focus { outline: 2px solid #8B5CF6; outline-offset: 1px; }
         .adv-input { width:100%; padding:0.6rem 0.75rem; border:1px solid #D1D5DB; border-radius:0.6rem; font-size:0.8rem; font-family:inherit; box-sizing:border-box; }
         .adv-input:focus { outline:2px solid #8B5CF6; }
         .img-btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-        @media (max-width: 480px) {
-          .img-btn-row { flex-direction: column; }
-        }
+        @media (max-width: 480px) { .img-btn-row { flex-direction: column; } }
       `}</style>
 
       {/* Header */}
       <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "clamp(1.4rem, 4vw, 2rem)", fontWeight: "bold", background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", marginBottom: "0.25rem", fontFamily: "var(--font-nrt-bd)" }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", marginBottom: "0.25rem", fontFamily: "var(--font-nrt-bd)" }}>
           {isEditMode ? "✏️ Update Bought Payment" : "💼 Bought Payment Management"}
         </h1>
       </div>
 
       {error && (
         <div style={{ padding: "1rem", backgroundColor: "#FEF2F2", border: `1px solid ${colorScheme.danger}`, borderRadius: "0.75rem", marginBottom: "1rem" }}>
-          <p style={{ color: colorScheme.danger, margin: 0 }}>❌ {error}</p>
+          <p style={{ color: colorScheme.danger, margin: 0, fontWeight: "500" }}>❌ {error}</p>
         </div>
       )}
       {success && (
         <div style={{ padding: "1rem", backgroundColor: "#F0FDF4", border: `1px solid ${colorScheme.success}`, borderRadius: "0.75rem", marginBottom: "1rem" }}>
-          <p style={{ color: colorScheme.success, margin: 0 }}>✅ {success}</p>
+          <p style={{ color: colorScheme.success, margin: 0, fontWeight: "500" }}>✅ {success}</p>
         </div>
       )}
 
@@ -964,9 +982,9 @@ export default function BoughtPaymentManagementPage() {
       {consignmentWarnings.length > 0 && (
         <div style={{ padding: "1rem", backgroundColor: "#FFF7ED", border: "2px solid #F59E0B", borderRadius: "0.75rem", marginBottom: "1rem" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
-            <span style={{ fontSize: "1.5rem" }}>⚠️</span>
+            <span style={{ fontSize: "1.2rem" }}>⚠️</span>
             <div>
-              <div style={{ fontWeight: "bold", color: "#92400E", marginBottom: "0.5rem", fontSize: "0.95rem" }}>Consignment Warning — Optional but important!</div>
+              <div style={{ fontWeight: "600", color: "#92400E", marginBottom: "0.5rem", fontSize: "0.9rem" }}>Consignment Warning — Optional but important!</div>
               {consignmentWarnings.map((w, i) => (
                 <div key={i} style={{ color: "#B45309", fontSize: "0.85rem", marginBottom: "0.25rem" }}>• {w.message}</div>
               ))}
@@ -979,29 +997,33 @@ export default function BoughtPaymentManagementPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2rem" }}>
 
         {/* Company Information */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.125rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: `2px solid ${colorScheme.primary}`, color: colorScheme.text }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: `2px solid ${colorScheme.primary}`, color: colorScheme.text }}>
             🏢 Company Information
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem" }}>
-            {/* Company Search */}
-            <div style={{ position: "relative" }} ref={companyDropdownRef}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.5rem" }}>
+            
+            {/* ✅ React Select Dropdown Component */}
+            <div style={{ position: "relative", zIndex: 50 }}>
               <label style={labelStyle}>Select Company *</label>
-              <input ref={companyInputRef} type="text" value={companySearchTerm} onChange={handleCompanyInputChange} onFocus={() => setShowCompanyDropdown(true)}
-                placeholder="Type to search company..." style={inputStyle} />
-              {showCompanyDropdown && filteredCompanies.length > 0 && (
-                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "200px", overflowY: "auto", backgroundColor: "white", border: "1px solid #D1D5DB", borderRadius: "0.75rem", marginTop: "0.25rem", zIndex: 10, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-                  {filteredCompanies.map((company) => (
-                    <div key={company.id} onClick={() => handleSelectCompany(company)}
-                      style={{ padding: "0.75rem", cursor: "pointer", borderBottom: "1px solid #E5E7EB", transition: "background 0.15s" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "#F5F3FF"}
-                      onMouseLeave={e => e.currentTarget.style.background = "white"}>
-                      <div style={{ fontWeight: "600", fontSize: "0.875rem" }}>{company.name}</div>
-                      {company.code && <div style={{ fontSize: "0.75rem", color: colorScheme.textLight }}>Code: {company.code}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <Select
+                options={companies.map(c => ({ value: c.id, label: `${c.name} ${c.code ? `(${c.code})` : ''}`, company: c }))}
+                onChange={(selected) => handleSelectCompany(selected ? selected.company : null)}
+                value={selectedCompany ? { value: selectedCompany, label: companySearchTerm } : null}
+                placeholder="Search company..."
+                isClearable
+                isSearchable
+                styles={{
+                  control: (base, state) => ({
+                    ...base,
+                    borderRadius: '0.75rem',
+                    padding: '0.2rem',
+                    borderColor: state.isFocused ? colorScheme.primary : '#D1D5DB',
+                    boxShadow: state.isFocused ? `0 0 0 3px ${colorScheme.primary}20` : 'none',
+                    '&:hover': { borderColor: colorScheme.primary }
+                  })
+                }}
+              />
             </div>
 
             {/* Hardcopy Bill Number */}
@@ -1028,54 +1050,30 @@ export default function BoughtPaymentManagementPage() {
         </div>
 
         {/* Bill Image Section */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.125rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: `2px solid ${colorScheme.primary}`, color: colorScheme.text }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: `2px solid ${colorScheme.primary}`, color: colorScheme.text }}>
             📷 Bill Image
           </h2>
 
-          {/* Hidden file input - Gallery */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept="image/*"
-            onChange={handleImageChange}
-            style={{ display: "none" }}
-          />
-          
-          {/* Hidden file input - Camera (capture="environment" opens camera directly) */}
-          <input
-            type="file"
-            ref={cameraInputRef}
-            accept="image/*"
-            capture="environment"
-            onChange={handleCameraChange}
-            style={{ display: "none" }}
-          />
+          <input type="file" ref={fileInputRef} accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
+          <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" onChange={handleCameraChange} style={{ display: "none" }} />
 
           <div style={{ display: "grid", gridTemplateColumns: billImageData ? "1fr auto" : "1fr", gap: "1.5rem", alignItems: "start" }}>
             <div>
-              <label style={labelStyle}>Upload Bill Image (Optional — auto-converted to grayscale)</label>
+              <label style={labelStyle}>Upload Bill Image (Optional)</label>
 
               <div className="img-btn-row">
-                <button
-                  type="button"
-                  onClick={triggerFileInput}
-                  disabled={imageProcessing}
-                  style={{ flex: 1, padding: "0.75rem", backgroundColor: "#F3F4F6", color: "#374151", border: "1px solid #D1D5DB", borderRadius: "0.75rem", fontSize: "0.875rem", fontWeight: "500", cursor: imageProcessing ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "background 0.2s", textAlign: "center" }}
+                <button type="button" onClick={triggerFileInput} disabled={imageProcessing}
+                  style={{ flex: 1, padding: "0.75rem", backgroundColor: "#F3F4F6", color: "#374151", border: "1px solid #D1D5DB", borderRadius: "0.75rem", fontSize: "0.85rem", fontWeight: "600", cursor: imageProcessing ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "background 0.2s", textAlign: "center" }}
                   onMouseEnter={e => { if (!imageProcessing) e.currentTarget.style.background = "#E5E7EB"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "#F3F4F6"; }}
-                >
+                  onMouseLeave={e => { e.currentTarget.style.background = "#F3F4F6"; }}>
                   {imageProcessing ? "⏳ Processing..." : "📁 Choose from Gallery"}
                 </button>
                 
-                <button
-                  type="button"
-                  onClick={triggerCameraInput}
-                  disabled={imageProcessing}
-                  style={{ flex: 1, padding: "0.75rem", backgroundColor: "#EDE9FE", color: "#5B21B6", border: "1px solid #C4B5FD", borderRadius: "0.75rem", fontSize: "0.875rem", fontWeight: "500", cursor: imageProcessing ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "background 0.2s", textAlign: "center" }}
+                <button type="button" onClick={triggerCameraInput} disabled={imageProcessing}
+                  style={{ flex: 1, padding: "0.75rem", backgroundColor: "#EDE9FE", color: "#5B21B6", border: "1px solid #C4B5FD", borderRadius: "0.75rem", fontSize: "0.85rem", fontWeight: "600", cursor: imageProcessing ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "background 0.2s", textAlign: "center" }}
                   onMouseEnter={e => { if (!imageProcessing) e.currentTarget.style.background = "#DDD6FE"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "#EDE9FE"; }}
-                >
+                  onMouseLeave={e => { e.currentTarget.style.background = "#EDE9FE"; }}>
                   📷 Take Photo
                 </button>
               </div>
@@ -1100,21 +1098,10 @@ export default function BoughtPaymentManagementPage() {
             </div>
 
             {billImageData && !imageProcessing && (
-              <div style={{ textAlign: "center" }}>
-                <p style={{ fontSize: "0.7rem", color: colorScheme.textLight, marginBottom: "0.4rem" }}>Preview</p>
-                <img
-                  src={billImageData}
-                  alt="Bill Preview"
-                  style={{ width: "100px", height: "100px", objectFit: "cover", borderRadius: "0.5rem", border: "1px solid #E5E7EB", cursor: "pointer", filter: "grayscale(100%)" }}
-                  onClick={() => handleViewImage(billImageData)}
-                />
-                <button
-                  type="button"
-                  onClick={removeImage}
-                  style={{ display: "block", margin: "0.4rem auto 0", fontSize: "0.7rem", color: "#EF4444", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  ✕ Remove image
-                </button>
+              <div style={{ textAlign: "center", padding: "0.5rem", border: "1px dashed #D1D5DB", borderRadius: "0.75rem", background: "#F9FAFB" }}>
+                <p style={{ fontSize: "0.7rem", color: colorScheme.textLight, marginBottom: "0.4rem", fontWeight: "600", textTransform: "uppercase" }}>Preview</p>
+                <img src={billImageData} alt="Bill Preview" style={{ width: "90px", height: "90px", objectFit: "cover", borderRadius: "0.5rem", border: "1px solid #E5E7EB", cursor: "pointer", filter: "grayscale(100%)", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }} onClick={() => handleViewImage(billImageData)} />
+                <button type="button" onClick={removeImage} style={{ display: "block", margin: "0.5rem auto 0", padding: "0.3rem 0.6rem", fontSize: "0.7rem", color: "white", background: "#EF4444", border: "none", borderRadius: "0.25rem", cursor: "pointer", fontFamily: "inherit", fontWeight: "600" }}>✕ Remove</button>
               </div>
             )}
           </div>
@@ -1123,21 +1110,24 @@ export default function BoughtPaymentManagementPage() {
         {/* Bills & Returns Sections */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
           {/* Bought Bills */}
-          <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
+          <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
             <div style={{ background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, padding: "1rem 1.25rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-                <h2 style={{ fontSize: "1.1rem", fontWeight: "bold", color: "white", margin: 0 }}>📦 Bought Bills ({boughtBills.length})</h2>
+                <h2 style={{ fontSize: "1rem", fontWeight: "bold", color: "white", margin: 0 }}>📦 Bought Bills ({boughtBills.length})</h2>
                 {!isEditMode && boughtBills.length > 0 && (
-                  <button onClick={selectAllBoughtBills} style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white", padding: "0.4rem 0.9rem", borderRadius: "0.6rem", border: "none", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
+                  <button onClick={selectAllBoughtBills} style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white", padding: "0.4rem 0.9rem", borderRadius: "0.6rem", border: "1px solid rgba(255,255,255,0.3)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit", fontWeight: "600" }}>
                     {selectedBoughtBills.length === boughtBills.length ? "Deselect All" : "Select All"}
                   </button>
                 )}
               </div>
-              {selectedBoughtBills.length > 0 && <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#DDD6FE" }}>{selectedBoughtBills.length} selected</div>}
+              {selectedBoughtBills.length > 0 && <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#DDD6FE", fontWeight: "600" }}>{selectedBoughtBills.length} selected</div>}
             </div>
-            <div style={{ padding: "1rem", maxHeight: "500px", overflowY: "auto" }}>
+            <div style={{ padding: "1rem", maxHeight: "500px", overflowY: "auto", background: "#F8FAFC" }}>
               {loading ? (
-                <div style={{ textAlign: "center", padding: "2rem", color: colorScheme.textLight }}>Loading...</div>
+                <div style={{ padding: "3rem", textAlign: "center" }}>
+                   <div className="modern-spinner-small"></div>
+                   <p style={{ marginTop: "1rem", color: "#94a3b8", fontSize: "0.9rem" }}>Fetching records...</p>
+                </div>
               ) : boughtBills.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "3rem", color: colorScheme.textLight }}>{selectedCompany ? "No unpaid bills available" : "Select a company first"}</div>
               ) : (
@@ -1149,21 +1139,20 @@ export default function BoughtPaymentManagementPage() {
                   const isConsignment = bill.isConsignment;
                   return (
                     <div key={bill.id} onClick={() => toggleBoughtBill(bill.id)}
-                      style={{ padding: "0.85rem", marginBottom: "0.6rem", border: isSelected ? `2px solid ${colorScheme.primary}` : isConsignment ? "1px dashed #F59E0B" : "1px solid #E5E7EB", backgroundColor: isSelected ? "#F5F3FF" : isConsignment ? "#FFFBEB" : "white", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease" }}>
+                      style={{ padding: "0.85rem", marginBottom: "0.6rem", border: isSelected ? `2px solid ${colorScheme.primary}` : isConsignment ? "1px dashed #F59E0B" : "1px solid #E5E7EB", backgroundColor: isSelected ? "#F5F3FF" : isConsignment ? "#FFFBEB" : "white", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease", boxShadow: isSelected ? "0 4px 6px -1px rgba(139, 92, 246, 0.1)" : "0 1px 2px rgba(0,0,0,0.05)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                            <span style={{ fontWeight: "bold", fontSize: "0.875rem" }}>Bill #{bill.billNumber}</span>
-                            {isConsignment && <span style={{ backgroundColor: "#FEF3C7", color: "#92400E", fontSize: "0.65rem", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", border: "1px solid #FCD34D", whiteSpace: "nowrap" }}>⚠️ CONSIGNED</span>}
+                            <span style={{ fontWeight: "600", fontSize: "0.875rem", color: isSelected ? colorScheme.dark : colorScheme.text }}>Bill #{bill.billNumber}</span>
+                            {isConsignment && <span style={{ backgroundColor: "#FEF3C7", color: "#92400E", fontSize: "0.65rem", fontWeight: "700", padding: "2px 6px", borderRadius: "999px", border: "1px solid #FCD34D", whiteSpace: "nowrap" }}>⚠️ CONSIGNED</span>}
                           </div>
-                          <div style={{ fontSize: "0.75rem", color: colorScheme.textLight, marginTop: "0.2rem" }}>
+                          <div style={{ fontSize: "0.75rem", color: colorScheme.textLight, marginTop: "0.3rem" }}>
                             {formatDateToDMY(bill.date)}
                             {bill.items?.length > 0 && <span style={{ marginLeft: "0.5rem" }}>• {bill.items.length} item{bill.items.length !== 1 ? "s" : ""}</span>}
                           </div>
-                          {billNote && <div style={{ fontSize: "0.7rem", color: "#6B7280", marginTop: "0.25rem", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📝 {billNote}</div>}
-                          <div style={{ fontSize: "0.7rem", marginTop: "0.2rem", color: isSelected ? colorScheme.primary : colorScheme.success, fontWeight: "600" }}>{isSelected ? "✓ Selected" : "● Unpaid"}</div>
+                          {billNote && <div style={{ fontSize: "0.7rem", color: "#6B7280", marginTop: "0.3rem", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📝 {billNote}</div>}
                         </div>
-                        <div style={{ fontWeight: "bold", color: billCurrency === "USD" ? "#059669" : "#2563eb", fontSize: "0.9rem", textAlign: "right", whiteSpace: "nowrap", marginLeft: "0.5rem" }}>
+                        <div style={{ fontWeight: "bold", color: billCurrency === "USD" ? "#059669" : "#2563eb", fontSize: "0.95rem", textAlign: "right", whiteSpace: "nowrap", marginLeft: "0.5rem", padding: "0.25rem 0.5rem", background: billCurrency === "USD" ? "#ECFDF5" : "#DBEAFE", borderRadius: "0.5rem" }}>
                           {billCurrency === "USD" ? formatUSD(billAmount) : formatCurrency(billAmount)}
                         </div>
                       </div>
@@ -1175,21 +1164,24 @@ export default function BoughtPaymentManagementPage() {
           </div>
 
           {/* Returns */}
-          <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
+          <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
             <div style={{ background: `linear-gradient(135deg, ${colorScheme.secondary} 0%, #0891B2 100%)`, padding: "1rem 1.25rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-                <h2 style={{ fontSize: "1.1rem", fontWeight: "bold", color: "white", margin: 0 }}>🔄 Returns ({returns.length})</h2>
+                <h2 style={{ fontSize: "1rem", fontWeight: "bold", color: "white", margin: 0 }}>🔄 Returns ({returns.length})</h2>
                 {!isEditMode && returns.length > 0 && (
-                  <button onClick={selectAllBoughtReturns} style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white", padding: "0.4rem 0.9rem", borderRadius: "0.6rem", border: "none", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
+                  <button onClick={selectAllBoughtReturns} style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white", padding: "0.4rem 0.9rem", borderRadius: "0.6rem", border: "1px solid rgba(255,255,255,0.3)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit", fontWeight: "600" }}>
                     {selectedBoughtReturns.length === returns.length ? "Deselect All" : "Select All"}
                   </button>
                 )}
               </div>
-              {selectedBoughtReturns.length > 0 && <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#CFFAFE" }}>{selectedBoughtReturns.length} selected</div>}
+              {selectedBoughtReturns.length > 0 && <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#CFFAFE", fontWeight: "600" }}>{selectedBoughtReturns.length} selected</div>}
             </div>
-            <div style={{ padding: "1rem", maxHeight: "500px", overflowY: "auto" }}>
+            <div style={{ padding: "1rem", maxHeight: "500px", overflowY: "auto", background: "#F8FAFC" }}>
               {loading ? (
-                <div style={{ textAlign: "center", padding: "2rem", color: colorScheme.textLight }}>Loading...</div>
+                <div style={{ padding: "3rem", textAlign: "center" }}>
+                   <div className="modern-spinner-small"></div>
+                   <p style={{ marginTop: "1rem", color: "#94a3b8", fontSize: "0.9rem" }}>Fetching records...</p>
+                </div>
               ) : returns.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "3rem", color: colorScheme.textLight }}>{selectedCompany ? "No unprocessed returns available" : "Select a company first"}</div>
               ) : (
@@ -1205,19 +1197,18 @@ export default function BoughtPaymentManagementPage() {
                   const retNote = returnBill.returnNote || returnBill.note || "";
                   return (
                     <div key={returnBill.id} onClick={() => toggleBoughtReturn(returnBill.id)}
-                      style={{ padding: "0.85rem", marginBottom: "0.6rem", border: isSelected ? `2px solid ${colorScheme.secondary}` : "1px solid #E5E7EB", backgroundColor: isSelected ? "#ECFEFF" : "white", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease" }}>
+                      style={{ padding: "0.85rem", marginBottom: "0.6rem", border: isSelected ? `2px solid ${colorScheme.secondary}` : "1px solid #E5E7EB", backgroundColor: isSelected ? "#ECFEFF" : "white", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease", boxShadow: isSelected ? "0 4px 6px -1px rgba(6, 182, 212, 0.1)" : "0 1px 2px rgba(0,0,0,0.05)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: "bold", fontSize: "0.875rem" }}>Return #{returnBill.returnBillNumber || returnBill.id?.slice(-6)}</div>
-                          <div style={{ fontSize: "0.75rem", color: colorScheme.textLight, marginTop: "0.2rem" }}>
+                          <div style={{ fontWeight: "600", fontSize: "0.875rem", color: isSelected ? "#0891B2" : colorScheme.text }}>Return #{returnBill.returnBillNumber || returnBill.id?.slice(-6)}</div>
+                          <div style={{ fontSize: "0.75rem", color: colorScheme.textLight, marginTop: "0.3rem" }}>
                             {formatDateToDMY(returnBill.returnDate || returnBill.date)}
                             {returnBill.items?.length > 0 && <span style={{ marginLeft: "0.5rem" }}>• {returnBill.items.length} item{returnBill.items.length !== 1 ? "s" : ""}</span>}
                           </div>
-                          {retNote && <div style={{ fontSize: "0.7rem", color: "#6B7280", marginTop: "0.25rem", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📝 {retNote}</div>}
-                          <div style={{ fontSize: "0.7rem", marginTop: "0.2rem", color: isSelected ? colorScheme.secondary : colorScheme.danger, fontWeight: "600" }}>{isSelected ? "✓ Selected" : "● Unprocessed"}</div>
+                          {retNote && <div style={{ fontSize: "0.7rem", color: "#6B7280", marginTop: "0.3rem", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📝 {retNote}</div>}
                         </div>
-                        <div style={{ fontWeight: "bold", color: returnCurrency === "USD" ? "#dc2626" : "#b91c1c", fontSize: "0.9rem", textAlign: "right", whiteSpace: "nowrap", marginLeft: "0.5rem" }}>
-                          {returnCurrency === "USD" ? formatUSD(returnTotal) : formatCurrency(returnTotal)}
+                        <div style={{ fontWeight: "bold", color: returnCurrency === "USD" ? "#dc2626" : "#b91c1c", fontSize: "0.95rem", textAlign: "right", whiteSpace: "nowrap", marginLeft: "0.5rem", padding: "0.25rem 0.5rem", background: returnCurrency === "USD" ? "#FEF2F2" : "#FEF2F2", borderRadius: "0.5rem" }}>
+                          -{returnCurrency === "USD" ? formatUSD(returnTotal) : formatCurrency(returnTotal)}
                         </div>
                       </div>
                     </div>
@@ -1228,29 +1219,50 @@ export default function BoughtPaymentManagementPage() {
           </div>
         </div>
 
-        {/* Payment Summary */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.25rem" }}>
-          <h2 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: `2px solid ${colorScheme.secondary}`, color: colorScheme.text }}>💰 Payment Summary</h2>
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "stretch" }}>
-            <div style={{ flex: "1 1 0", minWidth: "0", padding: "0.85rem 1rem", backgroundColor: "#F0FDF9", borderRadius: "0.75rem", border: "1px solid #A7F3D0" }}>
-              <div style={{ fontSize: "0.7rem", fontWeight: "700", color: "#059669", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>📦 Total Bought</div>
-              {currencyTotals.boughtUSD > 0 && <div style={{ color: "#059669", fontWeight: "700", fontSize: "0.95rem" }}>+{formatUSD(currencyTotals.boughtUSD)}</div>}
-              {currencyTotals.boughtIQD > 0 && <div style={{ color: "#2563eb", fontWeight: "700", fontSize: "0.95rem" }}>+{formatCurrency(currencyTotals.boughtIQD)}</div>}
-              {currencyTotals.boughtUSD === 0 && currencyTotals.boughtIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "0.9rem" }}>—</div>}
+        {/* ✅ BEAUTIFUL PAYMENT SUMMARY SECTION - REFINED FONT SIZES */}
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottom: `2px solid ${colorScheme.secondary}`, color: colorScheme.text, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>💰</span> Payment Summary
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.25rem", alignItems: "stretch" }}>
+            
+            {/* Total Bought Card */}
+            <div style={{ padding: "1rem", backgroundColor: "white", borderRadius: "1rem", border: "1px solid #A7F3D0", boxShadow: "0 4px 6px -1px rgba(16, 185, 129, 0.1)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                <div style={{ background: "#D1FAE5", padding: "0.4rem", borderRadius: "0.5rem", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: "1rem" }}>📦</span></div>
+                <div style={{ fontSize: "0.8rem", fontWeight: "600", color: "#059669", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Bought</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                {currencyTotals.boughtUSD > 0 && <div style={{ color: "#059669", fontWeight: "700", fontSize: "1.15rem" }}>+{formatUSD(currencyTotals.boughtUSD)}</div>}
+                {currencyTotals.boughtIQD > 0 && <div style={{ color: "#2563eb", fontWeight: "700", fontSize: "1.15rem" }}>+{formatCurrency(currencyTotals.boughtIQD)}</div>}
+                {currencyTotals.boughtUSD === 0 && currencyTotals.boughtIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "1.1rem", fontWeight: "600" }}>$0.00</div>}
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", fontSize: "1.25rem", color: colorScheme.textLight, flexShrink: 0 }}>−</div>
-            <div style={{ flex: "1 1 0", minWidth: "0", padding: "0.85rem 1rem", backgroundColor: "#FEF2F2", borderRadius: "0.75rem", border: "1px solid #FECACA" }}>
-              <div style={{ fontSize: "0.7rem", fontWeight: "700", color: "#dc2626", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>🔄 Total Return</div>
-              {currencyTotals.returnUSD > 0 && <div style={{ color: "#dc2626", fontWeight: "700", fontSize: "0.95rem" }}>−{formatUSD(currencyTotals.returnUSD)}</div>}
-              {currencyTotals.returnIQD > 0 && <div style={{ color: "#b91c1c", fontWeight: "700", fontSize: "0.95rem" }}>−{formatCurrency(currencyTotals.returnIQD)}</div>}
-              {currencyTotals.returnUSD === 0 && currencyTotals.returnIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "0.9rem" }}>—</div>}
+            
+            {/* Total Return Card */}
+            <div style={{ padding: "1rem", backgroundColor: "white", borderRadius: "1rem", border: "1px solid #FECACA", boxShadow: "0 4px 6px -1px rgba(239, 68, 68, 0.1)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                <div style={{ background: "#FEE2E2", padding: "0.4rem", borderRadius: "0.5rem", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: "1rem" }}>🔄</span></div>
+                <div style={{ fontSize: "0.8rem", fontWeight: "600", color: "#DC2626", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Return</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                {currencyTotals.returnUSD > 0 && <div style={{ color: "#dc2626", fontWeight: "700", fontSize: "1.15rem" }}>−{formatUSD(currencyTotals.returnUSD)}</div>}
+                {currencyTotals.returnIQD > 0 && <div style={{ color: "#b91c1c", fontWeight: "700", fontSize: "1.15rem" }}>−{formatCurrency(currencyTotals.returnIQD)}</div>}
+                {currencyTotals.returnUSD === 0 && currencyTotals.returnIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "1.1rem", fontWeight: "600" }}>$0.00</div>}
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", fontSize: "1.25rem", color: colorScheme.textLight, flexShrink: 0 }}>=</div>
-            <div style={{ flex: "1 1 0", minWidth: "0", padding: "0.85rem 1rem", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", borderRadius: "0.75rem", border: "1px solid #C4B5FD" }}>
-              <div style={{ fontSize: "0.7rem", fontWeight: "700", color: colorScheme.dark, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>💰 Net Amount</div>
-              {currencyTotals.netUSD !== 0 && <div style={{ fontWeight: "800", fontSize: "1rem", color: currencyTotals.netUSD > 0 ? "#059669" : "#dc2626" }}>{currencyTotals.netUSD > 0 ? "+" : ""}{formatUSD(currencyTotals.netUSD)}</div>}
-              {currencyTotals.netIQD !== 0 && <div style={{ fontWeight: "800", fontSize: "1rem", color: currencyTotals.netIQD > 0 ? "#2563eb" : "#b91c1c" }}>{currencyTotals.netIQD > 0 ? "+" : ""}{formatCurrency(currencyTotals.netIQD)}</div>}
-              {currencyTotals.netUSD === 0 && currencyTotals.netIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "0.9rem" }}>—</div>}
+            
+            {/* Net Amount Card */}
+            <div style={{ padding: "1rem", background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)", borderRadius: "1rem", border: "none", boxShadow: "0 10px 15px -3px rgba(124, 58, 237, 0.3)", color: "white", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                <div style={{ background: "rgba(255,255,255,0.2)", padding: "0.4rem", borderRadius: "0.5rem", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: "1rem" }}>💰</span></div>
+                <div style={{ fontSize: "0.8rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "#E0E7FF" }}>Net Amount</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                {currencyTotals.netUSD !== 0 && <div style={{ fontWeight: "700", fontSize: "1.25rem", color: "white" }}>{currencyTotals.netUSD > 0 ? "+" : ""}{formatUSD(currencyTotals.netUSD)}</div>}
+                {currencyTotals.netIQD !== 0 && <div style={{ fontWeight: "700", fontSize: "1.25rem", color: "#FDE047" }}>{currencyTotals.netIQD > 0 ? "+" : ""}{formatCurrency(currencyTotals.netIQD)}</div>}
+                {currencyTotals.netUSD === 0 && currencyTotals.netIQD === 0 && <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "1.25rem", fontWeight: "600" }}>$0.00</div>}
+              </div>
             </div>
           </div>
         </div>
@@ -1266,39 +1278,70 @@ export default function BoughtPaymentManagementPage() {
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
           {isEditMode && (
             <button onClick={handleCancelEdit} disabled={submitting}
-              style={{ flex: "1 1 120px", padding: "0.9rem", backgroundColor: colorScheme.textLight, color: "white", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.95rem", fontWeight: "600" }}>
-              Cancel
+              style={{ flex: "1 1 120px", padding: "0.8rem", backgroundColor: colorScheme.textLight, color: "white", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.95rem", fontWeight: "600", transition: "background 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "#4B5563"}
+              onMouseLeave={e => e.currentTarget.style.background = colorScheme.textLight}
+            >
+              ✕ Cancel
             </button>
           )}
           <button onClick={handleSubmit} disabled={submitting || imageProcessing}
-            style={{ flex: "2 1 200px", padding: "0.9rem", background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, color: "white", border: "none", borderRadius: "0.75rem", cursor: submitting || imageProcessing ? "not-allowed" : "pointer", opacity: submitting || imageProcessing ? 0.8 : 1, fontFamily: "inherit", fontSize: "0.95rem", fontWeight: "700" }}>
-            {imageProcessing ? "⚙️ Processing image..." : submitting ? "⏳ Saving..." : isEditMode ? (imageHasChanged ? "✏️ Update Payment (Image Changed)" : "✏️ Update Payment") : "✅ Create Payment"}
+            style={{ flex: "2 1 200px", padding: "0.8rem", background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, color: "white", border: "none", borderRadius: "0.75rem", cursor: submitting || imageProcessing ? "not-allowed" : "pointer", opacity: submitting || imageProcessing ? 0.8 : 1, fontFamily: "inherit", fontSize: "0.95rem", fontWeight: "700", boxShadow: "0 4px 14px rgba(124, 58, 237, 0.4)", transition: "transform 0.1s" }}
+            onMouseDown={e => { if(!submitting && !imageProcessing) e.currentTarget.style.transform = "scale(0.98)" }}
+            onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+          >
+            {imageProcessing ? "⚙️ Processing image..." : submitting ? "⏳ Saving..." : isEditMode ? (imageHasChanged ? "✏️ Update Payment (Image Changed)" : "✏️ Update Payment") : "✅ Confirm & Save Payment"}
           </button>
         </div>
       </div>
 
       {/* Payment History section */}
       <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
-        <div style={{ background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, padding: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", color: "white", margin: 0 }}>📋 Bought Payment History</h2>
-          {paymentHistory.length > 0 && <div style={{ fontSize: "0.8rem", color: "#DDD6FE", marginTop: "0.25rem" }}>{filteredPayments.length} of {paymentHistory.length} payments</div>}
+        <div style={{ background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, padding: "1.25rem" }}>
+          <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", color: "white", margin: 0 }}>📋 Bought Payment History</h2>
         </div>
 
         <div style={{ padding: "1.5rem" }}>
-          <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-            <input type="text" placeholder="🔍 Quick search: company, payment #, hardcopy, notes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ flex: "1 1 200px", padding: "0.75rem 1rem", border: "1px solid #D1D5DB", borderRadius: "0.75rem", fontSize: "0.875rem", fontFamily: "inherit", boxSizing: "border-box" }} />
-            <button onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
-              style={{ padding: "0.75rem 1.25rem", backgroundColor: showAdvancedSearch ? colorScheme.primary : colorScheme.textLight, color: "white", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: "600", whiteSpace: "nowrap" }}>
-              {showAdvancedSearch ? "▲ Hide Advanced" : "▼ Advanced Search"}
-            </button>
+          <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            
+            <div style={{ flex: "1 1 200px", position: "relative" }}>
+               <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }}>🔍</span>
+               <input type="text" placeholder="Search payments..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                 style={{ ...inputStyle, paddingLeft: "35px" }} />
+            </div>
+
+            <div style={{ flex: "1 1 150px" }}>
+              <select style={inputStyle} value={filters.paymentStatus} onChange={(e) => handleFilterChange("paymentStatus", e.target.value)} className="input-focus">
+                <option value="all">All Status</option>
+                <option value="Paid">Paid</option>
+                <option value="Unpaid">Unpaid</option>
+              </select>
+            </div>
+
+            <div style={{ flex: "1 1 150px" }}>
+              <input type="date" style={inputStyle} value={filters.startDate} onChange={(e) => handleFilterChange("startDate", e.target.value)} className="input-focus" />
+            </div>
+
+            <div style={{ flex: "1 1 150px" }}>
+              <input type="date" style={inputStyle} value={filters.endDate} onChange={(e) => handleFilterChange("endDate", e.target.value)} className="input-focus" />
+            </div>
+            
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button onClick={() => setShowAdvancedSearch(!showAdvancedSearch)} style={{ padding: "0.75rem 1.25rem", height: "42px", backgroundColor: showAdvancedSearch ? colorScheme.primary : colorScheme.textLight, color: "white", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: "600", whiteSpace: "nowrap" }}>
+                 {showAdvancedSearch ? "▲ Hide" : "▼ Filters"}
+              </button>
+              <button onClick={() => setFilters({ paymentStatus: "all", startDate: "", endDate: "" })} style={{ padding: "0.75rem 1rem", height: "42px", backgroundColor: "#E5E7EB", color: "#374151", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: "600", whiteSpace: "nowrap" }}>
+                ✕ Clear
+              </button>
+            </div>
           </div>
 
           {showAdvancedSearch && (
             <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "0.75rem", padding: "1.25rem", marginBottom: "1.25rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
                 <span style={{ fontWeight: "700", fontSize: "0.9rem", color: colorScheme.text }}>🔍 Advanced Search Filters</span>
-                <button onClick={resetAdvancedSearch} style={{ padding: "0.35rem 0.9rem", backgroundColor: "#E5E7EB", color: "#374151", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit", fontWeight: "600" }}>✕ Clear All</button>
+                <button onClick={resetAdvancedSearch} style={{ padding: "0.35rem 0.9rem", backgroundColor: "#E5E7EB", color: "#374151", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit", fontWeight: "600" }}>✕ Clear Advanced</button>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
                 <div>
@@ -1326,37 +1369,29 @@ export default function BoughtPaymentManagementPage() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
                 <div>
-                  <label style={{ ...labelStyle, fontSize: "0.72rem" }}>📅 Payment Date — From</label>
-                  <input className="adv-input" type="date" value={advancedSearch.dateFrom} onChange={e => setAdvancedSearch(p => ({ ...p, dateFrom: e.target.value }))} />
+                  <label style={{ ...labelStyle, fontSize: "0.72rem" }}>💵 Net Amount USD — Range</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#059669", fontWeight: "700", fontSize: "0.85rem" }}>$</span>
+                      <input className="adv-input" type="number" placeholder="Min USD" style={{ paddingLeft: "1.5rem" }} value={advancedSearch.amountMinUSD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMinUSD: e.target.value }))} />
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#059669", fontWeight: "700", fontSize: "0.85rem" }}>$</span>
+                      <input className="adv-input" type="number" placeholder="Max USD" style={{ paddingLeft: "1.5rem" }} value={advancedSearch.amountMaxUSD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMaxUSD: e.target.value }))} />
+                    </div>
+                  </div>
                 </div>
                 <div>
-                  <label style={{ ...labelStyle, fontSize: "0.72rem" }}>📅 Payment Date — To</label>
-                  <input className="adv-input" type="date" value={advancedSearch.dateTo} onChange={e => setAdvancedSearch(p => ({ ...p, dateTo: e.target.value }))} />
-                </div>
-              </div>
-              <div style={{ marginBottom: "0.75rem" }}>
-                <label style={{ ...labelStyle, fontSize: "0.72rem" }}>💵 Net Amount USD — Range</label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                  <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#059669", fontWeight: "700", fontSize: "0.85rem" }}>$</span>
-                    <input className="adv-input" type="number" placeholder="Min USD" style={{ paddingLeft: "1.5rem" }} value={advancedSearch.amountMinUSD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMinUSD: e.target.value }))} />
-                  </div>
-                  <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#059669", fontWeight: "700", fontSize: "0.85rem" }}>$</span>
-                    <input className="adv-input" type="number" placeholder="Max USD" style={{ paddingLeft: "1.5rem" }} value={advancedSearch.amountMaxUSD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMaxUSD: e.target.value }))} />
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label style={{ ...labelStyle, fontSize: "0.72rem" }}>🇮🇶 Net Amount IQD — Range</label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                  <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#2563eb", fontWeight: "600", fontSize: "0.7rem" }}>IQD</span>
-                    <input className="adv-input" type="number" placeholder="Min IQD" style={{ paddingRight: "3rem" }} value={advancedSearch.amountMinIQD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMinIQD: e.target.value }))} />
-                  </div>
-                  <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#2563eb", fontWeight: "600", fontSize: "0.7rem" }}>IQD</span>
-                    <input className="adv-input" type="number" placeholder="Max IQD" style={{ paddingRight: "3rem" }} value={advancedSearch.amountMaxIQD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMaxIQD: e.target.value }))} />
+                  <label style={{ ...labelStyle, fontSize: "0.72rem" }}>🇮🇶 Net Amount IQD — Range</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#2563eb", fontWeight: "600", fontSize: "0.7rem" }}>IQD</span>
+                      <input className="adv-input" type="number" placeholder="Min IQD" style={{ paddingRight: "3rem" }} value={advancedSearch.amountMinIQD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMinIQD: e.target.value }))} />
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#2563eb", fontWeight: "600", fontSize: "0.7rem" }}>IQD</span>
+                      <input className="adv-input" type="number" placeholder="Max IQD" style={{ paddingRight: "3rem" }} value={advancedSearch.amountMaxIQD} onChange={e => setAdvancedSearch(p => ({ ...p, amountMaxIQD: e.target.value }))} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1369,7 +1404,10 @@ export default function BoughtPaymentManagementPage() {
           )}
 
           {historyLoading ? (
-            <div style={{ textAlign: "center", padding: "4rem", color: colorScheme.textLight }}>Loading payment history...</div>
+            <div style={{ textAlign: "center", padding: "4rem" }}>
+              <div className="modern-spinner-small"></div>
+              <p style={{ marginTop: "1rem", color: colorScheme.textLight, fontSize: "0.9rem" }}>Loading payment history...</p>
+            </div>
           ) : filteredPayments.length === 0 ? (
             <div style={{ textAlign: "center", padding: "4rem", color: colorScheme.textLight }}>{paymentHistory.length === 0 ? "No payments yet" : "No payments match your search"}</div>
           ) : (
@@ -1430,46 +1468,114 @@ export default function BoughtPaymentManagementPage() {
         </div>
       </div>
 
-      {/* Payment Details Modal */}
+      {/* ✅ BEAUTIFUL STATEMENT MODAL - REFINED FONTS & LAYOUT */}
       {showPaymentModal && selectedPayment && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem", overflowY: "auto" }}>
-          <div style={{ width: "100%", maxWidth: "750px", maxHeight: "90vh", overflowY: "auto", background: "white", borderRadius: "1rem", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
-            <div style={{ background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, padding: "1.25rem 1.5rem", borderRadius: "1rem 1rem 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem", overflowY: "auto", backdropFilter: "blur(4px)" }} onClick={closePaymentModal}>
+          <div style={{ width: "100%", maxWidth: "850px", maxHeight: "90vh", display: "flex", flexDirection: "column", background: "white", borderRadius: "1.25rem", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* Modal Header */}
+            <div style={{ background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, padding: "1.25rem 1.5rem", borderRadius: "1.25rem 1.25rem 0 0", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
               <div>
-                <h2 style={{ color: "white", margin: 0, fontSize: "1.1rem", fontWeight: "700" }}>Payment Details</h2>
-                <div style={{ color: "#DDD6FE", fontSize: "0.8rem", marginTop: "0.2rem" }}>{formatPaymentNumber(selectedPayment)}</div>
+                <h2 style={{ color: "white", margin: 0, fontSize: "1.2rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span>📑</span> Payment Statement
+                </h2>
+                <div style={{ color: "#E0E7FF", fontSize: "0.85rem", marginTop: "0.2rem", fontWeight: "500", letterSpacing: "0.05em" }}>{formatPaymentNumber(selectedPayment)}</div>
               </div>
-              <button onClick={closePaymentModal} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", fontSize: "1.25rem", cursor: "pointer", borderRadius: "0.5rem", padding: "0.25rem 0.6rem", lineHeight: 1 }}>✕</button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button onClick={() => handlePrintPayment(selectedPayment)} style={{ background: "white", border: "none", color: colorScheme.dark, fontSize: "0.8rem", cursor: "pointer", borderRadius: "0.5rem", padding: "0.4rem 1rem", fontWeight: "700", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>🖨️ Print</button>
+                <button onClick={closePaymentModal} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", fontSize: "1.25rem", cursor: "pointer", borderRadius: "0.5rem", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.3)"} onMouseLeave={e => e.currentTarget.style.background="rgba(255,255,255,0.2)"}>✕</button>
+              </div>
             </div>
-            <div style={{ padding: "1.5rem" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem", padding: "1rem", background: "#F8FAFC", borderRadius: "0.75rem" }}>
-                <div><div style={{ fontSize: "0.7rem", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", marginBottom: "0.2rem" }}>Company</div><div style={{ fontWeight: "600", fontSize: "0.9rem" }}>{selectedPayment.companyName}</div></div>
-                <div><div style={{ fontSize: "0.7rem", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", marginBottom: "0.2rem" }}>Hardcopy Bill</div><div style={{ fontWeight: "600", fontSize: "0.9rem" }}>{selectedPayment.hardcopyBillNumber}</div></div>
-                <div><div style={{ fontSize: "0.7rem", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", marginBottom: "0.2rem" }}>Payment Date</div><div style={{ fontWeight: "600", fontSize: "0.9rem" }}>{formatDateToDMY(selectedPayment.paymentDate)}</div></div>
-                <div><div style={{ fontSize: "0.7rem", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", marginBottom: "0.2rem" }}>Created By</div><div style={{ fontWeight: "600", fontSize: "0.9rem" }}>{getFirstName(selectedPayment.createdByName)}</div></div>
+
+            {/* Modal Body (Scrollable) */}
+            <div style={{ padding: "1.5rem", overflowY: "auto", flex: 1 }}>
+              
+              {/* Top Info Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1.25rem", paddingBottom: "1.25rem", borderBottom: "1px solid #E5E7EB" }}>
+                <div>
+                  <div style={{ fontSize: "0.75rem", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>Bill To</div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: "700", color: colorScheme.text }}>{selectedPayment.companyName}</div>
+                  <div style={{ fontSize: "0.8rem", color: colorScheme.textLight, marginTop: "0.25rem" }}>Hardcopy: <span style={{ fontWeight: "600", color: colorScheme.text }}>{selectedPayment.hardcopyBillNumber}</span></div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>Payment Details</div>
+                  <div style={{ fontSize: "0.9rem", fontWeight: "600", color: colorScheme.text }}>{formatDateToDMY(selectedPayment.paymentDate)}</div>
+                  <div style={{ fontSize: "0.8rem", color: colorScheme.textLight, marginTop: "0.25rem" }}>Processed by: {getFirstName(selectedPayment.createdByName)}</div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+                {/* Bought */}
+                <div style={{ background: "#F0FDF4", border: "1px solid #A7F3D0", borderRadius: "1rem", padding: "1rem" }}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#059669", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>📦 Total Bought</div>
+                  {(() => {
+                    const bUSD = selectedPayment.boughtTotalUSD || 0;
+                    const bIQD = selectedPayment.boughtTotalIQD || 0;
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                        {bUSD > 0 && <div style={{ color: "#059669", fontWeight: "700", fontSize: "1.1rem" }}>+{formatUSD(bUSD)}</div>}
+                        {bIQD > 0 && <div style={{ color: "#2563eb", fontWeight: "700", fontSize: "1.1rem" }}>+{formatCurrency(bIQD)}</div>}
+                        {bUSD === 0 && bIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "1.1rem", fontWeight: "600" }}>$0.00</div>}
+                      </div>
+                    );
+                  })()}
+                </div>
+                {/* Return */}
+                <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "1rem", padding: "1rem" }}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#DC2626", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>🔄 Total Return</div>
+                  {(() => {
+                    const rUSD = selectedPayment.returnTotalUSD || 0;
+                    const rIQD = selectedPayment.returnTotalIQD || 0;
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                        {rUSD > 0 && <div style={{ color: "#dc2626", fontWeight: "700", fontSize: "1.1rem" }}>−{formatUSD(rUSD)}</div>}
+                        {rIQD > 0 && <div style={{ color: "#b91c1c", fontWeight: "700", fontSize: "1.1rem" }}>−{formatCurrency(rIQD)}</div>}
+                        {rUSD === 0 && rIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "1.1rem", fontWeight: "600" }}>$0.00</div>}
+                      </div>
+                    );
+                  })()}
+                </div>
+                {/* Net */}
+                <div style={{ background: "linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%)", border: "1px solid #C7D2FE", borderRadius: "1rem", padding: "1rem", boxShadow: "0 4px 6px -1px rgba(79, 70, 229, 0.1)" }}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: "800", color: "#4F46E5", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>💰 Net Amount Paid</div>
+                  {(() => {
+                    const nUSD = selectedPayment.netAmountUSD || 0;
+                    const nIQD = selectedPayment.netAmountIQD || 0;
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                        {nUSD !== 0 && <div style={{ color: nUSD > 0 ? "#059669" : "#DC2626", fontWeight: "700", fontSize: "1.15rem" }}>{nUSD > 0 ? "+" : ""}{formatUSD(nUSD)}</div>}
+                        {nIQD !== 0 && <div style={{ color: nIQD > 0 ? "#2563eb" : "#B91C1C", fontWeight: "700", fontSize: "1.15rem" }}>{nIQD > 0 ? "+" : ""}{formatCurrency(nIQD)}</div>}
+                        {nUSD === 0 && nIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "1.15rem", fontWeight: "600" }}>$0.00</div>}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
 
               {/* Bought Bills Table */}
-              {paymentDetails[selectedPayment.id]?.boughtBills?.length > 0 ? (
-                <div style={{ marginBottom: "1.25rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", marginBottom: "0.75rem", color: colorScheme.text }}>📦 Bought Bills ({paymentDetails[selectedPayment.id].boughtBills.length})</h3>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+              {paymentDetails[selectedPayment.id]?.boughtBills?.length > 0 && (
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", marginBottom: "0.75rem", color: colorScheme.text, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{background: "#D1FAE5", padding: "4px", borderRadius: "6px"}}>📦</span> Bought Bills
+                  </h3>
+                  <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                       <thead>
-                        <tr style={{ background: "#F3F4F6" }}>
-                          <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Bill #</th>
-                          <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Date</th>
-                          <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Note</th>
-                          <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Amount</th>
+                        <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                          <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Bill #</th>
+                          <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Date</th>
+                          <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Note</th>
+                          <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Amount</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {paymentDetails[selectedPayment.id].boughtBills.map((bill) => (
-                          <tr key={bill.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                            <td style={{ padding: "8px 10px", fontWeight: "600" }}>#{bill.billNumber || bill.id}</td>
-                            <td style={{ padding: "8px 10px", color: colorScheme.textLight }}>{formatDateToDMY(bill.date)}</td>
-                            <td style={{ padding: "8px 10px", color: colorScheme.textLight, fontStyle: "italic", fontSize: "0.78rem" }}>{bill.billNote || "—"}</td>
-                            <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#059669" }}>
+                        {paymentDetails[selectedPayment.id].boughtBills.map((bill, i) => (
+                          <tr key={bill.id} style={{ borderBottom: i === paymentDetails[selectedPayment.id].boughtBills.length - 1 ? "none" : "1px solid #F3F4F6", background: i % 2 === 0 ? "white" : "#FAFAFA" }}>
+                            <td style={{ padding: "10px 12px", fontWeight: "600", color: colorScheme.text }}>#{bill.billNumber || bill.id}</td>
+                            <td style={{ padding: "10px 12px", color: colorScheme.textLight }}>{formatDateToDMY(bill.date)}</td>
+                            <td style={{ padding: "10px 12px", color: colorScheme.textLight, fontStyle: "italic", fontSize: "0.8rem", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bill.billNote || "—"}</td>
+                            <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: "600", color: "#059669" }}>
                               +{getDisplayAmount(bill.totalAmountUSD || 0, bill.totalAmountIQD || 0)}
                             </td>
                           </tr>
@@ -1478,29 +1584,31 @@ export default function BoughtPaymentManagementPage() {
                     </table>
                   </div>
                 </div>
-              ) : null}
+              )}
 
               {/* Returns Table */}
-              {paymentDetails[selectedPayment.id]?.returns?.length > 0 ? (
-                <div style={{ marginBottom: "1.25rem" }}>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", marginBottom: "0.75rem", color: colorScheme.text }}>🔄 Returns ({paymentDetails[selectedPayment.id].returns.length})</h3>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+              {paymentDetails[selectedPayment.id]?.returns?.length > 0 && (
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <h3 style={{ fontSize: "0.95rem", fontWeight: "700", marginBottom: "0.75rem", color: colorScheme.text, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{background: "#FEE2E2", padding: "4px", borderRadius: "6px"}}>🔄</span> Returns
+                  </h3>
+                  <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: "0.75rem" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                       <thead>
-                        <tr style={{ background: "#F3F4F6" }}>
-                          <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Return #</th>
-                          <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Date</th>
-                          <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Note</th>
-                          <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: colorScheme.textLight, fontSize: "0.72rem", textTransform: "uppercase" }}>Amount</th>
+                        <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                          <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Return #</th>
+                          <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Date</th>
+                          <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Note</th>
+                          <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: "700", color: colorScheme.textLight, textTransform: "uppercase", fontSize: "0.7rem" }}>Amount</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {paymentDetails[selectedPayment.id].returns.map((ret) => (
-                          <tr key={ret.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                            <td style={{ padding: "8px 10px", fontWeight: "600" }}>{ret.returnBillNumber || ret.id?.slice(-6)}</td>
-                            <td style={{ padding: "8px 10px", color: colorScheme.textLight }}>{formatDateToDMY(ret.returnDate || ret.date)}</td>
-                            <td style={{ padding: "8px 10px", color: colorScheme.textLight, fontStyle: "italic", fontSize: "0.78rem" }}>{ret.returnNote || "—"}</td>
-                            <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#dc2626" }}>
+                        {paymentDetails[selectedPayment.id].returns.map((ret, i) => (
+                          <tr key={ret.id} style={{ borderBottom: i === paymentDetails[selectedPayment.id].returns.length - 1 ? "none" : "1px solid #F3F4F6", background: i % 2 === 0 ? "white" : "#FAFAFA" }}>
+                            <td style={{ padding: "10px 12px", fontWeight: "600", color: colorScheme.text }}>#{ret.returnBillNumber || ret.id?.slice(-6)}</td>
+                            <td style={{ padding: "10px 12px", color: colorScheme.textLight }}>{formatDateToDMY(ret.returnDate || ret.date)}</td>
+                            <td style={{ padding: "10px 12px", color: colorScheme.textLight, fontStyle: "italic", fontSize: "0.8rem", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ret.returnNote || "—"}</td>
+                            <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: "600", color: "#DC2626" }}>
                               -{getDisplayAmount(ret.totalReturnUSD || 0, ret.totalReturnIQD || 0)}
                             </td>
                           </tr>
@@ -1509,41 +1617,16 @@ export default function BoughtPaymentManagementPage() {
                     </table>
                   </div>
                 </div>
-              ) : null}
+              )}
 
-              {/* Net Amount */}
-              <div style={{ padding: "1rem", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", borderRadius: "0.75rem", marginBottom: "1rem" }}>
-                <div style={{ fontWeight: "700", marginBottom: "0.5rem", fontSize: "0.85rem", color: colorScheme.dark }}>💰 Net Amount Paid</div>
-                <div style={{ fontSize: "1.1rem", fontWeight: "800", color: selectedPayment.netAmountIQD < 0 ? "#dc2626" : "#059669" }}>
-                  {(() => {
-                    const netUSD = selectedPayment.netAmountUSD || 0;
-                    const netIQD = selectedPayment.netAmountIQD || 0;
-                    if (netIQD !== 0) {
-                      return netIQD < 0 ? formatCurrency(netIQD) : `+${formatCurrency(netIQD)}`;
-                    }
-                    if (netUSD !== 0) {
-                      return netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`;
-                    }
-                    return "0 IQD";
-                  })()}
-                </div>
-              </div>
-
+              {/* Payment Notes */}
               {selectedPayment.notes && (
-                <div style={{ marginBottom: "1rem", padding: "0.85rem", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "0.75rem", fontSize: "0.85rem" }}>
-                  <strong>📝 Notes:</strong>
-                  <p style={{ margin: "0.3rem 0 0", color: colorScheme.textLight }}>{selectedPayment.notes}</p>
+                <div style={{ padding: "1rem", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "0.75rem", fontSize: "0.85rem" }}>
+                  <div style={{ fontWeight: "700", color: "#B45309", marginBottom: "0.25rem" }}>📝 Payment Notes</div>
+                  <div style={{ color: colorScheme.text }}>{selectedPayment.notes}</div>
                 </div>
               )}
 
-              {getPaymentImage(selectedPayment) && (
-                <div style={{ textAlign: "center" }}>
-                  <img src={getPaymentImage(selectedPayment)} alt="Bill"
-                    style={{ maxWidth: "250px", maxHeight: "250px", borderRadius: "0.5rem", cursor: "pointer", border: "1px solid #E5E7EB", filter: "grayscale(100%)" }}
-                    onClick={() => handleViewImage(getPaymentImage(selectedPayment))} />
-                  <div style={{ fontSize: "0.72rem", color: colorScheme.textLight, marginTop: "0.3rem" }}>Click image to enlarge</div>
-                </div>
-              )}
             </div>
           </div>
         </div>
