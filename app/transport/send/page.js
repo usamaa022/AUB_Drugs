@@ -26,26 +26,40 @@ export default function SendTransportPage() {
       router.push("/login");
       return;
     }
+    // Set default branches safely (case-insensitive check)
     if (user) {
-      const userBranch = user.branch;
-      setFromBranch(userBranch);
-      setToBranch(userBranch === "Slemany" ? "Erbil" : "Slemany");
+      const isSlemany = user.branch?.toLowerCase() === "slemany";
+      const defaultFrom = isSlemany ? "Slemany" : "Erbil";
+      const defaultTo = isSlemany ? "Erbil" : "Slemany";
+      
+      setFromBranch(defaultFrom);
+      setToBranch(defaultTo);
     }
   }, [user, router]);
 
   const fetchStoreItems = async () => {
     try {
       setIsLoading(true);
-      const items = await getStoreItems();
-      let branchItems;
-      if (user.role === "superAdmin") {
-        branchItems = items.filter((item) => item.branch === fromBranch && item.quantity > 0);
-      } else {
-        branchItems = items.filter((item) => item.branch === user.branch && item.quantity > 0);
-      }
+      setError(null); // FIX: Clear previous errors before fetching
+
+      const fetchedItems = await getStoreItems();
+      
+      // Determine which branch we are pulling inventory from
+      const targetBranch = user.role === "superAdmin" ? fromBranch : user.branch;
+
+      // FIX: Case-insensitive filtering and strict Number check for quantity
+      const branchItems = fetchedItems.filter((item) => {
+        const itemBranch = item.branch || "";
+        const branchMatch = itemBranch.toLowerCase() === targetBranch?.toLowerCase();
+        const hasQuantity = Number(item.quantity) > 0;
+        
+        return branchMatch && hasQuantity;
+      });
+
       if (branchItems.length === 0) {
-        setError("No items available in store. Please add items to the store first.");
+        setError(`No items available in store for ${targetBranch}. Please add items to the store first.`);
       }
+
       setStoreItems(branchItems);
     } catch (err) {
       console.error("Error fetching store items:", err);
@@ -56,7 +70,7 @@ export default function SendTransportPage() {
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !fromBranch) return; // Wait until fromBranch is set
     fetchStoreItems();
   }, [user, fromBranch]);
 
@@ -81,7 +95,7 @@ export default function SendTransportPage() {
   const getBatchesForItem = (barcode) => {
     const uniqueBatches = {};
     storeItems
-      .filter((item) => item.barcode === barcode && item.quantity > 0)
+      .filter((item) => item.barcode === barcode && Number(item.quantity) > 0)
       .forEach((item) => {
         let expireDate = item.expireDate;
         if (expireDate && expireDate.toDate) {
@@ -95,7 +109,7 @@ export default function SendTransportPage() {
             quantity: 0,
           };
         }
-        uniqueBatches[key].quantity += item.quantity;
+        uniqueBatches[key].quantity += Number(item.quantity);
       });
 
     const batches = Object.values(uniqueBatches).sort((a, b) => {
@@ -124,8 +138,10 @@ export default function SendTransportPage() {
         quantity: parseInt(item.quantity),
         expireDate: toFirestoreTimestamp(item.expireDate),
       }));
-
-      await sendTransport(fromBranch, toBranch, preparedItems, user.uid, sendDate, notes);
+// Pulls the exact database casing from the first item being sent
+      const exactFromBranch = preparedItems[0]?.branch || fromBranch; 
+      
+      await sendTransport(exactFromBranch, toBranch, preparedItems, user.uid, sendDate, notes);
       setSuccess("Transport sent successfully!");
       setItems([]);
       setNotes("");
@@ -179,7 +195,7 @@ export default function SendTransportPage() {
           outPrice: Number(batch.outPrice),
           expireDate: normalizedExpireDate,
           availableQuantity: batch.quantity,
-          branch: fromBranch,
+          branch: batch.branch, // Uses the exact casing from the database
         },
       ]);
     }
@@ -203,12 +219,20 @@ export default function SendTransportPage() {
     newItems.splice(index, 1);
     setItems(newItems);
   };
+  
+  // FIX: Handle SuperAdmin branch switching intelligently
+  const handleFromBranchChange = (e) => {
+    const newFromBranch = e.target.value;
+    setFromBranch(newFromBranch);
+    setToBranch(newFromBranch === "Slemany" ? "Erbil" : "Slemany");
+    setItems([]); // Clear currently selected items so they don't accidentally send wrong branch stock
+  };
 
   if (!user) {
     return null;
   }
 
-  if (isLoading) {
+  if (isLoading && storeItems.length === 0) {
     return (
       <div style={{ width: '100%', minHeight: '100vh', padding: '1rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '256px' }}>
@@ -260,7 +284,7 @@ export default function SendTransportPage() {
               {user && user.role === "superAdmin" ? (
                 <select
                   value={fromBranch}
-                  onChange={(e) => setFromBranch(e.target.value)}
+                  onChange={handleFromBranchChange}
                   className="input"
                   required
                 >
@@ -270,7 +294,7 @@ export default function SendTransportPage() {
               ) : (
                 <input
                   type="text"
-                  value={user?.branch || ""}
+                  value={fromBranch}
                   readOnly
                   className="input"
                   style={{ backgroundColor: '#f3f4f6' }}

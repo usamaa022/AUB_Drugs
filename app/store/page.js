@@ -701,7 +701,6 @@ export default function StorePage() {
     );
   };
 
-  // ⬇️ NOTE: Added 'colWidth' to TableHeader to control specific column sizes
   const TableHeader = ({ title, columnKey, type = "string", colWidth }) => (
     <th style={{ 
       backgroundColor: "#34495e", color: "white", padding: "12px 10px", 
@@ -790,32 +789,30 @@ export default function StorePage() {
 
   if (isLoading) {
     return (
-      <div style={{ width: '100%', minHeight: '100vh', padding: '2rem', ...nrtFontStyle }}>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '256px' }}>
-          <div style={{
-            animation: 'spin 1s linear infinite',
-            borderRadius: '9999px',
-            height: '40px',
-            width: '40px',
-            borderTop: '2px solid #3b82f6',
-            borderBottom: '2px solid #3b82f6'
-          }}></div>
-        </div>
+      <div style={{ width: '100%', margin: 0, padding: 0, boxSizing: 'border-box', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'white', ...nrtFontStyle }}>
+        <div style={{
+          animation: 'spin 1s linear infinite',
+          borderRadius: '9999px',
+          height: '40px',
+          width: '40px',
+          borderTop: '2px solid #3b82f6',
+          borderBottom: '2px solid #3b82f6'
+        }}></div>
       </div>
     );
   }
 
   return (
-    // ⬇️ NOTE: Adjusted padding here (0.5rem) to reduce left/right blank space on the screen
-    <div style={{ width: '100%', minHeight: '100vh', padding: '0.5rem', backgroundColor: '#f3f4f6', ...nrtFontStyle }}>
+    // 0 margins, 0 padding on the outermost container to ensure 100% full screen width
+    <div style={{ width: '100%', margin: 0, padding: 0, boxSizing: 'border-box', backgroundColor: 'white', ...nrtFontStyle, minHeight: '100vh' }}>
       
-      {/* ⬇️ NOTE: Adjusted padding here (1.5rem 5px) to remove the huge blank spaces next to the table inside the white card */}
-      <div style={{ maxWidth: '100%', overflow: 'hidden', backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem 5px' }}>
+      {/* Wrapper with no card edges, just pure full width */}
+      <div style={{ width: '100%', boxSizing: 'border-box' }}>
         
-        {/* Header and controls */}
-        <div style={{ marginBottom: '1.5rem', padding: '0 1rem' }}>
+        {/* Header and controls (A tiny bit of padding here so the text doesn't hit the physical screen edge) */}
+        <div style={{ padding: '15px 15px 0 15px', width: '100%', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#1f2937', ...nrtFontBoldStyle }}>Store Inventory</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#1f2937', margin: 0, ...nrtFontBoldStyle }}>Store Inventory</h2>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 onClick={exportToExcel}
@@ -900,11 +897,13 @@ export default function StorePage() {
 
           {/* Date Search Section */}
           <div style={{
-            padding: '1rem',
+            padding: '10px',
             backgroundColor: '#f9fafb',
             borderRadius: '8px',
             border: '1px solid #e5e7eb',
-            marginBottom: '1.5rem'
+            marginBottom: '1.5rem',
+            width: '100%',
+            boxSizing: 'border-box'
           }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <div>
@@ -913,7 +912,7 @@ export default function StorePage() {
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                  style={{ width: '100%', padding: '8px 12px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
                 />
               </div>
               <div>
@@ -922,7 +921,7 @@ export default function StorePage() {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                  style={{ width: '100%', padding: '8px 12px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
                 />
               </div>
               <div>
@@ -931,7 +930,7 @@ export default function StorePage() {
                   type="date"
                   value={expireBefore}
                   onChange={handleExpireBeforeChange}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                  style={{ width: '100%', padding: '8px 12px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
                 />
               </div>
             </div>
@@ -967,11 +966,11 @@ export default function StorePage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table Area (0 horizontal margin/padding to stretch 100%) */}
         {filteredItems.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem', backgroundColor: 'white', borderRadius: '8px', ...nrtFontStyle }}>
-            <div style={{ margin: '0 auto 16px', height: '48px', width: '48px', borderRadius: '9999px', backgroundColor: '#f3f4f6' }}>
-              <svg style={{ height: '24px', width: '24px', color: '#9ca3af' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div style={{ textAlign: 'center', padding: '3rem', margin: '0 15px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb', ...nrtFontStyle }}>
+            <div style={{ margin: '0 auto 16px', height: '48px', width: '48px', borderRadius: '9999px', backgroundColor: '#e5e7eb' }}>
+              <svg style={{ height: '24px', width: '24px', color: '#9ca3af', transform: 'translate(12px, 12px)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
               </svg>
             </div>
@@ -985,25 +984,19 @@ export default function StorePage() {
             </p>
           </div>
         ) : (
-          /* ========================================================================= */
-          /* ⬇️ NOTE: TABLE HEIGHT SETTINGS ⬇️                                         */
-          /* You can change the minHeight and maxHeight here to maximize the table.    */
-          /* Setting a large minHeight ensures filter dropdowns do not get cut off.    */
-          /* ========================================================================= */
           <div style={{ 
+            width: '100%',
             overflowX: 'auto', 
             overflowY: 'auto', 
             minHeight: '65vh', 
             maxHeight: '85vh', 
-            borderRadius: '8px', 
-            border: '1px solid #e5e7eb' 
+            borderTop: '1px solid #e5e7eb',
+            borderBottom: '1px solid #e5e7eb'
           }}>
-            {/* ⬇️ NOTE: Reduce minWidth from 1600px to 1000px so columns don't stretch artificially */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+            {/* Table margins set strictly to 0 */}
+            <table style={{ width: '100%', margin: 0, borderCollapse: 'collapse', minWidth: '1000px' }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr style={{ backgroundColor: '#f9fafb' }}>
-                  {/* ⬇️ NOTE: Adjust individual column widths via 'colWidth' prop here. 
-                      'Item Name' is set to 'auto' so it takes all the remaining space. */}
                   <TableHeader title="Barcode" columnKey="barcode" colWidth="100px" />
                   <TableHeader title="Item Name" columnKey="name" colWidth="auto" />
                   {user?.role === "superAdmin" && (
@@ -1020,7 +1013,7 @@ export default function StorePage() {
                   <TableHeader title="Out Price (IQD)" columnKey="outPriceIQD" type="number" colWidth="110px" />
                   <TableHeader title="Quantity" columnKey="quantity" type="number" colWidth="90px" />
                   <TableHeader title="Expiry Date" columnKey="expireDate" colWidth="120px" />
-                  <th style={{ padding: '12px', textAlign: 'left', backgroundColor: "#34495e", color: "white", width: "80px", ...nrtFontBoldStyle }}>Actions</th>
+                  <th style={{ padding: '12px', textAlign: 'left', backgroundColor: "#34495e", color: "white", width: "80px", borderRight: 'none', ...nrtFontBoldStyle }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1173,7 +1166,7 @@ export default function StorePage() {
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '12px' }}>
+                      <td style={{ padding: '12px', borderRight: 'none' }}>
                         <button
                           onClick={() => {
                             setEditingItem(item);
@@ -1208,22 +1201,22 @@ export default function StorePage() {
               </tbody>
               <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 1 }}>
                 <tr style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb', boxShadow: '0 -2px 4px rgba(0,0,0,0.05)' }}>
-                  <td colSpan={user.role === "superAdmin" ? 6 : 5} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', ...nrtFontBoldStyle }}>
+                  <td colSpan={user.role === "superAdmin" ? 6 : 5} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
                     Totals:
                   </td>
-                  <td style={{ padding: '12px', fontWeight: '600', color: '#1f2937', ...nrtFontBoldStyle }}>
+                  <td style={{ padding: '12px', fontWeight: '600', color: '#1f2937', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
                     {totalQuantity}
                   </td>
-                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#065f46', ...nrtFontBoldStyle }}>
+                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#065f46', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
                     USD Base: {formatUSD(totalBaseValueUSD)}<br/>
                     USD Net: {formatUSD(totalNetValueUSD)}
                   </td>
-                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#92400e', ...nrtFontBoldStyle }}>
+                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#92400e', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
                     IQD Base: {formatIQD(totalBaseValueIQD)}<br/>
                     IQD Net: {formatIQD(totalNetValueIQD)}
                   </td>
-                  <td style={{ padding: '12px' }}></td>
-                  <td style={{ padding: '12px' }}></td>
+                  <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}></td>
+                  <td style={{ padding: '12px', borderRight: 'none' }}></td>
                 </tr>
               </tfoot>
             </table>
@@ -1352,7 +1345,7 @@ export default function StorePage() {
                   type="number"
                   value={editForm.quantity}
                   onChange={(e) => setEditForm({...editForm, quantity: e.target.value})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                   required
                   min="0"
                 />
@@ -1363,7 +1356,7 @@ export default function StorePage() {
                 <select
                   value={editForm.priceType}
                   onChange={(e) => setEditForm({...editForm, priceType: e.target.value})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                 >
                   <option value="USD">USD ($)</option>
                   <option value="IQD">IQD (د.ع)</option>
@@ -1379,7 +1372,7 @@ export default function StorePage() {
                       step="0.01"
                       value={editForm.basePriceUSD}
                       onChange={(e) => setEditForm({...editForm, basePriceUSD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                       required
                       min="0"
                     />
@@ -1392,7 +1385,7 @@ export default function StorePage() {
                       step="0.01"
                       value={editForm.netPriceUSD}
                       onChange={(e) => setEditForm({...editForm, netPriceUSD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                       required
                       min="0"
                     />
@@ -1406,7 +1399,7 @@ export default function StorePage() {
                       step="0.01"
                       value={editForm.outPriceUSD}
                       onChange={(e) => setEditForm({...editForm, outPriceUSD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                       required
                       min="0"
                     />
@@ -1421,7 +1414,7 @@ export default function StorePage() {
                       type="number"
                       value={editForm.basePriceIQD}
                       onChange={(e) => setEditForm({...editForm, basePriceIQD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                       required
                       min="0"
                     />
@@ -1433,7 +1426,7 @@ export default function StorePage() {
                       type="number"
                       value={editForm.netPriceIQD}
                       onChange={(e) => setEditForm({...editForm, netPriceIQD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                       required
                       min="0"
                     />
@@ -1446,7 +1439,7 @@ export default function StorePage() {
                       type="number"
                       value={editForm.outPriceIQD}
                       onChange={(e) => setEditForm({...editForm, outPriceIQD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', ...nrtFontStyle }}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
                       required
                       min="0"
                     />

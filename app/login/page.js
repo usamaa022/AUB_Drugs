@@ -4,6 +4,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, Store } from "lucide-react";
 
+// --- NEW: Import Firebase to fetch the role after login ---
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase"; // Make sure this path matches your project structure
+
 export default function LoginPage() {
   const { user, login } = useAuth();
   const router = useRouter();
@@ -24,7 +28,21 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
+      // 1. Authenticate using your AuthContext
       await login(email, password);
+
+      // 2. NEW FIX: Fetch user data from Firestore and save role to localStorage
+      if (auth.currentUser) {
+        const userDocRef = doc(db, "users", auth.currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          // This saves the exact role (e.g., 'superAdmin') so SoldPage can read it
+          localStorage.setItem("userRole", userData.role);
+        }
+      }
+
     } catch (err) {
       // Keep email, only clear password and show error
       setPassword("");

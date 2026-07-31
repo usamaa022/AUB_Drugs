@@ -432,10 +432,10 @@ export default function ItemsPage() {
       fontSize: '0.9rem', 
       fontWeight: '600', 
       color: '#475569',
-      position: 'sticky',         // ✅ CHANGED HERE: Keeps the header fixed while scrolling
-      top: 0,                     // ✅ CHANGED HERE: Pinned to the top edge of the scroll container
-      backgroundColor: '#f8fafc', // ✅ CHANGED HERE: Ensures background stays solid
-      zIndex: 10                  // ✅ CHANGED HERE: Keeps it above the scrolling rows
+      position: 'sticky',
+      top: 0,
+      backgroundColor: '#f8fafc',
+      zIndex: 10
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
         <div onClick={() => handleSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1, userSelect: "none" }}>
@@ -489,11 +489,14 @@ export default function ItemsPage() {
     <div style={{
       minHeight: '100vh',
       background: '#f8fafc',
-      padding: '2rem 1rem'
+      padding: '10px',
+      width: '100%',
+      boxSizing: 'border-box'
     }}>
       <div style={{
-        maxWidth: '1200px',
-        margin: '0 auto'
+        width: '100%',
+        maxWidth: '100%',
+        margin: '0'
       }}>
         {/* Header */}
         <div style={{ marginBottom: '2rem' }}>
@@ -604,7 +607,8 @@ export default function ItemsPage() {
                     fontSize: '0.9rem',
                     outline: 'none',
                     background: barcodeError ? '#fffbeb' : 'white',
-                    fontFamily: 'monospace'
+                    fontFamily: 'monospace',
+                    boxSizing: 'border-box'
                   }}
                   placeholder={barcodeMode === "auto" ? "Auto-generated" : "Enter barcode"}
                   value={formData.barcode}
@@ -631,7 +635,8 @@ export default function ItemsPage() {
                     border: '1px solid #e2e8f0',
                     borderRadius: '6px',
                     fontSize: '0.9rem',
-                    outline: 'none'
+                    outline: 'none',
+                    boxSizing: 'border-box'
                   }}
                   placeholder="Enter item name"
                   value={formData.name}
@@ -706,7 +711,7 @@ export default function ItemsPage() {
               Total Items: <strong style={{ color: '#1e293b' }}>{filteredItems.length}</strong>
               {Object.keys(columnFilters).length > 0 && (
                  <span style={{ marginLeft: "10px", fontSize: "0.85rem", color: "#ef4444", cursor: "pointer" }} onClick={() => setColumnFilters({})}>
-                    Clear Filters
+                   Clear Filters
                  </span>
               )}
             </div>
@@ -717,7 +722,8 @@ export default function ItemsPage() {
                 borderRadius: '6px',
                 fontSize: '0.9rem',
                 width: '250px',
-                outline: 'none'
+                outline: 'none',
+                boxSizing: 'border-box'
               }}
               placeholder="Global Search (Name/Barcode)"
               value={searchQuery}
@@ -728,9 +734,9 @@ export default function ItemsPage() {
           {/* Table */}
           <div style={{ 
             overflowX: 'auto', 
-            overflowY: 'auto',              // ✅ CHANGED HERE: Enabled vertical scrolling inside the list
-            height: 'calc(100vh - 350px)',  // ✅ CHANGED HERE: Maximized height dynamically based on viewport
-            minHeight: '500px'              // ✅ CHANGED HERE: Safely increased the minimum height limit
+            overflowY: 'auto',
+            height: 'calc(100vh - 350px)',
+            minHeight: '500px'
           }}>
             <table style={{
               width: '100%',
@@ -746,10 +752,10 @@ export default function ItemsPage() {
                     fontWeight: '600', 
                     color: '#475569', 
                     width: '60px',
-                    position: 'sticky',         // ✅ CHANGED HERE: Made the index column header sticky
-                    top: 0,                     // ✅ CHANGED HERE: Pinned to top
-                    backgroundColor: '#f8fafc', // ✅ CHANGED HERE: Solid background
-                    zIndex: 10                  // ✅ CHANGED HERE: Kept above the rows
+                    position: 'sticky',
+                    top: 0,
+                    backgroundColor: '#f8fafc',
+                    zIndex: 10
                   }}>#</th>
                   <TableHeader title="Barcode" columnKey="barcode" />
                   <TableHeader title="Item Name" columnKey="name" />
@@ -760,10 +766,10 @@ export default function ItemsPage() {
                     fontWeight: '600', 
                     color: '#475569', 
                     width: '120px',
-                    position: 'sticky',         // ✅ CHANGED HERE: Made the actions column header sticky
-                    top: 0,                     // ✅ CHANGED HERE: Pinned to top
-                    backgroundColor: '#f8fafc', // ✅ CHANGED HERE: Solid background
-                    zIndex: 10                  // ✅ CHANGED HERE: Kept above the rows
+                    position: 'sticky',
+                    top: 0,
+                    backgroundColor: '#f8fafc',
+                    zIndex: 10
                   }}>Actions</th>
                 </tr>
               </thead>

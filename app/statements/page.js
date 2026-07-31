@@ -1,13 +1,11 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
-import Card from "@/components/Card";
-import PharmacySelectionModal from "@/components/PharmacySelectionModal";
+import { useState, useEffect, useCallback } from "react";
+import Select from "react-select";
 import { format } from "date-fns";
 import { getPharmacies, getPharmacyBills, getReturnsForPharmacy } from "@/lib/data";
 
 export default function StatementPage() {
   const [selectedPharmacy, setSelectedPharmacy] = useState(null);
-  const [showModal, setShowModal] = useState(true);
   const [bills, setBills] = useState([]);
   const [returns, setReturns] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,8 +16,8 @@ export default function StatementPage() {
   useEffect(() => {
     const fetchPharmacies = async () => {
       try {
-        const pharmacies = await getPharmacies();
-        setPharmacies(pharmacies);
+        const data = await getPharmacies();
+        setPharmacies(data);
       } catch (err) {
         console.error("Error fetching pharmacies:", err);
       }
@@ -27,102 +25,98 @@ export default function StatementPage() {
     fetchPharmacies();
   }, []);
 
-  // Currency formatting function
+  // Enhanced Currency Formatting
   const formatCurrency = (amount, currency = "IQD") => {
+    const safeAmount = Number(amount) || 0;
     if (currency === "USD") {
       return new Intl.NumberFormat("en-US", {
         style: 'currency',
         currency: 'USD',
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      }).format(amount || 0);
+      }).format(safeAmount);
     } else {
       return new Intl.NumberFormat("en-US", {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
-      }).format(Math.round(amount || 0)) + " IQD";
+      }).format(Math.round(safeAmount)) + " IQD";
     }
   };
 
   // Handle pharmacy selection
-  const handlePharmacySelect = useCallback(
-    async (pharmacy) => {
-      setSelectedPharmacy(pharmacy);
-      setShowModal(false);
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [billsResult, returnsResult] = await Promise.all([
-          getPharmacyBills(pharmacy.id),
-          getReturnsForPharmacy(pharmacy.id),
-        ]);
+  const handlePharmacySelect = useCallback(async (selectedOption) => {
+    if (!selectedOption) {
+      setSelectedPharmacy(null);
+      setBills([]);
+      setReturns([]);
+      return;
+    }
+    const pharmacy = selectedOption.value;
+    
+    setSelectedPharmacy(pharmacy);
+    setIsLoading(true);
+    setError(null);
 
-        // Filter out paid and cash bills - only show unpaid bills
-        const unpaidBills = billsResult.bills.filter(
-          (bill) => bill.paymentStatus !== "Paid" && bill.paymentStatus !== "Cash"
-        );
+    try {
+      const [billsResult, returnsResult] = await Promise.all([
+        getPharmacyBills(pharmacy.id),
+        getReturnsForPharmacy(pharmacy.id),
+      ]);
 
-        // Filter returns to only show UNPAID returns
-        const unpaidReturns = returnsResult.filter(
-          (returnItem) =>
-            returnItem.paymentStatus !== "Processed" &&
-            returnItem.paymentStatus !== "Paid"
-        );
+      const unpaidBills = billsResult.bills.filter(
+        (bill) => bill.paymentStatus !== "Paid" && bill.paymentStatus !== "Cash"
+      );
 
-        // Remove duplicates by bill ID
-        const uniqueBills = unpaidBills.filter((bill, index, self) =>
-          index === self.findIndex(b => b.id === bill.id)
-        );
+      const unpaidReturns = returnsResult.filter(
+        (returnItem) =>
+          returnItem.paymentStatus !== "Processed" &&
+          returnItem.paymentStatus !== "Paid"
+      );
 
-        setBills(uniqueBills);
-        setReturns(unpaidReturns);
-      } catch (err) {
-        console.error("Error loading data:", err);
-        setError(err.message || "Failed to load data for this pharmacy");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    []
-  );
+      const uniqueBills = unpaidBills.filter((bill, index, self) =>
+        index === self.findIndex(b => b.id === bill.id)
+      );
 
-  // Calculate totals for both currencies
+      setBills(uniqueBills);
+      setReturns(unpaidReturns);
+    } catch (err) {
+      console.error("Error loading data:", err);
+      setError(err.message || "Failed to load data for this pharmacy");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Calculate Totals
   const calculateTotals = () => {
     let totalUSD = 0;
     let totalIQD = 0;
     let totalReturnUSD = 0;
     let totalReturnIQD = 0;
 
-    // Calculate bill totals
     bills.forEach(bill => {
+      const bCurrency = bill.currency || "USD";
       if (bill.items && Array.isArray(bill.items)) {
         bill.items.forEach(item => {
-          const quantity = item.quantity || 0;
-          const currency = item.originalCurrency || item.currency || "IQD";
+          const qty = item.quantity || 0;
+          const usdPrice = item.outPriceUSD !== undefined ? item.outPriceUSD : (bCurrency === "USD" ? item.price : 0);
+          const iqdPrice = item.outPriceIQD !== undefined ? item.outPriceIQD : (bCurrency === "IQD" ? item.price : 0);
           
-          if (currency === "USD") {
-            const price = item.outPriceUSD || item.price || 0;
-            totalUSD += price * quantity;
-          } else {
-            const price = item.outPriceIQD || item.price || 0;
-            totalIQD += price * quantity;
-          }
+          totalUSD += usdPrice * qty;
+          totalIQD += iqdPrice * qty;
         });
       }
     });
 
-    // Calculate return totals
     returns.forEach(returnItem => {
-      const quantity = returnItem.returnQuantity || 0;
-      const currency = returnItem.currency || returnItem.originalCurrency || "IQD";
+      const rCurrency = returnItem.currency || returnItem.originalCurrency || "USD";
+      const qty = returnItem.returnQuantity || 0;
       
-      if (currency === "USD") {
-        const price = returnItem.returnPriceUSD || returnItem.returnPrice || 0;
-        totalReturnUSD += price * quantity;
-      } else {
-        const price = returnItem.returnPriceIQD || returnItem.returnPrice || 0;
-        totalReturnIQD += price * quantity;
-      }
+      const usdPrice = returnItem.returnPriceUSD !== undefined ? returnItem.returnPriceUSD : (rCurrency === "USD" ? returnItem.returnPrice : 0);
+      const iqdPrice = returnItem.returnPriceIQD !== undefined ? returnItem.returnPriceIQD : (rCurrency === "IQD" ? returnItem.returnPrice : 0);
+      
+      totalReturnUSD += usdPrice * qty;
+      totalReturnIQD += iqdPrice * qty;
     });
 
     return {
@@ -137,7 +131,6 @@ export default function StatementPage() {
 
   const totals = calculateTotals();
 
-  // Format date for display - dd/mm/yyyy
   const formatDateForDisplay = (date) => {
     if (!date) return "N/A";
     try {
@@ -147,837 +140,519 @@ export default function StatementPage() {
     }
   };
 
-  // Get currency symbol
-  const getCurrencySymbol = (currency) => {
-    return currency === "USD" ? "$" : "";
-  };
-
-  // Handle print
+  // NATIVE MOBILE APP PRINT ENGINE (IFRAME METHOD)
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert("Please allow popups to print the statement.");
-      return;
-    }
+    // Create a visually hidden iframe
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.zIndex = '-1';
+    document.body.appendChild(iframe);
+
+    // Get the iframe's document
+    const doc = iframe.contentWindow ? iframe.contentWindow.document : iframe.contentDocument;
     
-    printWindow.document.write(`
+    // Write the exact same beautiful print layout into the iframe
+    doc.open();
+    doc.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Statement for ${selectedPharmacy?.name || 'Pharmacy'}</title>
+        <title>Statement - ${selectedPharmacy?.name || 'Pharmacy'}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+          @page { margin: 0.3in; size: A4; }
+          body { font-family: 'Inter', sans-serif; color: #1f2937; font-size: 11px; line-height: 1.4; padding: 0; margin: 0; }
           
-          @page { 
-            margin: 0 in; 
-            @top-center {
-              content: "";
-              font-size: 10px;
-              color: #666;
-            }
-          }
+          .avoid-break { page-break-inside: avoid; break-inside: avoid; margin-bottom: 15px; }
+          tr { page-break-inside: avoid; break-inside: avoid; }
           
-          body { 
-            font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
-            margin: 0;
-            padding: 0;
-            color: #1f2937;
-            font-size: 12px;
-            line-height: 1.5;
-          }
+          .print-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 2px solid #2563eb; margin-bottom: 12px; }
+          .company-name { font-size: 22px; font-weight: 800; color: #1e40af; margin-bottom: 2px; letter-spacing: -0.5px; }
+          .company-info { font-size: 11px; color: #4b5563; }
+          .company-logo { max-height: 60px; object-fit: contain; }
           
-          .print-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 20px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #3b82f6;
-          }
+          .pharmacy-details { background: #f8fafc; padding: 12px 16px; margin-bottom: 15px; border-radius: 6px; border-left: 3px solid #3b82f6; display: flex; justify-content: space-between; align-items: center; }
+          .statement-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
           
-          .header-left {
-            text-align: left;
-          }
+          .section-title { font-weight: 700; color: #1e40af; font-size: 13px; letter-spacing: 0.5px; margin-bottom: 6px; text-transform: uppercase; }
           
-          .company-name {
-            font-size: 24px;
-            font-weight: 700;
-            color: #1e40af;
-            margin-bottom: 5px;
-            letter-spacing: -0.5px;
-          }
+          table.data-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+          table.data-table th { color: #64748b; font-weight: 600; padding: 8px 6px; text-align: left; border-bottom: 1px solid #cbd5e1; text-transform: uppercase; font-size: 10px; }
+          table.data-table td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+          table.data-table tr:last-child td { border-bottom: none; }
+          table.data-table tfoot td { font-weight: 700; border-top: 1px solid #cbd5e1; padding-top: 10px; }
           
-          .company-info {
-            font-size: 11px;
-            color: #4b5563;
-            margin-bottom: 3px;
-          }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .note-cell { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #64748b; }
           
-          .logo-container {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-          }
+          .summary-section { background: #f8fafc; border-radius: 8px; padding: 16px; }
+          table.summary-table { width: 100%; border-collapse: collapse; }
+          table.summary-table td { padding: 8px 6px; font-size: 13px; }
+          .summary-total td { font-weight: 800; font-size: 15px; color: #047857; border-top: 2px solid #34d399; padding-top: 12px; margin-top: 4px; }
           
-          .company-logo {
-            max-height: 85px;
-            object-fit: contain;
-          }
-          
-          .statement-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin: 15px 0 10px 0;
-            color: #111827;
-            text-align: center;
-          }
-          
-          .pharmacy-details {
-            background: #f8fafc;
-            padding: 12px;
-            margin: 15px 0;
-            border-radius: 6px;
-            border-left: 4px solid #3b82f6;
-            border: 1px solid #e5e7eb;
-          }
-          
-          .date-info {
-            text-align: right;
-            font-size: 11px;
-            color: #6b7280;
-            margin-bottom: 10px;
-          }
-          
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 10px 0;
-            font-size: 11px;
-            border: 1px solid #e5e7eb;
-            table-layout: auto;
-          }
-          
-          th {
-            background-color: #f9fafb;
-            color: #374151;
-            font-weight: 600;
-            padding: 10px 8px;
-            border: 1px solid #e5e7eb;
-            text-align: left;
-            font-size: 11px;
-            white-space: nowrap;
-          }
-          
-          td {
-            padding: 8px;
-            border: 1px solid #f3f4f6;
-            text-align: left;
-            vertical-align: top;
-            white-space: nowrap;
-          }
-          
-          .note-column {
-            white-space: normal;
-            word-wrap: break-word;
-            min-width: 150px;
-            max-width: 400px;
-          }
-          
-          tfoot td {
-            background-color: #f8fafc;
-            font-weight: 600;
-            border-top: 2px solid #e5e7eb;
-          }
-          
-          .section-title {
-            background-color: #f9fafb;
-            padding: 10px;
-            margin: 20px 0 10px 0;
-            border-left: 4px solid #3b82f6;
-            font-weight: 600;
-            color: #111827;
-            border-radius: 4px;
-          }
-          
-          .summary-section {
-            margin-top: 25px;
-            padding: 18px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
-          }
-          
-          .summary-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 8px 0;
-            padding: 8px 0;
-            border-bottom: 1px solid #f3f4f6;
-          }
-          
-          .summary-total {
-            font-weight: 700;
-            font-size: 14px;
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 2px solid #e5e7eb;
-            color: #059669;
-          }
-          
-          .footer {
-            margin-top: 35px;
-            padding-top: 15px;
-            border-top: 1px solid #e5e7eb;
-            text-align: center;
-            color: #6b7280;
-            font-size: 10px;
-          }
-          
-          .text-right {
-            text-align: right;
-          }
-          
-          .text-center {
-            text-align: center;
-          }
-          
-          .font-bold {
-            font-weight: 700;
-          }
-          
-          .currency-label {
-            font-size: 10px;
-            color: #6b7280;
-            font-weight: 400;
-          }
-          
-          @media print {
-            body { margin: 0 in; }
+          @media print { 
+            body { padding: 0; } 
             .no-print { display: none; }
           }
         </style>
       </head>
       <body>
-        <div class="print-header">
-          <div class="header-left">
+        <div class="print-header avoid-break">
+          <div>
             <div class="company-name">ARAN MED STORE</div>
             <div class="company-info">Slemany - opposite Smart Health Tower</div>
             <div class="company-info">+964 772 533 5252 | +964 751 741 2241</div>
           </div>
-          <div class="logo-container">
-            <img src="${window.location.origin}/Aranlogo.png" alt="Aran Med Store Logo" class="company-logo">
+          <div>
+            <img src="${window.location.origin}/Aranlogo.png" alt="Aran Med Store" class="company-logo" onerror="this.style.display='none'">
           </div>
         </div>
         
-      
-        
-       
-        
-       <div class="pharmacy-details" style="display: flex; justify-content: space-between; align-items: center;">
-  <div>
-    <strong>Pharmacy:</strong> ${selectedPharmacy?.name || 'N/A'}<br>
-    <strong>Statement Period:</strong> As of ${format(new Date(), "dd/MM/yyyy")}
-  </div>
-  <div class="statement-title" style="font-size: 20px; font-weight: 600; color: #111827; margin: 0;">
-    كشف حساب
-  </div>
-</div>
+        <div class="pharmacy-details avoid-break">
+          <div>
+            <div style="font-size: 14px; margin-bottom: 2px;"><strong>Pharmacy:</strong> <span style="color:#1d4ed8;">${selectedPharmacy?.name || 'N/A'}</span></div>
+            <div style="font-size: 11px; color:#64748b;"><strong>Statement Date:</strong> ${format(new Date(), "dd/MM/yyyy")}</div>
+          </div>
+          <div class="statement-title">كشف حساب</div>
+        </div>
         
         <!-- Unpaid Bills Section -->
-        <div class="section-title">UNPAID SALES BILLS</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Bill #</th>
-              <th>Date</th>
-              <th class="text-right">Amount (USD)</th>
-              <th class="text-right">Amount (IQD)</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${bills.length > 0 ? bills.map(bill => {
-              let billUSD = 0;
-              let billIQD = 0;
-              if (bill.items && Array.isArray(bill.items)) {
-                bill.items.forEach(item => {
-                  const quantity = item.quantity || 0;
-                  const currency = item.originalCurrency || item.currency || "IQD";
-                  if (currency === "USD") {
-                    billUSD += (item.outPriceUSD || item.price || 0) * quantity;
-                  } else {
-                    billIQD += (item.outPriceIQD || item.price || 0) * quantity;
-                  }
-                });
-              }
-              return `
-                <tr>
-                  <td>${bill.billNumber || `BILL-${bill.id?.slice(-6)}`}</td>
-                  <td>${formatDateForDisplay(bill.date)}</td>
-                  <td class="text-right">${billUSD > 0 ? '$' + billUSD.toFixed(2) : '-'}</td>
-                  <td class="text-right">${billIQD > 0 ? Math.round(billIQD).toLocaleString() + ' IQD' : '-'}</td>
-                  <td class="note-column">${bill.note || bill.billNote || '-'}</td>
-                </tr>
-              `;
-            }).join('') : `
-              <tr>
-                <td colspan="5" class="text-center" style="padding: 20px; color: #6b7280;">
-                  No unpaid sales bills found
-                </td>
-              </tr>
-            `}
-          </tbody>
-          ${bills.length > 0 ? `
-            <tfoot>
-              <tr>
-                <td colspan="2" class="text-right font-bold">Total Unpaid Sales:</td>
-                <td class="text-right font-bold">${totals.totalUSD > 0 ? '$' + totals.totalUSD.toFixed(2) : '-'}</td>
-                <td class="text-right font-bold">${totals.totalIQD > 0 ? Math.round(totals.totalIQD).toLocaleString() + ' IQD' : '-'}</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          ` : ''}
-        </table>
-        
-        <!-- Returns Section -->
-        ${returns.length > 0 ? `
-          <div class="section-title">RETURNED ITEMS</div>
-          <table>
+        <div class="avoid-break">
+          <div class="section-title">Unpaid Sales Bills</div>
+          <table class="data-table">
             <thead>
               <tr>
-                <th>Return #</th>
-                <th>Original Bill #</th>
-                <th>Item</th>
-                <th>Qty</th>
-                <th class="text-right">Total (USD)</th>
-                <th class="text-right">Total (IQD)</th>
-                <th>Note</th>
+                <th style="width: 10%;">Invoice #</th>
+                <th class="text-center" style="width: 10%;">Date</th>
+                <th class="text-right" style="width: 20%;">Amount (USD)</th>
+                <th class="text-right" style="width: 20%;">Amount (IQD)</th>
+                <th style="width: 30%;">Note</th>
               </tr>
             </thead>
             <tbody>
-              ${returns.map((returnItem, index) => {
-                const qty = returnItem.returnQuantity || 0;
-                const currency = returnItem.currency || returnItem.originalCurrency || "IQD";
-                let totalUSD = 0;
-                let totalIQD = 0;
-                if (currency === "USD") {
-                  totalUSD = (returnItem.returnPriceUSD || returnItem.returnPrice || 0) * qty;
-                } else {
-                  totalIQD = (returnItem.returnPriceIQD || returnItem.returnPrice || 0) * qty;
+              ${bills.length > 0 ? bills.map(bill => {
+                let billUSD = 0; let billIQD = 0;
+                const bCurrency = bill.currency || "USD";
+                if (bill.items) {
+                  bill.items.forEach(item => {
+                    const qty = item.quantity || 0;
+                    const usdP = item.outPriceUSD !== undefined ? item.outPriceUSD : (bCurrency === "USD" ? item.price : 0);
+                    const iqdP = item.outPriceIQD !== undefined ? item.outPriceIQD : (bCurrency === "IQD" ? item.price : 0);
+                    billUSD += usdP * qty; billIQD += iqdP * qty;
+                  });
                 }
                 return `
                   <tr>
-                    <td>${returnItem.returnNumber || `RETURN-${returnItem.id?.slice(-6) || index + 1}`}</td>
-                    <td>${returnItem.billNumber || '-'}</td>
-                    <td>${returnItem.name}<br><small style="color: #6b7280; font-size: 10px;">${returnItem.barcode || 'No barcode'}</small></td>
-                    <td>${qty}</td>
-                    <td class="text-right" style="color: #dc2626;">${totalUSD > 0 ? '-$' + totalUSD.toFixed(2) : '-'}</td>
-                    <td class="text-right" style="color: #dc2626;">${totalIQD > 0 ? '-' + Math.round(totalIQD).toLocaleString() + ' IQD' : '-'}</td>
-                    <td class="note-column">${returnItem.note || '-'}</td>
+                    <td style="font-weight: 600;">${bill.billNumber || `BILL-${bill.id?.slice(-6)}`}</td>
+                    <td class="text-left">${formatDateForDisplay(bill.date)}</td>
+                    <td class="text-center" style="font-weight: 600; color:#1e40af;">${billUSD > 0 ? formatCurrency(billUSD, "USD") : '-'}</td>
+                    <td class="text-left" style="font-weight: 600; color:#1e40af;">${billIQD > 0 ? formatCurrency(billIQD, "IQD") : '-'}</td>
+                    <td class="note-cell">${bill.note || bill.billNote || '-'}</td>
                   </tr>
                 `;
-              }).join('')}
+              }).join('') : `<tr><td colspan="5" class="text-center" style="padding: 20px; color: #94a3b8;">No unpaid sales bills found</td></tr>`}
             </tbody>
-            <tfoot>
-              <tr>
-                <td colspan="4" class="text-right font-bold">Total Returns:</td>
-                <td class="text-right font-bold" style="color: #dc2626;">${totals.totalReturnUSD > 0 ? '-$' + totals.totalReturnUSD.toFixed(2) : '-'}</td>
-                <td class="text-right font-bold" style="color: #dc2626;">${totals.totalReturnIQD > 0 ? '-' + Math.round(totals.totalReturnIQD).toLocaleString() + ' IQD' : '-'}</td>
-                <td></td>
-              </tr>
-            </tfoot>
+            ${bills.length > 0 ? `
+              <tfoot>
+                <tr>
+                  <td colspan="2" class="text-right font-bold">Total Sales:</td>
+                  <td class="text-center font-bold" style="color:#371184; font-size:13px;">${totals.totalUSD > 0 ? formatCurrency(totals.totalUSD, "USD") : '-'}</td>
+                  <td class="text-left font-bold" style="color:#371184; font-size:13px;">${totals.totalIQD > 0 ? formatCurrency(totals.totalIQD, "IQD") : '-'}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            ` : ''}
           </table>
+        </div>
+        
+        <!-- Returns Section -->
+        ${returns.length > 0 ? `
+          <div class="avoid-break">
+            <div class="section-title" style="color:#b91c1c;">Returned Items</div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 12%;">Return #</th>
+                  <th style="width: 13%;">Orig Inv #</th>
+                  <th style="width: 30%;">Product</th>
+                  <th class="text-center" style="width: 5%;">Qty</th>
+                  <th class="text-right" style="width: 15%;">Total (USD)</th>
+                  <th class="text-right" style="width: 15%;">Total (IQD)</th>
+                  <th style="width: 30%;">Return Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${returns.map((ret, idx) => {
+                  const qty = ret.returnQuantity || 0;
+                  const rCurr = ret.currency || ret.originalCurrency || "USD";
+                  const usdP = ret.returnPriceUSD !== undefined ? ret.returnPriceUSD : (rCurr === "USD" ? ret.returnPrice : 0);
+                  const iqdP = ret.returnPriceIQD !== undefined ? ret.returnPriceIQD : (rCurr === "IQD" ? ret.returnPrice : 0);
+                  return `
+                    <tr>
+                      <td style="font-weight: 600;">${ret.returnNumber || `RET-${ret.id?.slice(-5) || idx + 1}`}</td>
+                      <td>${ret.billNumber || '-'}</td>
+                      <td><div style="font-weight:600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;">${ret.name}</div></td>
+                      <td class="text-center font-bold">${qty}</td>
+                      <td class="text-center" style="color:#dc2626; font-weight: 600;">${usdP > 0 ? '-' + formatCurrency(usdP * qty, "USD") : '-'}</td>
+                      <td class="text-center" style="color:#dc2626; font-weight: 600;">${iqdP > 0 ? '-' + formatCurrency(iqdP * qty, "IQD") : '-'}</td>
+                      <td class="note-cell">${ret.note || ret.returnNote || '-'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" class="text-right font-bold" style="color:#991b1b;">Total Returns:</td>
+                  <td class="text-right font-bold" style="color:#dc2626;">${totals.totalReturnUSD > 0 ? '-' + formatCurrency(totals.totalReturnUSD, "USD") : '-'}</td>
+                  <td class="text-center font-bold" style="color:#dc2626;">${totals.totalReturnIQD > 0 ? '-' + formatCurrency(totals.totalReturnIQD, "IQD") : '-'}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         ` : ''}
         
         <!-- Summary Section -->
-        <div class="summary-section">
-          <div class="statement-title" style="font-size: 16px; margin: 0 0 12px 0;">SUMMARY</div>
-      <div class="summary-row">
-  <span>Total Unpaid Sales:</span>
-  <span class="font-bold">
-    ${totals.totalUSD > 0 ? '$' + totals.totalUSD.toFixed(2) : ''} 
-    ${totals.totalUSD > 0 && totals.totalIQD > 0 ? '&nbsp;&nbsp;+&nbsp;&nbsp;' : ''} 
-    ${totals.totalIQD > 0 ? Math.round(totals.totalIQD).toLocaleString() + ' IQD' : ''}
-  </span>
-</div>
-      ${returns.length > 0 ? `
-  <div class="summary-row">
-    <span> Total Returns:</span>
-    <span class="font-bold" style="color: #dc2626;">
-      ${totals.totalReturnUSD > 0 ? '$' + totals.totalReturnUSD.toFixed(2) : ''} 
-      ${totals.totalReturnUSD > 0 && totals.totalReturnIQD > 0 ? '&nbsp;&nbsp;+&nbsp;&nbsp;' : ''} 
-      ${totals.totalReturnIQD > 0 ? '' + Math.round(totals.totalReturnIQD).toLocaleString() + ' IQD' : ''}
-    </span>
-  </div>
-` : ''}
-     <div class="summary-row summary-total">
-  <span>NET AMOUNT DUE:</span>
-  <span class="font-bold">
-    ${totals.netUSD > 0 ? '$' + totals.netUSD.toFixed(2) : ''} 
-    ${totals.netUSD > 0 && totals.netIQD > 0 ? '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' : ''} 
-    ${totals.netIQD > 0 ? Math.round(totals.netIQD).toLocaleString() + ' IQD' : ''}
-  </span>
-</div>
+        <div class="summary-section avoid-break">
+          <div style="font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 8px; text-transform: uppercase;">Financial Summary</div>
+          
+          <table class="summary-table">
+            <tr>
+              <td style="color:#475569; font-weight: 600;">Total Unpaid Sales:</td>
+              <td class="text-right" style="color:#1e40af; font-weight: 700; width: 140px;">${totals.totalUSD > 0 ? formatCurrency(totals.totalUSD, "USD") : '-'}</td>
+              <td class="text-right" style="color:#1e40af; font-weight: 700; width: 140px;">${totals.totalIQD > 0 ? formatCurrency(totals.totalIQD, "IQD") : '-'}</td>
+            </tr>
+            ${returns.length > 0 ? `
+              <tr>
+                <td style="color:#475569; font-weight: 600;">Total Returns Deducted:</td>
+                <td class="text-right" style="color:#dc2626; font-weight: 700;">${totals.totalReturnUSD > 0 ? '-' + formatCurrency(totals.totalReturnUSD, "USD") : '-'}</td>
+                <td class="text-right" style="color:#dc2626; font-weight: 700;">${totals.totalReturnIQD > 0 ? '-' + formatCurrency(totals.totalReturnIQD, "IQD") : '-'}</td>
+              </tr>
+            ` : ''}
+            <tr class="summary-total">
+              <td>NET AMOUNT DUE:</td>
+              <td class="text-right">${totals.netUSD > 0 ? formatCurrency(totals.netUSD, "USD") : '-'}</td>
+              <td class="text-right">${totals.netIQD > 0 ? formatCurrency(totals.netIQD, "IQD") : '-'}</td>
+            </tr>
+          </table>
         </div>
-        
-      
-        
-        <script>
-          setTimeout(() => {
-            window.print();
-            setTimeout(() => window.close(), 500);
-          }, 100);
-        </script>
       </body>
       </html>
     `);
-    
-    printWindow.document.close();
+    doc.close();
+
+    // Give the iframe 800ms to load images, then natively print
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      
+      // We clean up the hidden iframe after 10 seconds.
+      // This ensures the mobile OS has plenty of time to process the print/app dialog.
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 10000);
+    }, 800);
   };
 
-  // Handle pharmacy change
-  const handleChangePharmacy = () => {
-    setShowModal(true);
-    setSelectedPharmacy(null);
-    setBills([]);
-    setReturns([]);
+  const customSelectStyles = {
+    control: (provided) => ({
+      ...provided,
+      padding: '4px 8px',
+      border: '1px solid #ccc',
+      cursor: 'text',
+      backgroundColor: '#ffffff',
+      fontSize: '14px',
+      minHeight: '48px',
+    }),
+  };
+
+  const pharmacyOptions = pharmacies.map(p => ({
+    value: p,
+    label: `${p.name} ${p.code ? `(${p.code})` : ''}`
+  }));
+
+  const getBillTotal = (bill) => {
+    let billUSD = 0;
+    let billIQD = 0;
+    const bCurrency = bill.currency || "USD";
+    if (bill.items) {
+      bill.items.forEach(item => {
+        const qty = item.quantity || 0;
+        const usdP = item.outPriceUSD !== undefined ? item.outPriceUSD : (bCurrency === "USD" ? item.price : 0);
+        const iqdP = item.outPriceIQD !== undefined ? item.outPriceIQD : (bCurrency === "IQD" ? item.price : 0);
+        billUSD += usdP * qty;
+        billIQD += iqdP * qty;
+      });
+    }
+    return { billUSD, billIQD };
+  };
+
+  // --- INLINE STYLES FOR WEB UI TO MIMIC PRINT DESIGN EXACTLY ---
+  const containerStyle = {
+    width: "100%",
+    maxWidth: "100%",
+    margin: "0",
+    padding: "10px",
+    boxSizing: "border-box",
+    fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+    color: "#1f2937",
+    backgroundColor: "#ffffff",
+    minHeight: "100vh"
+  };
+
+  const headerStyle = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: "12px",
+    borderBottom: "2px solid #2563eb",
+    marginBottom: "20px",
+    width: "100%"
+  };
+
+  const tableStyle = {
+    width: "100%",
+    borderCollapse: "collapse",
+    marginBottom: "30px",
+    border: "1px solid #cbd5e1"
+  };
+
+  const thStyle = {
+    border: "1px solid #cbd5e1",
+    padding: "10px",
+    backgroundColor: "#f8fafc",
+    color: "#1e40af",
+    fontWeight: "700",
+    textAlign: "left",
+    textTransform: "uppercase",
+    fontSize: "12px",
+  };
+
+  const tdStyle = {
+    border: "1px solid #cbd5e1",
+    padding: "10px",
+    fontSize: "13px",
+    verticalAlign: "middle"
+  };
+
+  const printButtonStyle = {
+    padding: "10px 20px",
+    backgroundColor: "#2563eb",
+    color: "white",
+    border: "none",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "14px",
+    marginTop: "20px",
+    display: "inline-block"
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>
-      {showModal && (
-        <PharmacySelectionModal
-          pharmacies={pharmacies}
-          onSelect={handlePharmacySelect}
-          onClose={() => setShowModal(false)}
+    <div style={containerStyle}>
+      {/* Search Header Section */}
+      <div style={{ marginBottom: '30px', width: '100%' }}>
+        <div style={headerStyle}>
+          <div>
+            <h1 style={{ fontSize: "22px", fontWeight: "800", color: "#1e40af", margin: "0 0 5px 0" }}>ARAN MED STORE</h1>
+            <div style={{ fontSize: "12px", color: "#4b5563" }}>Slemany - opposite Smart Health Tower</div>
+            <div style={{ fontSize: "12px", color: "#4b5563" }}>+964 772 533 5252 | +964 751 741 2241</div>
+          </div>
+          <div>
+            <img src="/Aranlogo.png" alt="Aran Med Store" style={{ maxHeight: "60px", objectFit: "contain" }} onError={(e) => e.target.style.display = 'none'} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "10px", fontWeight: "bold", fontSize: "16px" }}>Select Pharmacy to View Statement:</div>
+        <Select
+          options={pharmacyOptions}
+          onChange={handlePharmacySelect}
+          value={selectedPharmacy ? { value: selectedPharmacy, label: `${selectedPharmacy.name} ${selectedPharmacy.code ? `(${selectedPharmacy.code})` : ''}` } : null}
+          styles={customSelectStyles}
+          placeholder="🔍 Search pharmacies by name or code..."
+          isClearable
+          isSearchable
+          noOptionsMessage={() => "No pharmacy found"}
         />
-      )}
+      </div>
+
+      {isLoading && <div style={{ textAlign: "center", padding: "50px", fontWeight: "bold" }}>Loading statement data...</div>}
       
-      {selectedPharmacy && (
-        <div className="max-w-7xl mx-auto">
-          {/* Header Card */}
-          <Card className="mb-6 shadow-lg border border-gray-200">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6">
-              <div className="flex items-center gap-4 flex-1">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-800 mb-2" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>
-                    ARAN MED STORE
-                  </h1>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="font-medium text-gray-600" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>Pharmacy:</span>
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>
-                      {selectedPharmacy.name}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-500" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>
-                    Generated on: {format(new Date(), "dd/MM/yyyy 'at' hh:mm a")}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <img 
-                  src="/Aranlogo.png" 
-                  alt="Aran Med Store Logo" 
-                  style={{
-                    height: "100px",
-                    objectFit: "contain"
-                  }}
-                />
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={handleChangePharmacy}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#ffffff",
-                      color: "#374151",
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      borderRadius: "8px",
-                      border: "1px solid #d1d5db",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-                      boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = "#f9fafb";
-                      e.target.style.borderColor = "#9ca3af";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = "#ffffff";
-                      e.target.style.borderColor = "#d1d5db";
-                    }}
-                  >
-                    <svg 
-                      style={{ 
-                        width: "16px", 
-                        height: "16px" 
-                      }} 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-                    </svg>
-                    Change Pharmacy
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    disabled={isLoading || error || (!bills.length && !returns.length)}
-                    style={{
-                      padding: "10px 20px",
-                      backgroundColor: "#2563eb",
-                      color: "#ffffff",
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      borderRadius: "8px",
-                      border: "none",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-                      boxShadow: "0 1px 3px rgba(37, 99, 235, 0.3)",
-                      opacity: (isLoading || error || (!bills.length && !returns.length)) ? 0.5 : 1,
-                      cursor: (isLoading || error || (!bills.length && !returns.length)) ? "not-allowed" : "pointer"
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!(isLoading || error || (!bills.length && !returns.length))) {
-                        e.target.style.backgroundColor = "#1d4ed8";
-                        e.target.style.boxShadow = "0 2px 4px rgba(37, 99, 235, 0.4)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!(isLoading || error || (!bills.length && !returns.length))) {
-                        e.target.style.backgroundColor = "#2563eb";
-                        e.target.style.boxShadow = "0 1px 3px rgba(37, 99, 235, 0.3)";
-                      }
-                    }}
-                  >
-                    <svg 
-                      style={{ 
-                        width: "16px", 
-                        height: "16px" 
-                      }} 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Print Statement
-                  </button>
-                </div>
-              </div>
+      {error && <div style={{ color: "red", fontWeight: "bold", padding: "20px", border: "1px solid red", backgroundColor: "#fff5f5" }}>{error}</div>}
+
+      {/* Statement Content Mimicking Print */}
+      {selectedPharmacy && !isLoading && !error && (
+        <div style={{ width: "100%" }}>
+          <div style={{ background: "#f8fafc", padding: "12px 16px", marginBottom: "20px", borderLeft: "3px solid #3b82f6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: "16px", marginBottom: "5px" }}><strong>Pharmacy:</strong> <span style={{ color: "#1d4ed8" }}>{selectedPharmacy.name}</span></div>
+              <div style={{ fontSize: "13px", color: "#64748b" }}><strong>Statement Date:</strong> {format(new Date(), "dd/MM/yyyy")}</div>
             </div>
-          </Card>
+            <div style={{ fontSize: "20px", fontWeight: "700", color: "#111827" }}>كشف حساب</div>
+          </div>
 
-          {/* Loading State */}
-          {isLoading && (
-            <Card className="mb-6 border border-gray-200">
-              <div className="p-8 text-center">
-                <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-                <p className="mt-4 text-gray-600" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>Loading statement data...</p>
-              </div>
-            </Card>
-          )}
-
-          {/* Error State */}
-          {error && (
-            <Card className="mb-6 border-red-200 bg-red-50 border">
-              <div className="p-6">
-                <div className="flex items-center gap-3">
-                  <div className="text-red-500">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-red-700" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>Error Loading Data</h3>
-                    <p className="text-red-600 text-sm mt-1" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>{error}</p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Main Content */}
-          {!isLoading && !error && (
-            <div className="space-y-6">
-              {/* Unpaid Bills Card */}
-              <Card className="shadow-md border border-gray-200">
-                <div className="border-b border-gray-200 px-6 py-4">
-                  <h2 className="text-lg font-bold text-gray-800" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>UNPAID SALES BILLS</h2>
-                  <p className="text-sm text-gray-600 mt-1" style={{ fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif" }}>
-                    Total: {bills.length} bill{bills.length !== 1 ? 's' : ''}
-                  </p>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full" style={{ tableLayout: "auto" }}>
-                    <thead className="bg-gray-50">
+          {!bills.length && !returns.length ? (
+            <div style={{ textAlign: "center", padding: "40px", border: "1px solid #ccc", color: "#666" }}>
+              <strong>Account Clear.</strong> This pharmacy has no pending unpaid sales or active returns.
+            </div>
+          ) : (
+            <>
+              {/* Unpaid Sales Table */}
+              {bills.length > 0 && (
+                <div>
+                  <h2 style={{ fontSize: "16px", color: "#1e40af", textTransform: "uppercase", marginBottom: "10px" }}>Unpaid Sales Bills</h2>
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Bill #</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Date</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Amount (USD)</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Amount (IQD)</th>
-                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[200px]">Note</th>
+                        <th style={{ ...thStyle, width: "15%" }}>Invoice #</th>
+                        <th style={{ ...thStyle, width: "15%", textAlign: "center" }}>Date</th>
+                        <th style={{ ...thStyle, width: "20%", textAlign: "right" }}>Amount (USD)</th>
+                        <th style={{ ...thStyle, width: "20%", textAlign: "right" }}>Amount (IQD)</th>
+                        <th style={{ ...thStyle, width: "30%" }}>Note</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {bills.length > 0 ? (
-                        bills.map((bill) => {
-                          let billUSD = 0;
-                          let billIQD = 0;
-                          if (bill.items && Array.isArray(bill.items)) {
-                            bill.items.forEach(item => {
-                              const quantity = item.quantity || 0;
-                              const currency = item.originalCurrency || item.currency || "IQD";
-                              if (currency === "USD") {
-                                billUSD += (item.outPriceUSD || item.price || 0) * quantity;
-                              } else {
-                                billIQD += (item.outPriceIQD || item.price || 0) * quantity;
-                              }
-                            });
-                          }
-                          return (
-                            <tr key={bill.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-center text-sm font-medium text-gray-900 whitespace-nowrap">
-                                {bill.billNumber || `BILL-${bill.id?.slice(-5)}`}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 whitespace-nowrap">
-                                {formatDateForDisplay(bill.date)}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 whitespace-nowrap">
-                                {billUSD > 0 ? '$' + billUSD.toFixed(2) : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 whitespace-nowrap">
-                                {billIQD > 0 ? Math.round(billIQD).toLocaleString() + ' IQD' : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 break-words max-w-md">
-                                <div className="truncate" title={bill.note || bill.billNote || ""}>
-                                  {bill.note || bill.billNote || "-"}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td colSpan="5" className="px-4 py-8 text-center text-gray-500">
-                            <p className="text-gray-600">No unpaid sales bills found</p>
-                            <p className="text-sm text-gray-500 mt-1">All bills are either paid or cash transactions</p>
-                          </td>
-                        </tr>
-                      )}
+                    <tbody>
+                      {bills.map((bill) => {
+                        const { billUSD, billIQD } = getBillTotal(bill);
+                        return (
+                          <tr key={bill.id}>
+                            <td style={{ ...tdStyle, fontWeight: "600" }}>{bill.billNumber || `BILL-${bill.id?.slice(-5)}`}</td>
+                            <td style={{ ...tdStyle, textAlign: "center" }}>{formatDateForDisplay(bill.date)}</td>
+                            <td style={{ ...tdStyle, textAlign: "right", fontWeight: "600", color: "#1e40af" }}>
+                              {billUSD > 0 ? formatCurrency(billUSD, "USD") : '-'}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: "right", fontWeight: "600", color: "#1e40af" }}>
+                              {billIQD > 0 ? formatCurrency(billIQD, "IQD") : '-'}
+                            </td>
+                            <td style={tdStyle}>{bill.note || bill.billNote || '-'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
-                    {bills.length > 0 && (
-                      <tfoot className="bg-gray-50">
-                        <tr>
-                          <td colSpan="2" className="px-4 py-3 text-right text-sm font-semibold text-gray-700">
-                            Total Unpaid Sales:
-                          </td>
-                          <td className="px-4 py-3 text-sm font-bold text-blue-700 text-center">
-                            {totals.totalUSD > 0 ? '$' + totals.totalUSD.toFixed(2) : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-sm font-bold text-blue-700 text-center">
-                            {totals.totalIQD > 0 ? Math.round(totals.totalIQD).toLocaleString() + ' IQD' : '-'}
-                          </td>
-                          <td className="px-4 py-3"></td>
-                        </tr>
-                      </tfoot>
-                    )}
+                    <tfoot>
+                      <tr>
+                        <td colSpan="2" style={{ ...tdStyle, textAlign: "right", fontWeight: "bold", backgroundColor: "#f1f5f9" }}>Total Sales:</td>
+                        <td style={{ ...tdStyle, textAlign: "right", fontWeight: "bold", color: "#371184", backgroundColor: "#f1f5f9" }}>
+                          {totals.totalUSD > 0 ? formatCurrency(totals.totalUSD, "USD") : '-'}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: "right", fontWeight: "bold", color: "#371184", backgroundColor: "#f1f5f9" }}>
+                          {totals.totalIQD > 0 ? formatCurrency(totals.totalIQD, "IQD") : '-'}
+                        </td>
+                        <td style={{ ...tdStyle, backgroundColor: "#f1f5f9" }}></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
-              </Card>
+              )}
 
-              {/* Returns Card (only if returns exist) */}
+              {/* Returns Table */}
               {returns.length > 0 && (
-                <Card className="shadow-md border border-gray-200">
-                  <div className="border-b border-gray-200 px-6 py-4">
-                    <h2 className="text-lg font-bold text-gray-800">RETURNED ITEMS</h2>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Total: {returns.length} return{returns.length !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Return #</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Original Bill #</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Item</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Qty</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Total (USD)</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap">Total (IQD)</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[150px]">Note</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {returns.map((returnItem, index) => {
-                          const qty = returnItem.returnQuantity || 0;
-                          const currency = returnItem.currency || returnItem.originalCurrency || "IQD";
-                          let totalUSD = 0;
-                          let totalIQD = 0;
-                          if (currency === "USD") {
-                            totalUSD = (returnItem.returnPriceUSD || returnItem.returnPrice || 0) * qty;
-                          } else {
-                            totalIQD = (returnItem.returnPriceIQD || returnItem.returnPrice || 0) * qty;
-                          }
-                          return (
-                            <tr key={index} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 text-center text-sm font-medium text-gray-900 whitespace-nowrap">
-                                {returnItem.returnNumber || `RETURN-${returnItem.id?.slice(-6) || index + 1}`}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 whitespace-nowrap">
-                                {returnItem.billNumber || "-"}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                                <div className="font-medium">{returnItem.name}</div>
-                                {returnItem.barcode && (
-                                  <div className="text-xs text-gray-500 mt-1">Barcode: {returnItem.barcode}</div>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 whitespace-nowrap">
-                                {qty}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm font-semibold text-red-600 whitespace-nowrap">
-                                {totalUSD > 0 ? '-$' + totalUSD.toFixed(2) : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm font-semibold text-red-600 whitespace-nowrap">
-                                {totalIQD > 0 ? '-' + Math.round(totalIQD).toLocaleString() + ' IQD' : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600 break-words max-w-md">
-                                {returnItem.note || "-"}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot className="bg-gray-50">
-                        <tr>
-                          <td colSpan="4" className="px-4 py-3 text-right text-sm font-semibold text-gray-700">
-                            Total Returns:
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-red-600">
-                            {totals.totalReturnUSD > 0 ? '-$' + totals.totalReturnUSD.toFixed(2) : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-red-600">
-                            {totals.totalReturnIQD > 0 ? '-' + Math.round(totals.totalReturnIQD).toLocaleString() + ' IQD' : '-'}
-                          </td>
-                          <td className="px-4 py-3"></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </Card>
+                <div>
+                  <h2 style={{ fontSize: "16px", color: "#b91c1c", textTransform: "uppercase", marginBottom: "10px" }}>Returned Items</h2>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...thStyle, width: "15%" }}>Return #</th>
+                        <th style={{ ...thStyle, width: "15%" }}>Orig Inv #</th>
+                        <th style={{ ...thStyle, width: "25%" }}>Product</th>
+                        <th style={{ ...thStyle, width: "10%", textAlign: "center" }}>Qty</th>
+                        <th style={{ ...thStyle, width: "15%", textAlign: "right" }}>Total (USD)</th>
+                        <th style={{ ...thStyle, width: "20%", textAlign: "right" }}>Total (IQD)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {returns.map((ret, idx) => {
+                        const qty = ret.returnQuantity || 0;
+                        const rCurr = ret.currency || ret.originalCurrency || "USD";
+                        const usdP = ret.returnPriceUSD !== undefined ? ret.returnPriceUSD : (rCurr === "USD" ? ret.returnPrice : 0);
+                        const iqdP = ret.returnPriceIQD !== undefined ? ret.returnPriceIQD : (rCurr === "IQD" ? ret.returnPrice : 0);
+                        return (
+                          <tr key={idx}>
+                            <td style={{ ...tdStyle, fontWeight: "600" }}>{ret.returnNumber || `RET-${ret.id?.slice(-5) || idx + 1}`}</td>
+                            <td style={tdStyle}>{ret.billNumber || '-'}</td>
+                            <td style={{ ...tdStyle, fontWeight: "600" }}>{ret.name}</td>
+                            <td style={{ ...tdStyle, textAlign: "center", fontWeight: "bold" }}>{qty}</td>
+                            <td style={{ ...tdStyle, textAlign: "right", color: "#dc2626", fontWeight: "600" }}>
+                              {usdP > 0 ? '-' + formatCurrency(usdP * qty, "USD") : '-'}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: "right", color: "#dc2626", fontWeight: "600" }}>
+                              {iqdP > 0 ? '-' + formatCurrency(iqdP * qty, "IQD") : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colSpan="4" style={{ ...tdStyle, textAlign: "right", fontWeight: "bold", color: "#991b1b", backgroundColor: "#f1f5f9" }}>Total Returns:</td>
+                        <td style={{ ...tdStyle, textAlign: "right", fontWeight: "bold", color: "#dc2626", backgroundColor: "#f1f5f9" }}>
+                          {totals.totalReturnUSD > 0 ? '-' + formatCurrency(totals.totalReturnUSD, "USD") : '-'}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: "right", fontWeight: "bold", color: "#dc2626", backgroundColor: "#f1f5f9" }}>
+                          {totals.totalReturnIQD > 0 ? '-' + formatCurrency(totals.totalReturnIQD, "IQD") : '-'}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               )}
 
-              {/* Summary Card */}
-              {(bills.length > 0 || returns.length > 0) && (
-                <Card className="shadow-md border border-gray-200">
-                  <div className="border-b border-gray-200 px-6 py-4">
-                    <h2 className="text-lg font-bold text-gray-800">SUMMARY</h2>
-                  </div>
-                  
-                  <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="bg-blue-50 rounded-lg p-5 border border-blue-100">
-                        <div className="text-sm font-medium text-blue-700 mb-1">Total Unpaid Sales</div>
-                        <div className="text-xl font-bold text-blue-800">
-                          {totals.totalUSD > 0 ? '$' + totals.totalUSD.toFixed(2) : ''}
-                          {totals.totalUSD > 0 && totals.totalIQD > 0 && <br />}
-                          {totals.totalIQD > 0 ? Math.round(totals.totalIQD).toLocaleString() + ' IQD' : ''}
-                          {totals.totalUSD === 0 && totals.totalIQD === 0 && '$0.00'}
-                        </div>
-                        <div className="text-xs text-blue-600 mt-2">{bills.length} unpaid bill{bills.length !== 1 ? 's' : ''}</div>
-                      </div>
-                      
-                      {returns.length > 0 && (
-                        <div className="bg-red-50 rounded-lg p-5 border border-red-100">
-                          <div className="text-sm font-medium text-red-700 mb-1">Total Returns</div>
-                          <div className="text-xl font-bold text-red-800">
-                            {totals.totalReturnUSD > 0 ? '-$' + totals.totalReturnUSD.toFixed(2) : ''}
-                            {totals.totalReturnUSD > 0 && totals.totalReturnIQD > 0 && <br />}
-                            {totals.totalReturnIQD > 0 ? '-' + Math.round(totals.totalReturnIQD).toLocaleString() + ' IQD' : ''}
-                            {totals.totalReturnUSD === 0 && totals.totalReturnIQD === 0 && '-$0.00'}
-                          </div>
-                          <div className="text-xs text-red-600 mt-2">{returns.length} return{returns.length !== 1 ? 's' : ''}</div>
-                        </div>
-                      )}
-                      
-                      <div className="bg-green-50 rounded-lg p-5 border border-green-100">
-                        <div className="text-sm font-medium text-green-700 mb-1">Net Amount Due</div>
-                        <div className="text-xl font-bold text-green-800">
-                          {totals.netUSD > 0 ? '$' + totals.netUSD.toFixed(2) : ''}
-                          {totals.netUSD > 0 && totals.netIQD > 0 && <br />}
-                          {totals.netIQD > 0 ? Math.round(totals.netIQD).toLocaleString() + ' IQD' : ''}
-                          {totals.netUSD === 0 && totals.netIQD === 0 && '$0.00'}
-                        </div>
-                        <div className="text-xs text-green-600 mt-2">Final amount to be paid</div>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="text-center sm:text-left">
-                          <div className="text-sm text-gray-600">Pharmacy</div>
-                          <div className="font-medium text-gray-800">{selectedPharmacy.name}</div>
-                        </div>
-                        <div className="text-center sm:text-left">
-                          <div className="text-sm text-gray-600">Statement Date</div>
-                          <div className="font-medium text-gray-800">{format(new Date(), "dd/MM/yyyy")}</div>
-                        </div>
-                        <div className="text-center sm:text-left">
-                          <div className="text-sm text-gray-600">Currencies</div>
-                          <div className="font-medium text-gray-800">USD & IQD</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              )}
+              {/* Summary Section */}
+              <div style={{ background: "#f8fafc", padding: "20px", border: "1px solid #cbd5e1", marginTop: "20px" }}>
+                <div style={{ fontSize: "16px", fontWeight: "700", marginBottom: "15px", textTransform: "uppercase" }}>Financial Summary</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "15px" }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: "8px 0", color: "#475569", fontWeight: "600" }}>Total Unpaid Sales:</td>
+                      <td style={{ padding: "8px 0", textAlign: "right", color: "#1e40af", fontWeight: "700", width: "150px" }}>
+                        {totals.totalUSD > 0 ? formatCurrency(totals.totalUSD, "USD") : '-'}
+                      </td>
+                      <td style={{ padding: "8px 0", textAlign: "right", color: "#1e40af", fontWeight: "700", width: "150px" }}>
+                        {totals.totalIQD > 0 ? formatCurrency(totals.totalIQD, "IQD") : '-'}
+                      </td>
+                    </tr>
+                    {returns.length > 0 && (
+                      <tr>
+                        <td style={{ padding: "8px 0", color: "#475569", fontWeight: "600" }}>Total Returns Deducted:</td>
+                        <td style={{ padding: "8px 0", textAlign: "right", color: "#dc2626", fontWeight: "700" }}>
+                          {totals.totalReturnUSD > 0 ? '-' + formatCurrency(totals.totalReturnUSD, "USD") : '-'}
+                        </td>
+                        <td style={{ padding: "8px 0", textAlign: "right", color: "#dc2626", fontWeight: "700" }}>
+                          {totals.totalReturnIQD > 0 ? '-' + formatCurrency(totals.totalReturnIQD, "IQD") : '-'}
+                        </td>
+                      </tr>
+                    )}
+                    <tr>
+                      <td style={{ padding: "15px 0 5px 0", borderTop: "2px solid #34d399", fontWeight: "800", fontSize: "18px", color: "#047857" }}>NET AMOUNT DUE:</td>
+                      <td style={{ padding: "15px 0 5px 0", borderTop: "2px solid #34d399", textAlign: "right", fontWeight: "800", fontSize: "18px", color: "#047857" }}>
+                        {totals.netUSD > 0 ? formatCurrency(totals.netUSD, "USD") : '-'}
+                      </td>
+                      <td style={{ padding: "15px 0 5px 0", borderTop: "2px solid #34d399", textAlign: "right", fontWeight: "800", fontSize: "18px", color: "#047857" }}>
+                        {totals.netIQD > 0 ? formatCurrency(totals.netIQD, "IQD") : '-'}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
-              {/* Empty State */}
-              {!bills.length && !returns.length && !isLoading && !error && (
-                <Card className="text-center py-12 border border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-700 mb-2">No Unpaid Transactions</h3>
-                  <p className="text-gray-500 mb-6">All bills for this pharmacy are either paid or cash transactions.</p>
-                  <button
-                    onClick={handleChangePharmacy}
-                    style={{
-                      padding: "10px 20px",
-                      backgroundColor: "#2563eb",
-                      color: "#ffffff",
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      borderRadius: "8px",
-                      border: "none",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease",
-                      fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-                      boxShadow: "0 1px 3px rgba(37, 99, 235, 0.3)"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = "#1d4ed8";
-                      e.target.style.boxShadow = "0 2px 4px rgba(37, 99, 235, 0.4)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = "#2563eb";
-                      e.target.style.boxShadow = "0 1px 3px rgba(37, 99, 235, 0.3)";
-                    }}
-                  >
-                    Select Another Pharmacy
-                  </button>
-                </Card>
-              )}
-            </div>
+              <div style={{ textAlign: "right" }}>
+                <button 
+                  onClick={handlePrint} 
+                  style={printButtonStyle}
+                  onMouseOver={(e) => e.target.style.backgroundColor = '#1d4ed8'}
+                  onMouseOut={(e) => e.target.style.backgroundColor = '#2563eb'}
+                >
+                  Print Statement
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}

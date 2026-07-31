@@ -14,6 +14,8 @@ import {
   getSaleBillById,
   getReturnById,
 } from "@/lib/data";
+import { deleteDoc, doc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function SoldPaymentManagementPage() {
   const { user } = useAuth();
@@ -96,7 +98,7 @@ export default function SoldPaymentManagementPage() {
     danger: "#EF4444",
     dark: "#1E40AF",
     light: "#93C5FD",
-    background: "#F8FAFC",
+    background: "#FFFFFF",
     card: "#FFFFFF",
     text: "#1F2937",
     textLight: "#6B7280",
@@ -125,10 +127,23 @@ export default function SoldPaymentManagementPage() {
     return d.toISOString().split("T")[0];
   };
 
-  const generatePaymentNumber = (docId) => {
+  // Fixed sequential payment number generator: SPAY-YYYY-001
+  const generatePaymentNumber = () => {
     const currentYear = new Date().getFullYear();
-    const shortId = docId ? docId.slice(-8).toUpperCase() : Math.random().toString(36).slice(-8).toUpperCase();
-    return `SPAY-${currentYear}-${shortId}`;
+    let maxId = 0;
+    paymentHistory.forEach((p) => {
+      if (p.paymentNumber && p.paymentNumber.startsWith(`SPAY-${currentYear}-`)) {
+        const parts = p.paymentNumber.split('-');
+        if (parts.length === 3) {
+          const num = parseInt(parts[2], 10);
+          if (!isNaN(num) && num > maxId) {
+            maxId = num;
+          }
+        }
+      }
+    });
+    const nextNum = maxId + 1;
+    return `SPAY-${currentYear}-${String(nextNum).padStart(3, '0')}`;
   };
 
   const formatCurrency = (amount, currency = "IQD") => {
@@ -144,10 +159,8 @@ export default function SoldPaymentManagementPage() {
 
   const getDisplayAmount = (amountUSD, amountIQD) => {
     const parts = [];
-    if (amountUSD && amountUSD > 0) parts.push(formatUSD(amountUSD));
-    if (amountIQD && amountIQD > 0) parts.push(formatIQD(amountIQD));
-    if (amountIQD < 0) parts.push(formatIQD(amountIQD));
-    if (amountUSD < 0) parts.push(formatUSD(amountUSD));
+    if (amountUSD && amountUSD !== 0) parts.push(formatUSD(amountUSD));
+    if (amountIQD && amountIQD !== 0) parts.push(formatIQD(amountIQD));
     if (parts.length === 0) return "0 IQD";
     return parts.join(" + ");
   };
@@ -432,6 +445,28 @@ export default function SoldPaymentManagementPage() {
     setPaymentDate(new Date().toISOString().split("T")[0]);
   };
 
+  // Direct Firestore deletion fallback for cancelled payments
+  const handleDeletePayment = async (paymentId) => {
+    if (!window.confirm("Are you sure you want to delete this payment? This action cannot be undone.")) {
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await deleteDoc(doc(db, "soldPayments", paymentId));
+      setSuccess("Payment deleted successfully!");
+      await refreshPayments();
+      setTimeout(() => setSuccess(null), 3000);
+      if (showPaymentModal) {
+        setShowPaymentModal(false);
+      }
+    } catch (err) {
+      console.error("Error deleting payment:", err);
+      setError(err.message || "Failed to delete payment.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -498,16 +533,15 @@ export default function SoldPaymentManagementPage() {
 
       if (isEditMode) {
         const existingPayment = paymentHistory.find(p => p.id === editPaymentId);
-        paymentData.paymentNumber = existingPayment?.paymentNumber || generatePaymentNumber(editPaymentId);
+        paymentData.paymentNumber = existingPayment?.paymentNumber || generatePaymentNumber();
         await updateSoldPayment(editPaymentId, paymentData);
         setSuccess("Sold Payment updated successfully!");
         setIsEditMode(false);
         setEditPaymentId(null);
       } else {
+        paymentData.paymentNumber = generatePaymentNumber();
         const result = await createSoldPayment(paymentData);
         if (!result || !result.id) throw new Error("Payment creation failed: No payment ID returned.");
-        const paymentNumber = generatePaymentNumber(result.id);
-        await updateSoldPayment(result.id, { ...paymentData, paymentNumber });
         setSuccess("Sold Payment created successfully!");
       }
 
@@ -777,13 +811,10 @@ export default function SoldPaymentManagementPage() {
     };
 
     const getPaidDisplay = () => {
-      if (paidIQD !== 0) {
-        return paidIQD < 0 ? formatIQD(paidIQD) : `+${formatIQD(paidIQD)}`;
-      }
-      if (paidUSD !== 0) {
-        return paidUSD < 0 ? formatUSD(paidUSD) : `+${formatUSD(paidUSD)}`;
-      }
-      return "0 IQD";
+      const parts = [];
+      if (paidUSD !== 0) parts.push(paidUSD < 0 ? formatUSD(paidUSD) : `+${formatUSD(paidUSD)}`);
+      if (paidIQD !== 0) parts.push(paidIQD < 0 ? formatIQD(paidIQD) : `+${formatIQD(paidIQD)}`);
+      return parts.length > 0 ? parts.join(" and ") : "0 IQD";
     };
 
     return `<!DOCTYPE html>
@@ -850,7 +881,7 @@ export default function SoldPaymentManagementPage() {
         </div>
         <div class="total-card paid">
           <div class="total-label">TOTAL PAID</div>
-          <div class="total-amount" style="color:${paidIQD < 0 ? '#dc2626' : '#059669'};">${getPaidDisplay()}</div>
+          <div class="total-amount" style="color:#3b82f6;">${getPaidDisplay()}</div>
         </div>
       </div>
       
@@ -973,7 +1004,10 @@ export default function SoldPaymentManagementPage() {
   });
 
   const formatPaymentNumber = (payment) => {
-    if (!payment.paymentNumber) return generatePaymentNumber(payment.id);
+    if (!payment.paymentNumber) {
+      const year = new Date(payment.createdAt?.toDate ? payment.createdAt.toDate() : payment.createdAt || Date.now()).getFullYear();
+      return `SPAY-${year}-${payment.id.slice(-4).toUpperCase()}`;
+    }
     return payment.paymentNumber;
   };
 
@@ -993,7 +1027,7 @@ export default function SoldPaymentManagementPage() {
 
   if (!user || isLoading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)" }}>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "white" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ width: "3rem", height: "3rem", border: "3px solid #F3F4F6", borderTop: "3px solid #3B82F6", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto" }}></div>
           <p style={{ marginTop: "1rem", color: "#6B7280" }}>Loading...</p>
@@ -1003,9 +1037,9 @@ export default function SoldPaymentManagementPage() {
   }
 
   return (
-    <div style={{ width: "100%", minHeight: "100vh", padding: "1rem", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", fontFamily: "var(--font-nrt-reg)", boxSizing: "border-box", overflowX: "hidden" }}>
+    <div style={{ width: "100%", minHeight: "100vh", padding: "0.5rem", background: "white", fontFamily: "var(--font-nrt-reg)", boxSizing: "border-box", overflowX: "hidden", margin: 0 }}>
       <style>{`
-        *, *::before, *::after { box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; }
         @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
         @keyframes shake { 0%,100%{transform:translateX(0);} 20%,60%{transform:translateX(-6px);} 40%,80%{transform:translateX(6px);} }
         @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
@@ -1069,13 +1103,6 @@ export default function SoldPaymentManagementPage() {
         }
       `}</style>
 
-      {/* Header */}
-      {/* <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "clamp(1.4rem, 4vw, 2rem)", fontWeight: "bold", background: "linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", marginBottom: "0.25rem", fontFamily: "var(--font-nrt-bd)" }}>
-          {isEditMode ? "✏️ Update Sold Payment" : "💰 Sold Payment Management"}
-        </h1>
-      </div> */}
-
       {error && (
         <div style={{ padding: "1rem", backgroundColor: "#FEF2F2", border: `1px solid ${colorScheme.danger}`, borderRadius: "0.75rem", marginBottom: "1rem" }}>
           <p style={{ color: colorScheme.danger, margin: 0 }}>❌ {error}</p>
@@ -1088,18 +1115,26 @@ export default function SoldPaymentManagementPage() {
       )}
 
       {/* Main Form */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "2rem", width: "100%" }}>
 
         {/* Pharmacy Information */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.125rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: "2px solid #3B82F6", color: colorScheme.text }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "0.5rem", border: "1px solid #E5E7EB", padding: "1rem" }}>
+          <h2 style={{ fontSize: "1.125rem", fontWeight: "700", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: "2px solid #3B82F6", color: colorScheme.text }}>
             🏪 Pharmacy Information
           </h2>
           <div className="grid-3col">
             <div style={{ position: "relative" }} ref={pharmacyDropdownRef}>
               <label style={labelStyle}>Select Pharmacy *</label>
-              <input ref={pharmacyInputRef} type="text" value={pharmacySearchTerm} onChange={handlePharmacyInputChange} onFocus={() => setShowPharmacyDropdown(true)}
-                placeholder="Type to search pharmacy..." style={inputStyle} />
+              <div style={{ position: "relative" }}>
+                <input ref={pharmacyInputRef} type="text" value={pharmacySearchTerm} onChange={handlePharmacyInputChange} 
+                  onFocus={() => setShowPharmacyDropdown(true)}
+                  onClick={() => setShowPharmacyDropdown(!showPharmacyDropdown)}
+                  placeholder="Type or select pharmacy..." style={{ ...inputStyle, paddingRight: "2rem" }} />
+                <div onClick={() => setShowPharmacyDropdown(!showPharmacyDropdown)}
+                  style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: colorScheme.textLight }}>
+                  ▼
+                </div>
+              </div>
               {showPharmacyDropdown && filteredPharmacies.length > 0 && (
                 <div style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "200px", overflowY: "auto", backgroundColor: "white", border: "1px solid #D1D5DB", borderRadius: "0.75rem", marginTop: "0.25rem", zIndex: 10, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
                   {filteredPharmacies.map((pharmacy) => (
@@ -1137,8 +1172,8 @@ export default function SoldPaymentManagementPage() {
         </div>
 
         {/* Bill Image Section */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.125rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: "2px solid #3B82F6", color: colorScheme.text }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "0.5rem", border: "1px solid #E5E7EB", padding: "1rem" }}>
+          <h2 style={{ fontSize: "1.125rem", fontWeight: "700", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: "2px solid #3B82F6", color: colorScheme.text }}>
             📷 Bill Image
           </h2>
 
@@ -1147,7 +1182,7 @@ export default function SoldPaymentManagementPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: billImageData ? "1fr auto" : "1fr", gap: "1.5rem", alignItems: "start" }}>
             <div>
-              <label style={labelStyle}>Upload Bill Image (Optional — auto-converted to grayscale)</label>
+              <label style={labelStyle}>Upload Bill Image (Optional)</label>
 
               <div className="img-btn-row">
                 <button type="button" onClick={triggerFileInput} disabled={imageProcessing}
@@ -1201,8 +1236,8 @@ export default function SoldPaymentManagementPage() {
         {/* Bills & Returns Sections */}
         <div className="grid-2col">
           {/* Sold Bills */}
-          <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
-            <div style={{ background: "linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)", padding: "1rem 1.25rem" }}>
+          <div style={{ backgroundColor: colorScheme.card, borderRadius: "0.5rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)", padding: "0.75rem 1rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                 <h2 style={{ fontSize: "1.1rem", fontWeight: "bold", color: "white", margin: 0 }}>💰 Sold Bills ({soldBills.length})</h2>
                 {!isEditMode && soldBills.length > 0 && (
@@ -1213,7 +1248,7 @@ export default function SoldPaymentManagementPage() {
               </div>
               {selectedSoldBills.length > 0 && <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#BFDBFE" }}>{selectedSoldBills.length} selected</div>}
             </div>
-            <div style={{ padding: "1rem" }}>
+            <div style={{ padding: "0.75rem" }}>
               {soldBills.length > 0 && (
                 <div style={{ marginBottom: "0.75rem" }}>
                   <input
@@ -1288,8 +1323,8 @@ export default function SoldPaymentManagementPage() {
           </div>
 
           {/* Returns */}
-          <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
-            <div style={{ background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)", padding: "1rem 1.25rem" }}>
+          <div style={{ backgroundColor: colorScheme.card, borderRadius: "0.5rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)", padding: "0.75rem 1rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                 <h2 style={{ fontSize: "1.1rem", fontWeight: "bold", color: "white", margin: 0 }}>🔄 Returns ({returns.length})</h2>
                 {!isEditMode && returns.length > 0 && (
@@ -1300,7 +1335,7 @@ export default function SoldPaymentManagementPage() {
               </div>
               {selectedSoldReturns.length > 0 && <div style={{ marginTop: "0.4rem", fontSize: "0.75rem", color: "#FDE68A" }}>{selectedSoldReturns.length} selected</div>}
             </div>
-            <div style={{ padding: "1rem" }}>
+            <div style={{ padding: "0.75rem" }}>
               {returns.length > 0 && (
                 <div style={{ marginBottom: "0.75rem" }}>
                   <input
@@ -1379,7 +1414,7 @@ export default function SoldPaymentManagementPage() {
         </div>
 
         {/* Payment Summary */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.25rem" }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "0.5rem", border: "1px solid #E5E7EB", padding: "1rem" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: "2px solid #3B82F6", color: colorScheme.text }}>💰 Payment Summary</h2>
           <div className="summary-row" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "stretch" }}>
             <div style={{ flex: "1 1 0", minWidth: "120px", padding: "0.85rem 1rem", backgroundColor: "#F0FDF9", borderRadius: "0.75rem", border: "1px solid #A7F3D0" }}>
@@ -1406,7 +1441,7 @@ export default function SoldPaymentManagementPage() {
         </div>
 
         {/* Notes */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.25rem" }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "0.5rem", border: "1px solid #E5E7EB", padding: "1rem" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: "2px solid #93C5FD", color: colorScheme.text }}>📝 Payment Notes</h2>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
             style={{ ...inputStyle, resize: "vertical", minHeight: "60px" }} placeholder="Add notes about this payment..." />
@@ -1428,13 +1463,13 @@ export default function SoldPaymentManagementPage() {
       </div>
 
       {/* Payment History */}
-      <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden" }}>
-        <div style={{ background: "linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)", padding: "1.5rem" }}>
+      <div style={{ backgroundColor: colorScheme.card, borderRadius: "0.5rem", border: "1px solid #E5E7EB", overflow: "hidden", width: "100%" }}>
+        <div style={{ background: "linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)", padding: "1.25rem" }}>
           <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", color: "white", margin: 0 }}>📋 Sold Payment History</h2>
           {paymentHistory.length > 0 && <div style={{ fontSize: "0.8rem", color: "#BFDBFE", marginTop: "0.25rem" }}>{filteredPayments.length} of {paymentHistory.length} payments</div>}
         </div>
 
-        <div style={{ padding: "1.5rem" }}>
+        <div style={{ padding: "1.25rem" }}>
           <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap" }}>
             <input type="text" placeholder="🔍 Quick search: pharmacy, payment #, hardcopy, notes..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
               style={{ flex: "1 1 200px", padding: "0.75rem 1rem", border: "1px solid #D1D5DB", borderRadius: "0.75rem", fontSize: "0.875rem", fontFamily: "inherit", boxSizing: "border-box" }} />
@@ -1527,7 +1562,14 @@ export default function SoldPaymentManagementPage() {
               {filteredPayments.map((payment) => {
                 const displayNumber = formatPaymentNumber(payment);
                 const paymentImage = getPaymentImage(payment);
-                const netDisplayAmount = getDisplayAmount(payment.netAmountUSD || 0, payment.netAmountIQD || 0);
+                
+                const parts = [];
+                const netUSD = payment.netAmountUSD || 0;
+                const netIQD = payment.netAmountIQD || 0;
+                if (netUSD !== 0) parts.push(netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`);
+                if (netIQD !== 0) parts.push(netIQD < 0 ? formatIQD(netIQD) : `+${formatIQD(netIQD)}`);
+                const netDisplayAmount = parts.length > 0 ? parts.join(" and ") : "0 IQD";
+
                 return (
                   <div key={payment.id} style={{ border: "1px solid #E5E7EB", borderRadius: "1rem", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                     <div style={{ background: "linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)", padding: "0.9rem 1rem" }}>
@@ -1568,6 +1610,10 @@ export default function SoldPaymentManagementPage() {
                         <button onClick={() => handleUpdatePayment(payment)}
                           style={{ flex: "1 1 40px", padding: "0.45rem 0.3rem", backgroundColor: "#3B82F6", color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "600", fontSize: "0.75rem", fontFamily: "inherit" }}>
                           ✏️ Edit
+                        </button>
+                        <button onClick={() => handleDeletePayment(payment.id)}
+                          style={{ flex: "1 1 40px", padding: "0.45rem 0.3rem", backgroundColor: "#EF4444", color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "600", fontSize: "0.75rem", fontFamily: "inherit" }}>
+                          🗑️ Delete
                         </button>
                       </div>
                     </div>
@@ -1667,17 +1713,23 @@ export default function SoldPaymentManagementPage() {
               {/* Net Amount */}
               <div style={{ padding: "1rem", background: "linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%)", borderRadius: "0.75rem", marginBottom: "1rem" }}>
                 <div style={{ fontWeight: "700", marginBottom: "0.5rem", fontSize: "0.85rem", color: "#1E40AF" }}>💰 Net Amount Paid</div>
-                <div style={{ fontSize: "1.1rem", fontWeight: "800", color: selectedPayment.netAmountIQD < 0 ? "#dc2626" : "#059669" }}>
+                <div style={{ fontSize: "1.1rem", fontWeight: "800", color: "#1E40AF" }}>
                   {(() => {
                     const netUSD = selectedPayment.netAmountUSD || 0;
                     const netIQD = selectedPayment.netAmountIQD || 0;
-                    if (netIQD !== 0) {
-                      return netIQD < 0 ? formatIQD(netIQD) : `+${formatIQD(netIQD)}`;
-                    }
-                    if (netUSD !== 0) {
-                      return netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`;
-                    }
-                    return "0 IQD";
+                    const parts = [];
+                    if (netUSD !== 0) parts.push(<span key="usd" style={{ color: netUSD < 0 ? '#dc2626' : '#059669' }}>{netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`}</span>);
+                    if (netIQD !== 0) parts.push(<span key="iqd" style={{ color: netIQD < 0 ? '#dc2626' : '#059669' }}>{netIQD < 0 ? formatIQD(netIQD) : `+${formatIQD(netIQD)}`}</span>);
+                    
+                    if (parts.length === 0) return <span style={{ color: '#6b7280' }}>0 IQD</span>;
+                    
+                    return (
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {parts.map((part, i) => (
+                          <span key={i}>{part}{i < parts.length - 1 ? <span style={{ color: '#1E40AF' }}> and </span> : ''}</span>
+                        ))}
+                      </div>
+                    );
                   })()}
                 </div>
               </div>
@@ -1697,6 +1749,14 @@ export default function SoldPaymentManagementPage() {
                   <div style={{ fontSize: "0.72rem", color: colorScheme.textLight, marginTop: "0.3rem" }}>Click image to enlarge</div>
                 </div>
               )}
+              
+              <div style={{ marginTop: "1rem", display: "flex", justifyContent: "flex-end" }}>
+                <button onClick={() => handleDeletePayment(selectedPayment.id)}
+                  style={{ padding: "0.6rem 1.2rem", backgroundColor: "#EF4444", color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "600", fontSize: "0.85rem", fontFamily: "inherit" }}>
+                  🗑️ Delete Payment
+                </button>
+              </div>
+
             </div>
           </div>
         </div>
