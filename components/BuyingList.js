@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import React from 'react';
 import { getBoughtBills, getCompanies, deleteBoughtBill, updateBoughtBill } from "@/lib/data";
-import Card from "./Card";
 import { useRouter } from "next/navigation";
 import Select from "react-select";
 import { 
@@ -230,7 +229,6 @@ export default function BuyingList({ refreshTrigger }) {
   const cameraInputRef = useRef(null);
   const router = useRouter();
 
-  // Instant automatic data fetching on edit, delete, or trigger
   const fetchData = useCallback(async () => {
     try {
       const [billsData, companiesData] = await Promise.all([
@@ -495,7 +493,7 @@ export default function BuyingList({ refreshTrigger }) {
     if (confirm("Are you sure you want to delete this bill?")) {
       try {
         await deleteBoughtBill(billNumber);
-        setInternalRefresh(prev => prev + 1); // Trigger non-reloading instant update
+        setInternalRefresh(prev => prev + 1);
         setSelectedBill(null);
       } catch (error) {
         console.error("Error deleting bill:", error);
@@ -580,7 +578,7 @@ export default function BuyingList({ refreshTrigger }) {
         attachmentDate: new Date().toISOString()
       });
 
-      setInternalRefresh(prev => prev + 1); // Trigger automatic update
+      setInternalRefresh(prev => prev + 1);
 
       setAttachmentModal(prev => ({
         ...prev,
@@ -604,7 +602,7 @@ export default function BuyingList({ refreshTrigger }) {
           attachmentDate: null
         });
 
-        setInternalRefresh(prev => prev + 1); // Trigger automatic update
+        setInternalRefresh(prev => prev + 1);
 
         setAttachmentModal(prev => ({
           ...prev,
@@ -629,7 +627,7 @@ export default function BuyingList({ refreshTrigger }) {
       switch (status) {
         case "Paid":
         case "Cash":
-          return "bg-yellow-100 text-yellow-800 border border-yellow-300";
+          return "bg-green-100 text-green-800 border border-green-300";
         case "Unpaid":
           return "bg-orange-100 text-orange-800 border border-orange-300";
         default:
@@ -646,7 +644,7 @@ export default function BuyingList({ refreshTrigger }) {
   const ConsignmentBadge = ({ isConsignment }) => {
     return (
       <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
-        isConsignment ? "bg-purple-100 text-purple-800 border-purple-300" : "bg-green-100 text-green-800 border-green-300"
+        isConsignment ? "bg-purple-100 text-purple-800 border-purple-300" : "bg-blue-100 text-blue-800 border-blue-300"
       }`}>
         {isConsignment ? "تحت صرف" : "OWNED"}
       </span>
@@ -797,7 +795,7 @@ export default function BuyingList({ refreshTrigger }) {
   };
 
   const TableHeader = ({ title, columnKey, type = "string", isLast = false }) => (
-    <th className="sortable" style={{ padding: "0.75rem", borderBottom: "2px solid #cbd5e1", borderRight: isLast ? "none" : "1px solid #cbd5e1", verticalAlign: "middle", whiteSpace: "nowrap", backgroundColor: "#f8fafc" }}>
+    <th className="sortable">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontWeight: "600", color: "#4b5563", fontSize: "0.875rem" }}>
         <div onClick={() => requestSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.375rem", flex: 1, userSelect: "none" }}>
           {title}
@@ -815,20 +813,58 @@ export default function BuyingList({ refreshTrigger }) {
   return (
     <>
       <style jsx global>{`
-        .buying-list-wrapper {
-          max-width: 100%;
-          margin: 0 auto;
-          padding: 0.75rem;
-          width: 100%;
+        /* CSS RESET FOR NEXTJS CONTAINERS */
+        body {
+          margin: 0;
+          padding: 0;
+          overflow-x: hidden;
         }
 
+        /* 100% WIDTH BREAKOUT TRICK */
+        .buying-list-wrapper {
+          width: 100vw;
+          position: relative;
+          left: 50%;
+          right: 50%;
+          margin-left: -50vw;
+          margin-right: -50vw;
+          background: #f1f5f9;
+          min-height: 100vh;
+          box-sizing: border-box;
+          padding: 0; /* Remove parent padding to stretch completely */
+        }
+
+        .main-card-container {
+          width: 100%;
+          background-color: white;
+          border-radius: 0; /* Flush against the edges */
+          border: none;
+          box-shadow: none; /* No shadow needed if edge-to-edge */
+          overflow: hidden;
+        }
+
+        .main-card-header {
+          background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+          padding: 1.25rem 2rem;
+        }
+
+        /* Padding specifically for filters so they don't touch the edge */
+        .filter-section-wrapper {
+          padding: 1.5rem 2rem;
+          background-color: white;
+        }
+
+        /* Table container needs to stretch full width with 0 side margins */
         .table-container {
           background: white;
-          border-radius: 12px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-          overflow: visible;
-          margin-top: 1rem;
+          border-radius: 0;
+          border-top: 1px solid #E5E7EB;
+          border-bottom: 1px solid #E5E7EB;
+          border-left: none;
+          border-right: none;
+          overflow: hidden;
           width: 100%;
+          margin: 0;
         }
 
         .table-scroll-wrapper {
@@ -838,7 +874,6 @@ export default function BuyingList({ refreshTrigger }) {
           max-height: 75vh;
           -webkit-overflow-scrolling: touch;
           width: 100%;
-          padding-bottom: 6rem;
         }
 
         .purchase-table {
@@ -846,11 +881,11 @@ export default function BuyingList({ refreshTrigger }) {
           border-collapse: separate;
           border-spacing: 0;
           font-size: 14px;
-          min-width: 900px;
+          min-width: 100%; /* Stretch fully */
         }
 
         .purchase-table th {
-          padding: 0.75rem;
+          padding: 0.75rem 1rem;
           font-weight: 600;
           color: #4b5563;
           text-align: left;
@@ -863,8 +898,17 @@ export default function BuyingList({ refreshTrigger }) {
           white-space: nowrap;
         }
 
+        /* Add extra padding to first and last columns so text isn't glued to monitor edges */
+        .purchase-table th:first-child, .purchase-table td:first-child {
+          padding-left: 2rem;
+        }
+        
+        .purchase-table th:last-child, .purchase-table td:last-child {
+          padding-right: 2rem;
+        }
+
         .purchase-table td {
-          padding: 0.75rem;
+          padding: 0.75rem 1rem;
           color: #374151;
           border-bottom: 1px solid #e5e7eb;
           transition: all 0.2s ease;
@@ -886,7 +930,7 @@ export default function BuyingList({ refreshTrigger }) {
         }
 
         .purchase-table tbody tr.selected-row {
-          background: #f0f9ff;
+          background: #f5f3ff;
         }
 
         .action-buttons {
@@ -908,18 +952,18 @@ export default function BuyingList({ refreshTrigger }) {
           gap: 0.25rem;
         }
 
-        .btn-edit { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+        .btn-edit { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
         .btn-delete { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
         .btn-attach { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
         .btn-view { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
 
         .details-panel {
-          background: #f9fafb;
-          border-top: 2px solid #3b82f6;
+          background: #f8fafc;
+          border-top: 2px solid #8b5cf6;
           border-bottom: 1px solid #e5e7eb;
         }
 
-        .details-content { padding: 1rem; }
+        .details-content { padding: 1rem 2rem; }
 
         .info-grid {
           display: grid;
@@ -959,6 +1003,7 @@ export default function BuyingList({ refreshTrigger }) {
           overflow: hidden;
           margin: 0.75rem 0;
           overflow-x: auto;
+          width: 100%;
         }
 
         .items-table {
@@ -993,7 +1038,7 @@ export default function BuyingList({ refreshTrigger }) {
           padding: 0.2rem 0.4rem;
           border-radius: 4px;
           font-size: 0.85rem;
-          color: #2563eb;
+          color: #8b5cf6;
         }
 
         .quantity-badge {
@@ -1013,7 +1058,7 @@ export default function BuyingList({ refreshTrigger }) {
           background: white;
           border: 1px solid #e5e7eb;
           border-radius: 12px;
-          padding: 1rem;
+          padding: 1.5rem;
           margin-bottom: 1rem;
         }
 
@@ -1021,13 +1066,13 @@ export default function BuyingList({ refreshTrigger }) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 0.75rem;
+          margin-bottom: 1rem;
           flex-wrap: wrap;
           gap: 0.5rem;
         }
 
         .filter-header h3 {
-          font-size: 1rem;
+          font-size: 1.1rem;
           font-weight: 600;
           color: #111827;
           margin: 0;
@@ -1036,7 +1081,7 @@ export default function BuyingList({ refreshTrigger }) {
         .filter-grid {
           display: grid;
           grid-template-columns: 1fr;
-          gap: 0.75rem;
+          gap: 1rem;
         }
 
         @media (min-width: 640px) {
@@ -1049,7 +1094,7 @@ export default function BuyingList({ refreshTrigger }) {
 
         .filter-input {
           width: 100%;
-          padding: 0.5rem;
+          padding: 0.6rem;
           border: 1px solid #e5e7eb;
           border-radius: 8px;
           font-size: 0.9rem;
@@ -1058,15 +1103,15 @@ export default function BuyingList({ refreshTrigger }) {
         .filter-label {
           display: block;
           font-size: 0.85rem;
-          font-weight: 500;
+          font-weight: 600;
           color: #4b5563;
-          margin-bottom: 0.25rem;
+          margin-bottom: 0.35rem;
         }
 
         .modal-overlay {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
+          background: rgba(15, 23, 42, 0.7);
           display: flex; alignItems: center; justify-content: center;
           padding: 1rem; z-index: 10000;
           backdrop-filter: blur(4px);
@@ -1077,23 +1122,23 @@ export default function BuyingList({ refreshTrigger }) {
           border-radius: 16px;
           width: 100%; max-width: 500px; max-height: 90vh;
           overflow-y: auto;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
         }
 
         .modal-header {
           position: sticky; top: 0;
           background: white; border-bottom: 1px solid #e5e7eb;
-          padding: 0.75rem 1rem;
+          padding: 1.25rem 1.5rem;
           display: flex; justify-content: space-between; align-items: center;
           z-index: 10;
         }
 
         .modal-header h3 {
-          font-size: 1rem; font-weight: 600; color: #111827; margin: 0;
+          font-size: 1.1rem; font-weight: 700; color: #111827; margin: 0;
         }
 
-        .modal-close { color: #9ca3af; cursor: pointer; }
-        .modal-body { padding: 1rem; }
+        .modal-close { color: #9ca3af; cursor: pointer; border: none; background: transparent; display: flex; align-items: center; justify-content: center; }
+        .modal-body { padding: 1.5rem; }
 
         .attachment-preview {
           width: 100%; height: 200px;
@@ -1110,12 +1155,12 @@ export default function BuyingList({ refreshTrigger }) {
 
         .modal-actions {
           display: grid; grid-template-columns: repeat(3, 1fr);
-          gap: 0.5rem; margin-top: 0.75rem;
+          gap: 0.5rem; margin-top: 1.5rem;
         }
 
         .modal-btn {
-          padding: 0.5rem; border-radius: 8px;
-          font-weight: 500; font-size: 0.85rem;
+          padding: 0.6rem; border-radius: 8px;
+          font-weight: 600; font-size: 0.85rem;
           border: none; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
           gap: 0.5rem;
@@ -1123,7 +1168,7 @@ export default function BuyingList({ refreshTrigger }) {
 
         .modal-btn-remove { background: #ef4444; color: white; }
         .modal-btn-cancel { background: #6b7280; color: white; }
-        .modal-btn-save { background: #3b82f6; color: white; }
+        .modal-btn-save { background: #8b5cf6; color: white; }
 
         .fullscreen-overlay {
           position: fixed;
@@ -1154,167 +1199,202 @@ export default function BuyingList({ refreshTrigger }) {
         }
 
         .fullscreen-btn-close { background: #ef4444; color: white; }
-        .fullscreen-btn-download { background: #3b82f6; color: white; }
+        .fullscreen-btn-download { background: #8b5cf6; color: white; }
 
         .empty-state {
-          text-align: center; padding: 2rem;
-          background: white; border-radius: 12px;
+          text-align: center; padding: 3rem;
+          background: white; border-radius: 0;
           border: 1px solid #e5e7eb;
+          margin-top: 0;
+        }
+        
+        .empty-state-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .empty-state-title { font-size: 1.25rem; font-weight: 700; color: #111827; margin: 0 0 0.5rem 0; }
+        .empty-state-text { color: #6b7280; margin: 0; }
+        
+        .file-upload-btn {
+          width: 100%;
+          padding: 0.75rem;
+          background: #f3f4f6;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          font-weight: 600;
+          color: #374151;
+          cursor: pointer;
+          margin-bottom: 0.5rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .file-input {
+          display: none;
         }
       `}</style>
 
       <div className="buying-list-wrapper">
-        <Card title="Purchase History">
-          {/* Top Filters Section */}
-          <div className="filter-section">
-            <div className="filter-header">
-              <h3>Search Filters</h3>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                {Object.keys(columnFilters).length > 0 && (
+        <div className="main-card-container">
+          {/* Header section matching Option A style */}
+          <div className="main-card-header">
+            <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", color: "white", margin: 0 }}>
+              📋 Purchase History
+            </h2>
+          </div>
+          
+          <div className="filter-section-wrapper">
+            {/* Top Filters Section */}
+            <div className="filter-section">
+              <div className="filter-header">
+                <h3>Search Filters</h3>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {Object.keys(columnFilters).length > 0 && (
+                    <button
+                      type="button"
+                      style={{ background: "#fee2e2", color: "#ef4444", fontSize: "0.75rem", padding: "0.4rem 0.75rem", borderRadius: "0.375rem", border: "1px solid #fca5a5", cursor: "pointer", fontWeight: "600" }}
+                      onClick={() => setColumnFilters({})}
+                    >
+                      Clear Header Filters
+                    </button>
+                  )}
                   <button
                     type="button"
-                    style={{ background: "#fee2e2", color: "#ef4444", fontSize: "0.75rem", padding: "0.25rem 0.5rem", borderRadius: "0.25rem", border: "1px solid #fca5a5", cursor: "pointer", fontWeight: "600" }}
-                    onClick={() => setColumnFilters({})}
+                    style={{ background: "#f3f4f6", color: "#1f2937", border: "none", fontSize: "0.75rem", padding: "0.4rem 0.75rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: "600" }}
+                    onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
                   >
-                    Clear Header Filters
+                    {showAdvancedSearch ? "Hide Advanced Search" : "Advanced Search"}
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs py-1 px-2 rounded"
-                  onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
-                >
-                  {showAdvancedSearch ? "Hide Advanced Search" : "Advanced Search"}
-                </button>
+                </div>
               </div>
-            </div>
-            <div className="filter-grid mb-4">
-              <div className="relative">
-                <label className="filter-label">Company</label>
-                <input
-                  className="filter-input"
-                  placeholder="Search company..."
-                  value={filters.companySearch}
-                  onChange={(e) => handleFilterChange('companySearch', e.target.value)}
-                  onFocus={() => setShowCompanySuggestions(true)}
-                />
-                {showCompanySuggestions && (
-                  <div className="absolute z-[999] w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto">
-                    {companySuggestions.map(company => (
-                      <div
-                        key={company.id}
-                        className="p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors duration-150"
-                        onClick={() => handleCompanySelect(company)}
+              <div className="filter-grid" style={{ marginBottom: "1rem" }}>
+                <div style={{ position: "relative" }}>
+                  <label className="filter-label">Company</label>
+                  <input
+                    className="filter-input"
+                    placeholder="Search company..."
+                    value={filters.companySearch}
+                    onChange={(e) => handleFilterChange('companySearch', e.target.value)}
+                    onFocus={() => setShowCompanySuggestions(true)}
+                  />
+                  {showCompanySuggestions && (
+                    <div style={{ position: "absolute", zIndex: 999, width: "100%", background: "white", border: "1px solid #e5e7eb", borderRadius: "0.5rem", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)", marginTop: "0.25rem", maxHeight: "240px", overflowY: "auto" }}>
+                      {companySuggestions.map(company => (
+                        <div
+                          key={company.id}
+                          style={{ padding: "0.5rem", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
+                          onClick={() => handleCompanySelect(company)}
+                        >
+                          <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#111827" }}>{company.name}</div>
+                          <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: "0.25rem" }}>Code: {company.code}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="filter-label">Filter by Items</label>
+                  <Select
+                    isMulti
+                    options={itemOptions}
+                    onChange={(selected) => setItemFilters(selected.map(option => option.value))}
+                    placeholder="Select specific items..."
+                    menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                    styles={{
+                      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                      control: (base) => ({
+                        ...base,
+                        minHeight: '39px',
+                        fontSize: '14px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        '&:hover': { borderColor: '#8b5cf6' },
+                        boxShadow: 'none'
+                      })
+                    }}
+                  />
+                </div>
+              </div>
+              {showAdvancedSearch && (
+                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "1rem" }}>
+                  <div className="filter-grid" style={{ marginBottom: "0.75rem" }}>
+                    <div>
+                      <label className="filter-label">Bill Number</label>
+                      <input
+                        className="filter-input"
+                        placeholder="Enter bill #"
+                        value={filters.billNumber}
+                        onChange={(e) => handleFilterChange('billNumber', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="filter-label">Company Bill #</label>
+                      <input
+                        className="filter-input"
+                        placeholder="Enter company bill #"
+                        value={filters.companyBillNumber}
+                        onChange={(e) => handleFilterChange('companyBillNumber', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="filter-label">From Date</label>
+                      <input
+                        type="date"
+                        className="filter-input"
+                        value={filters.startDate}
+                        onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="filter-label">To Date</label>
+                      <input
+                        type="date"
+                        className="filter-input"
+                        value={filters.endDate}
+                        onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="filter-grid">
+                    <div>
+                      <label className="filter-label">Payment Status</label>
+                      <select
+                        className="filter-input"
+                        value={filters.paymentStatus}
+                        onChange={(e) => handleFilterChange('paymentStatus', e.target.value)}
                       >
-                        <div className="font-semibold text-sm text-gray-900">{company.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">Code: {company.code}</div>
-                      </div>
-                    ))}
+                        <option value="all">All Status</option>
+                        <option value="Unpaid">Unpaid</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Paid">Paid</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="filter-label">Consignment Status</label>
+                      <select
+                        className="filter-input"
+                        value={filters.consignmentStatus}
+                        onChange={(e) => handleFilterChange('consignmentStatus', e.target.value)}
+                      >
+                        <option value="all">All</option>
+                        <option value="consignment">تحت صرف (Consignment)</option>
+                        <option value="owned">Owned</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="filter-label">Global Search</label>
+                      <input
+                        className="filter-input"
+                        placeholder="Search by item name or barcode..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
-              <div>
-                <label className="filter-label">Filter by Items</label>
-                <Select
-                  isMulti
-                  options={itemOptions}
-                  onChange={(selected) => setItemFilters(selected.map(option => option.value))}
-                  placeholder="Select specific items..."
-                  menuPortalTarget={typeof document !== "undefined" ? document.body : null}
-                  styles={{
-                    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                    control: (base) => ({
-                      ...base,
-                      minHeight: '36px',
-                      fontSize: '13px',
-                      border: '1px solid #e5e7eb',
-                      '&:hover': { borderColor: '#3b82f6' }
-                    })
-                  }}
-                />
-              </div>
+                </div>
+              )}
             </div>
-            {showAdvancedSearch && (
-              <div className="border-t pt-4 space-y-4">
-                <div className="filter-grid">
-                  <div>
-                    <label className="filter-label">Bill Number</label>
-                    <input
-                      className="filter-input"
-                      placeholder="Enter bill #"
-                      value={filters.billNumber}
-                      onChange={(e) => handleFilterChange('billNumber', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="filter-label">Company Bill #</label>
-                    <input
-                      className="filter-input"
-                      placeholder="Enter company bill #"
-                      value={filters.companyBillNumber}
-                      onChange={(e) => handleFilterChange('companyBillNumber', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="filter-label">From Date</label>
-                    <input
-                      type="date"
-                      className="filter-input"
-                      value={filters.startDate}
-                      onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="filter-label">To Date</label>
-                    <input
-                      type="date"
-                      className="filter-input"
-                      value={filters.endDate}
-                      onChange={(e) => handleFilterChange('endDate', e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="filter-grid">
-                  <div>
-                    <label className="filter-label">Payment Status</label>
-                    <select
-                      className="filter-input"
-                      value={filters.paymentStatus}
-                      onChange={(e) => handleFilterChange('paymentStatus', e.target.value)}
-                    >
-                      <option value="all">All Status</option>
-                      <option value="Unpaid">Unpaid</option>
-                      <option value="Cash">Cash</option>
-                      <option value="Paid">Paid</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="filter-label">Consignment Status</label>
-                    <select
-                      className="filter-input"
-                      value={filters.consignmentStatus}
-                      onChange={(e) => handleFilterChange('consignmentStatus', e.target.value)}
-                    >
-                      <option value="all">All</option>
-                      <option value="consignment">تحت صرف (Consignment)</option>
-                      <option value="owned">Owned</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="filter-label">Global Search</label>
-                    <input
-                      className="filter-input"
-                      placeholder="Search by item name or barcode..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Table Container */}
+          {/* Table Container - OUTSIDE of the padded wrapper so it hits the edges */}
           <div className="table-container">
             <div className="table-scroll-wrapper">
               <table className="purchase-table">
@@ -1326,7 +1406,7 @@ export default function BuyingList({ refreshTrigger }) {
                     <TableHeader title="STATUS" columnKey="paymentStatus" type="string" />
                     <TableHeader title="CONSIGNMENT" columnKey="consignment" type="string" />
                     <TableHeader title="ATTACHMENT" columnKey="hasAttachment" type="string" />
-                    <th style={{ padding: "0.75rem", borderBottom: "2px solid #cbd5e1", backgroundColor: "#f8fafc", fontWeight: "600" }}>ACTIONS</th>
+                    <th style={{ padding: "0.75rem 2rem", borderBottom: "2px solid #cbd5e1", backgroundColor: "#f8fafc", fontWeight: "600" }}>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1337,14 +1417,14 @@ export default function BuyingList({ refreshTrigger }) {
                         className={selectedBill?.billNumber === bill.billNumber ? 'selected-row' : ''}
                       >
                         <td>
-                          <span className="font-medium text-blue-600">#{bill.billNumber}</span>
+                          <span style={{ fontWeight: 600, color: "#8b5cf6" }}>#{bill.billNumber}</span>
                         </td>
                         <td>
-                          <div className="font-medium">{bill.companyName}</div>
-                          <div className="text-xs text-gray-500 mt-1">Code: {bill.companyCode}</div>
+                          <div style={{ fontWeight: 600 }}>{bill.companyName}</div>
+                          <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: "0.25rem" }}>Code: {bill.companyCode}</div>
                         </td>
                         <td>
-                          <div className="text-sm text-gray-700">{bill.formattedDate}</div>
+                          <div style={{ fontSize: "0.85rem", color: "#374151" }}>{bill.formattedDate}</div>
                         </td>
                         <td>
                           <PaymentStatusBadge status={bill.paymentStatus || "Unpaid"} />
@@ -1400,15 +1480,17 @@ export default function BuyingList({ refreshTrigger }) {
                       </tr>
                       {selectedBill?.billNumber === bill.billNumber && (
                         <tr>
-                          <td colSpan="7" className="p-0">
+                          <td colSpan="7" style={{ padding: 0 }}>
                             <div className="details-panel">
                               <div className="details-content">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
-                                  <h4 className="font-bold text-blue-800 text-lg">
-                                    📋 Bill #{bill.billNumber} - Complete Details
-                                  </h4>
-                                  <div className="text-sm text-gray-600">
-                                    Total Items: {bill.items.length} | Currency: {bill.currency || "USD"}
+                                <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1rem" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+                                    <h4 style={{ fontWeight: "bold", color: "#6d28d9", fontSize: "1.1rem", margin: 0 }}>
+                                      📋 Bill #{bill.billNumber} - Complete Details
+                                    </h4>
+                                    <div style={{ fontSize: "0.85rem", color: "#4b5563" }}>
+                                      Total Items: {bill.items.length} | Currency: {bill.currency || "USD"}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -1431,11 +1513,11 @@ export default function BuyingList({ refreshTrigger }) {
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Payment Status</span>
-                                    <PaymentStatusBadge status={bill.paymentStatus || "Unpaid"} />
+                                    <div><PaymentStatusBadge status={bill.paymentStatus || "Unpaid"} /></div>
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Consignment</span>
-                                    <ConsignmentBadge isConsignment={bill.isConsignment} />
+                                    <div><ConsignmentBadge isConsignment={bill.isConsignment} /></div>
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Expense %</span>
@@ -1443,13 +1525,13 @@ export default function BuyingList({ refreshTrigger }) {
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Transport Fee</span>
-                                    <div>
+                                    <div style={{ fontWeight: 600, color: "#111827" }}>
                                       {bill.currency === "USD" ? `$${formatNumber(bill.totalTransportFeeUSD || 0)}` : `${formatNumber(bill.totalTransportFeeIQD || 0)} IQD`}
                                     </div>
                                   </div>
                                   <div className="info-item">
                                     <span className="info-label">Other Expenses</span>
-                                    <div>
+                                    <div style={{ fontWeight: 600, color: "#111827" }}>
                                       {bill.currency === "USD" ? `$${formatNumber(bill.totalExternalExpenseUSD || 0)}` : `${formatNumber(bill.totalExternalExpenseIQD || 0)} IQD`}
                                     </div>
                                   </div>
@@ -1460,17 +1542,17 @@ export default function BuyingList({ refreshTrigger }) {
                                 </div>
 
                                 <div className="items-table-container">
-                                  <h5 className="font-semibold text-gray-700 mb-3 text-sm px-4 pt-4">Items List</h5>
+                                  <h5 style={{ fontWeight: 600, color: "#374151", fontSize: "0.9rem", padding: "1rem 1rem 0.5rem 1rem", margin: 0 }}>Items List</h5>
                                   <table className="items-table">
                                     <thead>
                                       <tr>
                                         <th>Barcode</th>
                                         <th>Item Name</th>
-                                        <th className="text-center">Qty</th>
-                                        <th className="text-right">Base Price</th>
-                                        <th className="text-right">Net Price</th>
-                                        <th className="text-right">Out Price</th>
-                                        <th className="text-center">Expire Date</th>
+                                        <th style={{ textAlign: "center" }}>Qty</th>
+                                        <th style={{ textAlign: "right" }}>Base Price</th>
+                                        <th style={{ textAlign: "right" }}>Net Price</th>
+                                        <th style={{ textAlign: "right" }}>Out Price</th>
+                                        <th style={{ textAlign: "center" }}>Expire Date</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -1487,11 +1569,11 @@ export default function BuyingList({ refreshTrigger }) {
                                           <tr key={index}>
                                             <td><code className="barcode-cell">{item.barcode}</code></td>
                                             <td>{item.name}</td>
-                                            <td className="text-center"><span className="quantity-badge">{quantity}</span></td>
-                                            <td className="text-right">{billCurrency === "USD" ? `$${formatNumber(basePrice)}` : `${formatNumber(basePrice)} IQD`}</td>
-                                            <td className="text-right" style={{ color: '#4f46e5', fontWeight: 'bold' }}>{billCurrency === "USD" ? `$${formatNumber(netPrice)}` : `${formatNumber(netPrice)} IQD`}</td>
-                                            <td className="text-right" style={{ color: '#059669', fontWeight: 'bold' }}>{billCurrency === "USD" ? `$${formatNumber(outPrice)}` : `${formatNumber(outPrice)} IQD`}</td>
-                                            <td className="text-center"><span className="expire-badge expire-ok">{expireDate}</span></td>
+                                            <td style={{ textAlign: "center" }}><span className="quantity-badge">{quantity}</span></td>
+                                            <td style={{ textAlign: "right" }}>{billCurrency === "USD" ? `$${formatNumber(basePrice)}` : `${formatNumber(basePrice)} IQD`}</td>
+                                            <td style={{ textAlign: "right", color: '#6d28d9', fontWeight: 'bold' }}>{billCurrency === "USD" ? `$${formatNumber(netPrice)}` : `${formatNumber(netPrice)} IQD`}</td>
+                                            <td style={{ textAlign: "right", color: '#059669', fontWeight: 'bold' }}>{billCurrency === "USD" ? `$${formatNumber(outPrice)}` : `${formatNumber(outPrice)} IQD`}</td>
+                                            <td style={{ textAlign: "center" }}><span style={{ display: "inline-block", background: "#f3f4f6", padding: "0.2rem 0.5rem", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "600", color: "#374151" }}>{expireDate}</span></td>
                                           </tr>
                                         );
                                       })}
@@ -1508,15 +1590,15 @@ export default function BuyingList({ refreshTrigger }) {
                 </tbody>
               </table>
             </div>
-          </div>
 
-          {sortedAndFilteredBills.length === 0 && (
-            <div className="empty-state">
-              <div className="empty-state-icon">📦</div>
-              <h3 className="empty-state-title">No bills found</h3>
-              <p className="empty-state-text">Try adjusting your search filters or create a new purchase bill.</p>
-            </div>
-          )}
+            {sortedAndFilteredBills.length === 0 && (
+              <div className="empty-state">
+                <div className="empty-state-icon">📦</div>
+                <h3 className="empty-state-title">No bills found</h3>
+                <p className="empty-state-text">Try adjusting your search filters or create a new purchase bill.</p>
+              </div>
+            )}
+          </div>
 
           {/* Attachment Modal */}
           {attachmentModal && (
@@ -1582,7 +1664,7 @@ export default function BuyingList({ refreshTrigger }) {
               </div>
             </div>
           )}
-        </Card>
+        </div>
       </div>
     </>
   );

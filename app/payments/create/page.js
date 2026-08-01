@@ -14,7 +14,7 @@ import {
   getSaleBillById,
   getReturnById,
 } from "@/lib/data";
-import { deleteDoc, doc } from "firebase/firestore";
+import { deleteDoc, doc,writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function SoldPaymentManagementPage() {
@@ -445,23 +445,71 @@ export default function SoldPaymentManagementPage() {
     setPaymentDate(new Date().toISOString().split("T")[0]);
   };
 
-  // Direct Firestore deletion fallback for cancelled payments
-  const handleDeletePayment = async (paymentId) => {
-    if (!window.confirm("Are you sure you want to delete this payment? This action cannot be undone.")) {
+const handleDeletePayment = async (paymentId) => {
+    if (!window.confirm("Are you sure you want to delete this payment? Associated bills and returns will be marked as unpaid. This action cannot be undone.")) {
       return;
     }
     try {
       setSubmitting(true);
-      await deleteDoc(doc(db, "soldPayments", paymentId));
-      setSuccess("Payment deleted successfully!");
+
+      const paymentToDelete = paymentHistory.find((p) => p.id === paymentId);
+      
+      if (!paymentToDelete) {
+        throw new Error("Payment not found in history.");
+      }
+
+      const batch = writeBatch(db);
+
+      // 1. Revert Sold Bills to unpaid (Now correctly pointing to "soldBills")
+      if (paymentToDelete.selectedSoldBills && paymentToDelete.selectedSoldBills.length > 0) {
+        paymentToDelete.selectedSoldBills.forEach((billId) => {
+          const billRef = doc(db, "soldBills", billId); 
+          batch.set(billRef, {
+            status: "unpaid",
+            paymentStatus: "unpaid",
+            isPaid: false,
+            paymentId: null
+          }, { merge: true });
+        });
+      }
+
+      // 2. Revert Returns to unprocessed
+      if (paymentToDelete.selectedReturns && paymentToDelete.selectedReturns.length > 0) {
+        paymentToDelete.selectedReturns.forEach((returnId) => {
+          const returnRef = doc(db, "returns", returnId); 
+          batch.set(returnRef, {
+            status: "unprocessed",
+            paymentStatus: "unpaid",
+            isPaid: false,
+            paymentId: null
+          }, { merge: true });
+        });
+      }
+
+      // 3. Delete the actual payment document
+      const paymentRef = doc(db, "soldPayments", paymentId);
+      batch.delete(paymentRef);
+
+      // 4. Commit all changes simultaneously
+      await batch.commit();
+
+      setSuccess("Payment deleted and bills reverted to unpaid successfully!");
+      
+      // 5. Refresh the UI data
       await refreshPayments();
+      
+      // Force a re-fetch of the pharmacy bills if the user is currently looking at the affected pharmacy
+      if (selectedPharmacy === paymentToDelete.pharmacyId) {
+        setInitialLoadComplete((prev) => !prev); 
+      }
+
       setTimeout(() => setSuccess(null), 3000);
       if (showPaymentModal) {
         setShowPaymentModal(false);
       }
     } catch (err) {
       console.error("Error deleting payment:", err);
-      setError(err.message || "Failed to delete payment.");
+      setError(err.message || "Failed to delete payment and revert bills.");
     } finally {
       setSubmitting(false);
     }

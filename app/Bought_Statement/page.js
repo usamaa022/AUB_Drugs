@@ -244,18 +244,19 @@ const BoughtStatementPage = () => {
   if (!selectedCompany) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", padding: "2rem 1rem", fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ maxWidth: '60%' , margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", padding: "1rem", fontFamily: "system-ui, sans-serif" }}>
+      {/* Changed maxWidth to 1000px and width to 100% for mobile responsiveness */}
+      <div style={{ width: '100%', maxWidth: '1000px', margin: "0 auto" }}>
         
-        {/* Top Control Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", backgroundColor: "white", padding: "1.25rem 1.5rem", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
+        {/* Top Control Header with flexWrap for mobile */}
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", backgroundColor: "white", padding: "1.25rem 1.5rem", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
           <div>
             <h1 style={{ fontSize: "1.25rem", fontWeight: "700", color: "#111827", margin: 0 }}>
               Statement Overview
             </h1>
             <p style={{ fontSize: "0.85rem", color: "#6b7280", margin: "4px 0 0 0" }}>{selectedCompany.name}</p>
           </div>
-          <div style={{ display: "flex", gap: "0.75rem" }}>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <button
               onClick={() => setShowModal(true)}
               style={{ padding: "0.6rem 1rem", borderRadius: "0.5rem", fontSize: "0.85rem", fontWeight: "600", cursor: "pointer", backgroundColor: "white", color: "#4b5563", border: "1px solid #d1d5db", transition: "all 0.2s" }}
@@ -272,8 +273,8 @@ const BoughtStatementPage = () => {
           </div>
         </div>
 
-        {/* Printable Area Wrapper */}
-        <div style={{ backgroundColor: "white", padding: "2rem", borderRadius: "1rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
+        {/* Printable Area Wrapper - Adjusted padding for mobile */}
+        <div style={{ backgroundColor: "white", padding: "1.5rem 1rem", borderRadius: "1rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
           <div ref={printRef}>
             
             {/* Print Header */}
@@ -291,56 +292,59 @@ const BoughtStatementPage = () => {
               <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#374151", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Unpaid Purchase Bills
               </h2>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                <thead>
-                  <tr>
-                    <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Bill #</th>
-                    <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Company Bill #</th>
-                    <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Date</th>
-                    <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount ($)</th>
-                    <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount (IQD)</th>
-                    <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600", width: "25%" }}>Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bills.map((bill, idx) => {
-                    const { usd, iqd, currency } = billTotals[idx];
-                    return (
-                      <tr key={bill.id || idx} className={idx % 2 === 0 ? "" : "alt"} style={{ background: idx % 2 === 0 ? "white" : "#f8fafc" }}>
-                        <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: "600", color: "#1f2937" }}>#{bill.billNumber}</td>
-                        <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{bill.companyBillNumber || "N/A"}</td>
-                        <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{formatDate(bill.date)}</td>
-                        {currency === "USD"
-                          ? <td className="right usd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "600" }}>${formatCurrency(usd)}</td>
-                          : <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>}
-                        {currency === "IQD"
-                          ? <td className="right iqd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "600" }}>{formatIQD(iqd)} IQD</td>
-                          : <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>}
-                        <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bill.billNote || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                  {!bills.length && (
+              {/* Added overflowX wrapper for mobile tables */}
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", minWidth: "600px" }}>
+                  <thead>
                     <tr>
-                      <td colSpan="6" style={{ textAlign: "center", padding: "24px", color: "#9ca3af", border: "1px solid #e2e8f0" }}>
-                        No unpaid purchase bills found
-                      </td>
+                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Bill #</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Company Bill #</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Date</th>
+                      <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount ($)</th>
+                      <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount (IQD)</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600", width: "25%" }}>Note</th>
                     </tr>
-                  )}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background: "#f1f5f9" }}>
-                    <td colSpan="3" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", fontWeight: "700", color: "#4b5563", fontSize: "0.8rem" }}>TOTAL BOUGHT:</td>
-                    <td className="right usd" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "700", fontSize: "0.9rem" }}>
-                      {totalBeforeReturnUSD > 0 ? `$${formatCurrency(totalBeforeReturnUSD)}` : "—"}
-                    </td>
-                    <td className="right iqd" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "700", fontSize: "0.9rem" }}>
-                      {totalBeforeReturnIQD > 0 ? `${formatIQD(totalBeforeReturnIQD)} IQD` : "—"}
-                    </td>
-                    <td style={{ padding: "10px", border: "1px solid #e2e8f0" }} />
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody>
+                    {bills.map((bill, idx) => {
+                      const { usd, iqd, currency } = billTotals[idx];
+                      return (
+                        <tr key={bill.id || idx} className={idx % 2 === 0 ? "" : "alt"} style={{ background: idx % 2 === 0 ? "white" : "#f8fafc" }}>
+                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: "600", color: "#1f2937" }}>#{bill.billNumber}</td>
+                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{bill.companyBillNumber || "N/A"}</td>
+                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{formatDate(bill.date)}</td>
+                          {currency === "USD"
+                            ? <td className="right usd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "600" }}>${formatCurrency(usd)}</td>
+                            : <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>}
+                          {currency === "IQD"
+                            ? <td className="right iqd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "600" }}>{formatIQD(iqd)} IQD</td>
+                            : <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>}
+                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bill.billNote || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                    {!bills.length && (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: "center", padding: "24px", color: "#9ca3af", border: "1px solid #e2e8f0" }}>
+                          No unpaid purchase bills found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: "#f1f5f9" }}>
+                      <td colSpan="3" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", fontWeight: "700", color: "#4b5563", fontSize: "0.8rem" }}>TOTAL BOUGHT:</td>
+                      <td className="right usd" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "700", fontSize: "0.9rem" }}>
+                        {totalBeforeReturnUSD > 0 ? `$${formatCurrency(totalBeforeReturnUSD)}` : "—"}
+                      </td>
+                      <td className="right iqd" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "700", fontSize: "0.9rem" }}>
+                        {totalBeforeReturnIQD > 0 ? `${formatIQD(totalBeforeReturnIQD)} IQD` : "—"}
+                      </td>
+                      <td style={{ padding: "10px", border: "1px solid #e2e8f0" }} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
 
             {/* Returns */}
@@ -349,94 +353,99 @@ const BoughtStatementPage = () => {
                 <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#991b1b", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Return Bills
                 </h2>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                  <thead>
-                    <tr>
-                      <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Return Bill #</th>
-                      <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Original Bill</th>
-                      <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Date</th>
-                      <th className="right" style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount ($)</th>
-                      <th className="right" style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount (IQD)</th>
-                      <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600", width: "25%" }}>Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {returns.map((ret, idx) => (
-                      <tr key={ret.id} style={{ background: idx % 2 === 0 ? "white" : "#fef2f2" }}>
-                        <td style={{ padding: "8px 10px", border: "1px solid #fecaca", fontWeight: "600", color: "#7f1d1d" }}>
-                          {ret.returnBillNumber || `BRET-${ret.id.slice(-6).toUpperCase()}`}
-                        </td>
-                        <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{ret.billNumber || "N/A"}</td>
-                        <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{formatDate(ret.date)}</td>
-                        {ret.totalUSD > 0 ? (
-                          <td className="right ret-usd" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "600" }}>
-                            -${formatCurrency(ret.totalUSD)}
-                          </td>
-                        ) : (
-                          <td className="center" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
-                        )}
-                        {ret.totalIQD > 0 ? (
-                          <td className="right ret-iqd" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "600" }}>
-                            -{formatIQD(ret.totalIQD)} IQD
-                          </td>
-                        ) : (
-                          <td className="center" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
-                        )}
-                        <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ret.note || "—"}</td>
+                {/* Added overflowX wrapper for mobile tables */}
+                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", minWidth: "600px" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Return Bill #</th>
+                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Original Bill</th>
+                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Date</th>
+                        <th className="right" style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount ($)</th>
+                        <th className="right" style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount (IQD)</th>
+                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600", width: "25%" }}>Note</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: "#fee2e2" }}>
-                      <td colSpan="3" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", fontWeight: "700", color: "#991b1b", fontSize: "0.8rem" }}>TOTAL RETURN:</td>
-                      <td className="right ret-usd" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "700", fontSize: "0.9rem" }}>
-                        {totalReturnUSD > 0 ? `-$${formatCurrency(totalReturnUSD)}` : "—"}
-                      </td>
-                      <td className="right ret-iqd" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "700", fontSize: "0.9rem" }}>
-                        {totalReturnIQD > 0 ? `-${formatIQD(totalReturnIQD)} IQD` : "—"}
-                      </td>
-                      <td style={{ padding: "10px", border: "1px solid #fecaca" }} />
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody>
+                      {returns.map((ret, idx) => (
+                        <tr key={ret.id} style={{ background: idx % 2 === 0 ? "white" : "#fef2f2" }}>
+                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", fontWeight: "600", color: "#7f1d1d" }}>
+                            {ret.returnBillNumber || `BRET-${ret.id.slice(-6).toUpperCase()}`}
+                          </td>
+                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{ret.billNumber || "N/A"}</td>
+                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{formatDate(ret.date)}</td>
+                          {ret.totalUSD > 0 ? (
+                            <td className="right ret-usd" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "600" }}>
+                              -${formatCurrency(ret.totalUSD)}
+                            </td>
+                          ) : (
+                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
+                          )}
+                          {ret.totalIQD > 0 ? (
+                            <td className="right ret-iqd" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "600" }}>
+                              -{formatIQD(ret.totalIQD)} IQD
+                            </td>
+                          ) : (
+                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
+                          )}
+                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ret.note || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: "#fee2e2" }}>
+                        <td colSpan="3" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", fontWeight: "700", color: "#991b1b", fontSize: "0.8rem" }}>TOTAL RETURN:</td>
+                        <td className="right ret-usd" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "700", fontSize: "0.9rem" }}>
+                          {totalReturnUSD > 0 ? `-$${formatCurrency(totalReturnUSD)}` : "—"}
+                        </td>
+                        <td className="right ret-iqd" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "700", fontSize: "0.9rem" }}>
+                          {totalReturnIQD > 0 ? `-${formatIQD(totalReturnIQD)} IQD` : "—"}
+                        </td>
+                        <td style={{ padding: "10px", border: "1px solid #fecaca" }} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             )}
 
-            {/* Summary Grid */}
-            <div className="summary-container" style={{ marginTop: "2rem", border: "1px solid #e2e8f0", borderRadius: "12px", overflow: "hidden", background: "white" }}>
-              <div className="summary-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0", fontWeight: "600", fontSize: "0.75rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                <div>Description</div>
-                <div style={{ textAlign: "right", color: "#059669" }}>USD ($)</div>
-                <div style={{ textAlign: "right", color: "#2563eb" }}>IQD</div>
-              </div>
-              
-              <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center" }}>
-                <div className="summary-label" style={{ fontWeight: "500", color: "#4b5563", fontSize: "0.9rem" }}>Total Before Return</div>
-                <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#059669", fontSize: "1.05rem" }}>
-                  {totalBeforeReturnUSD > 0 ? `$${formatCurrency(totalBeforeReturnUSD)}` : "—"}
+            {/* Summary Grid - Added overflowX for mobile protection */}
+            <div className="summary-container" style={{ marginTop: "2rem", border: "1px solid #e2e8f0", borderRadius: "12px", overflowX: "auto", background: "white" }}>
+              <div style={{ minWidth: "400px" }}>
+                <div className="summary-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0", fontWeight: "600", fontSize: "0.75rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <div>Description</div>
+                  <div style={{ textAlign: "right", color: "#059669" }}>USD ($)</div>
+                  <div style={{ textAlign: "right", color: "#2563eb" }}>IQD</div>
                 </div>
-                <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#2563eb", fontSize: "1.05rem" }}>
-                  {totalBeforeReturnIQD > 0 ? `${formatIQD(totalBeforeReturnIQD)} IQD` : "—"}
+                
+                <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center" }}>
+                  <div className="summary-label" style={{ fontWeight: "500", color: "#4b5563", fontSize: "0.9rem" }}>Total Before Return</div>
+                  <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#059669", fontSize: "1.05rem" }}>
+                    {totalBeforeReturnUSD > 0 ? `$${formatCurrency(totalBeforeReturnUSD)}` : "—"}
+                  </div>
+                  <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#2563eb", fontSize: "1.05rem" }}>
+                    {totalBeforeReturnIQD > 0 ? `${formatIQD(totalBeforeReturnIQD)} IQD` : "—"}
+                  </div>
                 </div>
-              </div>
 
-              <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center" }}>
-                <div className="summary-label" style={{ fontWeight: "500", color: "#4b5563", fontSize: "0.9rem" }}>Total Returns</div>
-                <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#dc2626", fontSize: "1.05rem" }}>
-                  {totalReturnUSD > 0 ? `-$${formatCurrency(totalReturnUSD)}` : "—"}
+                <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center" }}>
+                  <div className="summary-label" style={{ fontWeight: "500", color: "#4b5563", fontSize: "0.9rem" }}>Total Returns</div>
+                  <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#dc2626", fontSize: "1.05rem" }}>
+                    {totalReturnUSD > 0 ? `-$${formatCurrency(totalReturnUSD)}` : "—"}
+                  </div>
+                  <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#b91c1c", fontSize: "1.05rem" }}>
+                    {totalReturnIQD > 0 ? `-${formatIQD(totalReturnIQD)} IQD` : "—"}
+                  </div>
                 </div>
-                <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#b91c1c", fontSize: "1.05rem" }}>
-                  {totalReturnIQD > 0 ? `-${formatIQD(totalReturnIQD)} IQD` : "—"}
-                </div>
-              </div>
 
-              <div className="summary-row balance" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "16px", background: "#f0fdf4", borderTop: "2px solid #bbf7d0", alignItems: "center" }}>
-                <div className="summary-label" style={{ fontWeight: "700", color: "#166534", fontSize: "1rem" }}>BALANCE DUE</div>
-                <div className="summary-val" style={{ textAlign: "right", fontWeight: "800", color: totalAfterReturnUSD >= 0 ? "#059669" : "#dc2626", fontSize: "1.2rem" }}>
-                  {totalBeforeReturnUSD > 0 || totalReturnUSD > 0 ? `$${formatCurrency(totalAfterReturnUSD)}` : "—"}
-                </div>
-                <div className="summary-val" style={{ textAlign: "right", fontWeight: "800", color: totalAfterReturnIQD >= 0 ? "#2563eb" : "#b91c1c", fontSize: "1.2rem" }}>
-                  {totalBeforeReturnIQD > 0 || totalReturnIQD > 0 ? `${formatIQD(totalAfterReturnIQD)} IQD` : "—"}
+                <div className="summary-row balance" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "16px", background: "#f0fdf4", borderTop: "2px solid #bbf7d0", alignItems: "center" }}>
+                  <div className="summary-label" style={{ fontWeight: "700", color: "#166534", fontSize: "1rem" }}>BALANCE DUE</div>
+                  <div className="summary-val" style={{ textAlign: "right", fontWeight: "800", color: totalAfterReturnUSD >= 0 ? "#059669" : "#dc2626", fontSize: "1.2rem" }}>
+                    {totalBeforeReturnUSD > 0 || totalReturnUSD > 0 ? `$${formatCurrency(totalAfterReturnUSD)}` : "—"}
+                  </div>
+                  <div className="summary-val" style={{ textAlign: "right", fontWeight: "800", color: totalAfterReturnIQD >= 0 ? "#2563eb" : "#b91c1c", fontSize: "1.2rem" }}>
+                    {totalBeforeReturnIQD > 0 || totalReturnIQD > 0 ? `${formatIQD(totalAfterReturnIQD)} IQD` : "—"}
+                  </div>
                 </div>
               </div>
             </div>
@@ -456,7 +465,7 @@ const BoughtStatementPage = () => {
         </div>
 
         {/* Note Input Area (Hidden on Print) */}
-        <div style={{ marginTop: "1.5rem", backgroundColor: "white", borderRadius: "1rem", padding: "1.5rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
+        <div style={{ marginTop: "1.5rem", backgroundColor: "white", borderRadius: "1rem", padding: "1.5rem 1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
           <h3 style={{ fontSize: "1rem", fontWeight: "600", color: "#374151", marginBottom: "0.75rem" }}>Add Notes to Statement</h3>
           <textarea
             style={{ width: "100%", padding: "12px 16px", border: "1px solid #d1d5db", borderRadius: "0.5rem", fontSize: "0.9rem", minHeight: "80px", resize: "vertical", fontFamily: "inherit", outline: "none", transition: "border 0.2s" }}

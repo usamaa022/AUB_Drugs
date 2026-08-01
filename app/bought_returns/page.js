@@ -11,6 +11,7 @@ import {
   getPayments,
   deleteBoughtReturnItem,
   updateBoughtReturnBill,
+  generateBoughtReturnBillNumberForBill,
   getStoreItems   
 } from "@/lib/data";
 import { useRouter } from "next/navigation";
@@ -62,11 +63,17 @@ export default function BoughtReturnHistory() {
   const [itemFilters, setItemFilters] = useState([]);
   const [companySelectValue, setCompanySelectValue] = useState(null);
   const [returnNote, setReturnNote] = useState("");
+  
+  // --- Return History Table States ---
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-
-  // Column Filters State
   const [columnFilters, setColumnFilters] = useState({});
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+
+  // --- Bought Bills Table States (New) ---
+  const [billSearchText, setBillSearchText] = useState("");
+  const [billSortConfig, setBillSortConfig] = useState({ key: null, direction: 'asc' });
+  const [billColumnFilters, setBillColumnFilters] = useState({});
+  const [activeBillFilterDropdown, setActiveBillFilterDropdown] = useState(null);
 
   const router = useRouter();
 
@@ -75,6 +82,7 @@ export default function BoughtReturnHistory() {
     const handleClickOutside = (e) => {
       if (!e.target.closest('.filter-dropdown-container')) {
         setActiveFilterDropdown(null);
+        setActiveBillFilterDropdown(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -105,15 +113,20 @@ export default function BoughtReturnHistory() {
   const styles = {
     container: {
       minHeight: "100vh",
-      padding: "0px",
+      width: "100%",
+      margin: 0,
+      padding: 0,
+      boxSizing: "border-box",
       background: "linear-gradient(135deg, #f0f4ff 0%, #e8ecf1 100%)",
     },
     wrapper: {
-      maxWidth: "100%",
-      margin: "0 auto",
-      padding: "1rem",
+      width: "100%",
+      margin: "0",
+      padding: "1rem 0rem",
+      boxSizing: "border-box",
     },
     header: {
+      width: "100%",
       background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
       padding: "1.5rem 2rem",
       borderRadius: "20px",
@@ -124,6 +137,7 @@ export default function BoughtReturnHistory() {
       alignItems: "center",
       flexWrap: "wrap",
       gap: "1rem",
+      boxSizing: "border-box",
     },
     headerTitle: {
       color: "white",
@@ -140,11 +154,13 @@ export default function BoughtReturnHistory() {
       margin: "0.25rem 0 0 0",
     },
     mainCard: {
+      width: "100%",
       background: "white",
       borderRadius: "20px",
       boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
       overflow: "hidden",
-      marginBottom: "1.5rem",
+      marginBottom: "0.5rem",
+      boxSizing: "border-box",
     },
     cardHeader: {
       padding: "1.25rem 1.5rem",
@@ -166,13 +182,16 @@ export default function BoughtReturnHistory() {
       gap: "0.5rem",
     },
     cardBody: {
-      padding: "1.5rem",
+      padding: "0.5rem",
+      width: "100%",
+      boxSizing: "border-box",
     },
     filterGrid: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
       gap: "1rem",
-      marginBottom: "1.5rem",
+      marginBottom: "0.5rem",
+      width: "100%",
     },
     filterItem: {
       display: "flex",
@@ -196,30 +215,35 @@ export default function BoughtReturnHistory() {
       width: "100%",
       background: "white",
       color: "#1e293b",
+      boxSizing: "border-box",
     },
     inputFocus: {
       borderColor: "#6366f1",
       boxShadow: "0 0 0 3px rgba(99, 102, 241, 0.15)",
     },
     filterBox: {
+      width: "100%",
       background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
       borderRadius: "14px",
       padding: "1.25rem",
       marginBottom: "1.5rem",
       border: "1px solid #e2e8f0",
+      boxSizing: "border-box",
     },
     tableContainer: {
+      width: "100%",
       overflowX: "auto",
       borderRadius: "12px",
       border: "1px solid #e2e8f0",
       marginBottom: "1.5rem",
       background: "white",
     },
-    table: {
+table: {
       width: "100%",
+      minWidth: "100%", // Forces it to fill the entire container on wide screens
       borderCollapse: "collapse",
-      minWidth: "800px",
       fontSize: "0.9rem",
+      tableLayout: "auto", // Allows columns to distribute space dynamically
     },
     th: {
       padding: "0.75rem 1rem",
@@ -372,6 +396,8 @@ export default function BoughtReturnHistory() {
       padding: "1.5rem",
       marginTop: "1.5rem",
       border: "1px solid #e2e8f0",
+      width: "100%",
+      boxSizing: "border-box",
     },
     quantityBadge: {
       background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
@@ -397,6 +423,8 @@ export default function BoughtReturnHistory() {
       color: "#991b1b",
       marginBottom: "1rem",
       fontSize: "0.9rem",
+      width: "100%",
+      boxSizing: "border-box",
     },
     alertSuccess: {
       padding: "0.75rem 1rem",
@@ -406,6 +434,8 @@ export default function BoughtReturnHistory() {
       color: "#065f46",
       marginBottom: "1rem",
       fontSize: "0.9rem",
+      width: "100%",
+      boxSizing: "border-box",
     },
     emptyState: {
       textAlign: "center",
@@ -433,6 +463,7 @@ export default function BoughtReturnHistory() {
       display: "flex",
       alignItems: "center",
       gap: "0.5rem",
+      width: "100%",
     },
     billSelectRow: {
       cursor: "pointer",
@@ -443,6 +474,8 @@ export default function BoughtReturnHistory() {
       background: "#eef2ff",
       borderTop: "2px solid #6366f1",
       borderBottom: "2px solid #6366f1",
+      width: "100%",
+      boxSizing: "border-box",
     },
     inputSmall: {
       width: "70px",
@@ -508,9 +541,7 @@ export default function BoughtReturnHistory() {
 
   const handleSort = (key) => {
     let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
     setSortConfig({ key, direction });
   };
 
@@ -527,9 +558,7 @@ export default function BoughtReturnHistory() {
       const paidReturnIds = new Set();
       allPayments.forEach(payment => {
         if (payment.selectedBoughtReturns && Array.isArray(payment.selectedBoughtReturns)) {
-          payment.selectedBoughtReturns.forEach(returnId => {
-            paidReturnIds.add(returnId);
-          });
+          payment.selectedBoughtReturns.forEach(returnId => paidReturnIds.add(returnId));
         }
       });
       
@@ -597,9 +626,7 @@ export default function BoughtReturnHistory() {
         validBoughtBills.forEach((bill) => {
           if (bill.items && Array.isArray(bill.items)) {
             bill.items.forEach((item) => {
-              if (item && item.name) {
-                items.add(item.name);
-              }
+              if (item && item.name) items.add(item.name);
             });
           }
         });
@@ -627,9 +654,7 @@ export default function BoughtReturnHistory() {
           const paidReturnIds = new Set();
           allPayments.forEach(payment => {
             if (payment.selectedBoughtReturns && Array.isArray(payment.selectedBoughtReturns)) {
-              payment.selectedBoughtReturns.forEach(returnId => {
-                paidReturnIds.add(returnId);
-              });
+              payment.selectedBoughtReturns.forEach(returnId => paidReturnIds.add(returnId));
             }
           });
           
@@ -679,6 +704,8 @@ export default function BoughtReturnHistory() {
       setSelectedReturn(null);
       setEditingReturn(null);
       setError(null);
+      setBillSearchText("");
+      setBillColumnFilters({});
       return;
     }
     
@@ -688,6 +715,8 @@ export default function BoughtReturnHistory() {
     setSelectedReturn(null);
     setEditingReturn(null);
     setError(null);
+    setBillSearchText("");
+    setBillColumnFilters({});
   };
 
   const handleFilterChange = (field, value) => {
@@ -827,7 +856,7 @@ export default function BoughtReturnHistory() {
       
       setEditingReturn(returnItem);
       setEditItems([{ 
-        ...returnItem, // Retain ALL hidden fields
+        ...returnItem,
         returnPriceValue: returnPriceValue,
         originalCurrency: returnItem.currency,
         originalQuantity: returnItem.returnQuantity
@@ -998,9 +1027,7 @@ export default function BoughtReturnHistory() {
   };
 
   const handleSubmitReturn = async () => {
-    if (isSubmitting) {
-      return;
-    }
+    if (isSubmitting) return;
     
     if (!selectedCompany?.id || !selectedBill) {
       setError("Please select a company and bill");
@@ -1027,7 +1054,7 @@ export default function BoughtReturnHistory() {
     try {
       const billCurrency = selectedBill.currency || "USD";
       const exchangeRate = selectedBill.exchangeRate || 1500;
-      const returnBillNumber = `BRET-${selectedBill.billNumber}-${Date.now().toString().slice(-6)}`;
+      const returnBillNumber = await generateBoughtReturnBillNumberForBill(selectedBill.billNumber);
       
       const preparedItems = itemsToReturn.map(item => {
         const returnQuantity = Number(item.returnQuantity) || 0;
@@ -1128,20 +1155,7 @@ export default function BoughtReturnHistory() {
     }
   };
 
-  // --- Excel-Style Column Filters Logic ---
-  const handleUpdateColumnFilter = (columnKey, updates) => {
-    setColumnFilters(prev => {
-      const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
-      const next = { ...current, ...updates };
-      if (!next.operator && !next.textValue && (!next.selectedValues || next.selectedValues.length === 0)) {
-        const newFilters = { ...prev };
-        delete newFilters[columnKey];
-        return newFilters;
-      }
-      return { ...prev, [columnKey]: next };
-    });
-  };
-
+  // --- Core Evaluate Filter Function ---
   const evaluateFilter = (itemValue, filterData, type = "string") => {
     if (!filterData) return true;
     const { operator, textValue, selectedValues } = filterData;
@@ -1169,12 +1183,26 @@ export default function BoughtReturnHistory() {
     return true;
   };
 
-  // Combine Global Filters and Column Filters Instantly
+  // ==========================================
+  // --- Return History Table Filters Logic ---
+  // ==========================================
+  const handleUpdateColumnFilter = (columnKey, updates) => {
+    setColumnFilters(prev => {
+      const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
+      const next = { ...current, ...updates };
+      if (!next.operator && !next.textValue && (!next.selectedValues || next.selectedValues.length === 0)) {
+        const newFilters = { ...prev };
+        delete newFilters[columnKey];
+        return newFilters;
+      }
+      return { ...prev, [columnKey]: next };
+    });
+  };
+
   const filteredSortedReturns = useMemo(() => {
     let filtered = returns.filter((returnItem) => {
       if (!returnItem) return false;
       
-      // Global Dates
       if (filters.startDate && returnItem.returnDate) {
         if (new Date(returnItem.returnDate) < new Date(filters.startDate)) return false;
       }
@@ -1183,14 +1211,9 @@ export default function BoughtReturnHistory() {
         endDate.setHours(23, 59, 59);
         if (new Date(returnItem.returnDate) > endDate) return false;
       }
-      
-      // Global Payment Status
       if (filters.paymentStatus !== "all" && returnItem.paymentStatus !== filters.paymentStatus) return false;
-      
-      // Global Specific Items
       if (itemFilters.length > 0 && returnItem.name && !itemFilters.includes(returnItem.name)) return false;
       
-      // EXCEL Column Filters
       for (const [columnKey, filterData] of Object.entries(columnFilters)) {
         let itemValue = "";
         if (columnKey === 'companyName') itemValue = returnItem.companyName;
@@ -1207,10 +1230,8 @@ export default function BoughtReturnHistory() {
         if (columnKey === 'paymentStatus') itemValue = returnItem.paymentStatus;
 
         const isNum = ['returnQuantity', 'returnPrice', 'returnTotal'].includes(columnKey);
-
         if (!evaluateFilter(itemValue, filterData, isNum ? "number" : "string")) return false;
       }
-      
       return true;
     });
 
@@ -1235,10 +1256,98 @@ export default function BoughtReturnHistory() {
     return filtered;
   }, [returns, filters, itemFilters, columnFilters, sortConfig]);
 
-  const filteredBills = boughtBills.filter((bill) => {
-    if (!selectedCompany?.id || !bill) return false;
-    return bill.companyId === selectedCompany.id;
-  });
+
+  // ==========================================
+  // --- Bought Bills Table Filters Logic ---
+  // ==========================================
+  const handleUpdateBillColumnFilter = (columnKey, updates) => {
+    setBillColumnFilters(prev => {
+      const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
+      const next = { ...current, ...updates };
+      if (!next.operator && !next.textValue && (!next.selectedValues || next.selectedValues.length === 0)) {
+        const newFilters = { ...prev };
+        delete newFilters[columnKey];
+        return newFilters;
+      }
+      return { ...prev, [columnKey]: next };
+    });
+  };
+
+  const handleBillSort = (key) => {
+    let direction = 'asc';
+    if (billSortConfig.key === key && billSortConfig.direction === 'asc') direction = 'desc';
+    setBillSortConfig({ key, direction });
+  };
+
+  const getBillSortIcon = (key) => {
+    if (billSortConfig.key !== key) return '↕';
+    return billSortConfig.direction === 'asc' ? '↑' : '↓';
+  };
+
+  // Pre-process bills to calculate totals once for filtering and sorting
+  const processedBoughtBills = useMemo(() => {
+    return boughtBills.map(bill => {
+      const billTotal = bill.currency === "IQD"
+        ? (bill.items ? bill.items.reduce((sum, item) => sum + ((item.basePriceIQD || 0) * (item.quantity || 0)), 0) : 0)
+        : (bill.items ? bill.items.reduce((sum, item) => sum + ((item.basePriceUSD || 0) * (item.quantity || 0)), 0) : 0);
+      return { ...bill, billTotal };
+    });
+  }, [boughtBills]);
+
+  const filteredSortedBills = useMemo(() => {
+    let filtered = processedBoughtBills.filter((bill) => {
+      if (!selectedCompany?.id || !bill) return false;
+      if (bill.companyId !== selectedCompany.id) return false;
+
+      // Multi-item search box filter
+      if (billSearchText.trim()) {
+        const searchTerms = billSearchText.split(',').map(term => term.trim().toLowerCase()).filter(Boolean);
+        if (searchTerms.length > 0) {
+          const billItems = bill.items || [];
+          const hasMatchingItem = billItems.some(item => {
+            const itemName = (item.name || "").toLowerCase();
+            return searchTerms.some(term => itemName.includes(term));
+          });
+          if (!hasMatchingItem) return false;
+        }
+      }
+
+      // Column Filters
+      for (const [columnKey, filterData] of Object.entries(billColumnFilters)) {
+        let itemValue = "";
+        if (columnKey === 'billNumber') itemValue = bill.billNumber;
+        if (columnKey === 'date') itemValue = formatDate(bill.date);
+        if (columnKey === 'billTotal') itemValue = bill.billTotal;
+        if (columnKey === 'currency') itemValue = bill.currency;
+        if (columnKey === 'billNote') itemValue = bill.billNote;
+
+        const isNum = ['billTotal'].includes(columnKey);
+        if (!evaluateFilter(itemValue, filterData, isNum ? "number" : "string")) return false;
+      }
+      return true;
+    });
+
+    if (billSortConfig.key) {
+      filtered.sort((a, b) => {
+        let aVal = a[billSortConfig.key];
+        let bVal = b[billSortConfig.key];
+        
+        if (billSortConfig.key === 'billTotal') {
+          aVal = Number(aVal) || 0; bVal = Number(bVal) || 0;
+        } else if (billSortConfig.key === 'date') {
+          aVal = new Date(a.date); bVal = new Date(b.date);
+        } else if (typeof aVal === 'string') {
+          aVal = (aVal || '').toLowerCase(); bVal = (bVal || '').toLowerCase();
+        }
+        
+        if (aVal < bVal) return billSortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return billSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return filtered;
+  }, [processedBoughtBills, selectedCompany, billSearchText, billColumnFilters, billSortConfig]);
+
 
   const exportToExcel = () => {
     const exportData = filteredSortedReturns.map(returnItem => ({
@@ -1265,7 +1374,10 @@ export default function BoughtReturnHistory() {
 
   const handleInputFocus = (e) => e.target.select();
 
-  // Excel Dropdown UI Component
+
+  // ==========================================
+  // --- UI Filter Components ---
+  // ==========================================
   const ExcelFilterDropdown = ({ columnKey, type = "string" }) => {
     const [search, setSearch] = useState("");
     const isOpen = activeFilterDropdown === columnKey;
@@ -1301,7 +1413,7 @@ export default function BoughtReturnHistory() {
     return (
       <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
         <div 
-          onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
+          onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); setActiveBillFilterDropdown(null); }}
           style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.25rem", borderRadius: "0.375rem", background: isActive ? "#dbeafe" : "transparent", color: isActive ? "#2563eb" : "#94a3b8" }}
         >
           <Filter size={14} />
@@ -1312,8 +1424,6 @@ export default function BoughtReturnHistory() {
             <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc" }}>
               <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {/* Value Input Placed ABOVE the Select per request */}
-                  {/* Select Operator */}
                 <select 
                   value={operator || operators[0].value} 
                   onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
@@ -1330,11 +1440,9 @@ export default function BoughtReturnHistory() {
                     style={{ width: "100%", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", boxSizing: "border-box", marginTop: "0.5rem" }}
                   />
                 )}
-              
               </div>
             </div>
             
-            {/* Search list values */}
             <div style={{ padding: "0.75rem", flex: 1 }}>
               <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
               <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem" }}>
@@ -1379,6 +1487,123 @@ export default function BoughtReturnHistory() {
     </th>
   );
 
+  // Filter component specifically for the "Create New Bought Return" table
+  const BillExcelFilterDropdown = ({ columnKey, type = "string" }) => {
+    const [search, setSearch] = useState("");
+    const isOpen = activeBillFilterDropdown === columnKey;
+    const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
+    
+    const filterState = billColumnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
+    const { operator, textValue, selectedValues } = filterState;
+
+    const uniqueValues = useMemo(() => {
+      const vals = new Set();
+      // Only process unique values for the currently selected company
+      processedBoughtBills.filter(b => b.companyId === selectedCompany?.id).forEach(bill => {
+        let val = "";
+        if (columnKey === 'billNumber') val = bill.billNumber;
+        if (columnKey === 'date') val = formatDate(bill.date);
+        if (columnKey === 'billTotal') val = bill.billTotal;
+        if (columnKey === 'currency') val = bill.currency;
+        if (columnKey === 'billNote') val = bill.billNote;
+        vals.add(String(val || ""));
+      });
+      return Array.from(vals).sort();
+    }, [processedBoughtBills, selectedCompany, columnKey]);
+
+    const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+    const isActive = !!(textValue || (selectedValues && selectedValues.length > 0));
+
+    return (
+      <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
+        <div 
+          onClick={(e) => { e.stopPropagation(); setActiveBillFilterDropdown(isOpen ? null : columnKey); setActiveFilterDropdown(null); }}
+          style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.25rem", borderRadius: "0.375rem", background: isActive ? "#dbeafe" : "transparent", color: isActive ? "#2563eb" : "#94a3b8" }}
+        >
+          <Filter size={14} />
+        </div>
+
+        {isOpen && (
+          <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "0.5rem", background: "white", border: "1px solid #cbd5e1", borderRadius: "0.5rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)", zIndex: 9999, width: "240px", display: "flex", flexDirection: "column", cursor: "default", overflow: "hidden", color: "#2c3e50" }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc" }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <select 
+                  value={operator || operators[0].value} 
+                  onChange={(e) => handleUpdateBillColumnFilter(columnKey, { operator: e.target.value })}
+                  style={{ width: "100%", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
+                >
+                  {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+                </select>
+                {operator !== 'isEmpty' && operator !== 'isNotEmpty' && (
+                  <input 
+                    type={type === "number" ? "number" : "text"} 
+                    placeholder="Value..." 
+                    value={textValue || ""} 
+                    onChange={(e) => handleUpdateBillColumnFilter(columnKey, { textValue: e.target.value })}
+                    style={{ width: "100%", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", boxSizing: "border-box", marginTop: "0.5rem" }}
+                  />
+                )}
+              </div>
+            </div>
+            
+            <div style={{ padding: "0.75rem", flex: 1 }}>
+              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
+              <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem" }}>
+                <Search size={14} color="#94a3b8" />
+                <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem", marginLeft: "0.5rem" }} />
+              </div>
+              <div style={{ maxHeight: "160px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}>
+                  <input type="checkbox" checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0} onChange={(e) => handleUpdateBillColumnFilter(columnKey, { selectedValues: e.target.checked ? [...uniqueValues] : [] })} style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}/>
+                  <span>(Select All)</span>
+                </label>
+                {displayValues.map(val => (
+                  <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
+                    <input type="checkbox" checked={selectedValues.includes(val)} onChange={(e) => {
+                      const updated = e.target.checked ? [...selectedValues, val] : selectedValues.filter(v => v !== val);
+                      handleUpdateBillColumnFilter(columnKey, { selectedValues: updated });
+                    }} style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}/>
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "" ? "(Blank)" : val}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc" }}>
+              <button onClick={() => { const u = {...billColumnFilters}; delete u[columnKey]; setBillColumnFilters(u); }} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
+              <button onClick={() => setActiveBillFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
+    <th style={{ 
+      padding: "0.75rem 1rem", 
+      textAlign: "left", 
+      fontSize: "0.75rem", 
+      fontWeight: "600", 
+      textTransform: "uppercase", 
+      letterSpacing: "0.05em", 
+      color: "#475569", 
+      background: "#f8fafc", 
+      borderBottom: "2px solid #e2e8f0", 
+      borderRight: "1px solid #e2e8f0", 
+      whiteSpace: "nowrap",
+      width: width || "auto" // <--- ADD THIS LINE
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+        <div onClick={() => handleBillSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
+          {title} <span style={{ fontSize: "11px", color: "#94a3b8" }}>{getBillSortIcon(columnKey)}</span>
+        </div>
+        <BillExcelFilterDropdown columnKey={columnKey} type={type} />
+      </div>
+    </th>
+  );
+
   const PaymentStatusBadge = ({ status }) => {
     let style = {};
     if (status === "Paid") style = styles.badgePaid;
@@ -1406,7 +1631,7 @@ export default function BoughtReturnHistory() {
               <p style={styles.headerSubtitle}>Manage product returns from suppliers</p>
             </div>
           </div>
-          <div style={{...styles.mainCard, textAlign: "center", padding: "4rem"}}>
+          <div style={{...styles.mainCard, textAlign: "center", padding: "3rem"}}>
             <div style={{ display: "inline-block", width: "48px", height: "48px", border: "3px solid #e2e8f0", borderTopColor: "#6366f1", borderRadius: "50%", animation: "spin 1s linear infinite" }}></div>
             <p style={{ marginTop: "1rem", color: "#64748b" }}>Loading return history...</p>
           </div>
@@ -1428,7 +1653,7 @@ export default function BoughtReturnHistory() {
         .input-focus:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
-        .scrollable-table { overflow-x: auto; border-radius: 12px; }
+        .scrollable-table { overflow-x: auto; border-radius: 12px; width: 100%; box-sizing: border-box; }
         .scrollable-table::-webkit-scrollbar { height: 8px; }
         .scrollable-table::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         .scrollable-table::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -1683,26 +1908,40 @@ export default function BoughtReturnHistory() {
                   </span>
                 </div>
 
+                <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem", alignItems: "center" }}>
+                  <div style={{ flex: 1, position: "relative" }}>
+                    <Search size={16} color="#94a3b8" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }} />
+                    <input 
+                      type="text" 
+                      placeholder="Search by item name"
+                      value={billSearchText}
+                      onChange={(e) => setBillSearchText(e.target.value)}
+                      style={{
+                        ...styles.input,
+                        paddingLeft: "36px",
+                        background: "white"
+                      }}
+                      className="input-focus"
+                    />
+                  </div>
+                </div>
+
                 <div style={styles.tableContainer}>
-                  <div className="scrollable-table">
+                  <div className="scrollable-table" style={{ maxHeight: "400px", overflowY: "auto" }}>
                     <table style={styles.table}>
-                      <thead>
+                      <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                         <tr>
-                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Bill #</th>
-                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Date</th>
-                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Total Amount</th>
-                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Currency</th>
-                          <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Bill Note</th>
+                          <BillTableHeader title="Bill #" columnKey="billNumber" />
+                          <BillTableHeader title="Date" columnKey="date" />
+                          <BillTableHeader title="Total Amount" columnKey="billTotal" type="number" />
+                          <BillTableHeader title="Currency" columnKey="currency" />
+                          <BillTableHeader title="Bill Note" columnKey="billNote" />
                           <th style={{ padding: "0.75rem 1rem", textAlign: "left", fontSize: "0.75rem", fontWeight: "600", textTransform: "uppercase", color: "#475569", background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredBills.length > 0 ? (
-                          filteredBills.map((bill) => {
-                            const billTotal = bill.currency === "IQD"
-                              ? (bill.items ? bill.items.reduce((sum, item) => sum + ((item.basePriceIQD || 0) * (item.quantity || 0)), 0) : 0)
-                              : (bill.items ? bill.items.reduce((sum, item) => sum + ((item.basePriceUSD || 0) * (item.quantity || 0)), 0) : 0);
-                            
+                        {filteredSortedBills.length > 0 ? (
+                          filteredSortedBills.map((bill) => {
                             return (
                               <React.Fragment key={bill.id || bill.billNumber}>
                                 <tr 
@@ -1719,7 +1958,7 @@ export default function BoughtReturnHistory() {
                                   </td>
                                   <td style={styles.td}>{formatDate(bill.date)}</td>
                                   <td style={{...styles.td, color: getCurrencyColor(bill.currency), fontWeight: "600"}}>
-                                    {getCurrencySymbol(bill.currency)}{formatCurrency(billTotal, bill.currency)}
+                                    {getCurrencySymbol(bill.currency)}{formatCurrency(bill.billTotal, bill.currency)}
                                   </td>
                                   <td style={styles.td}>
                                     <span style={{ background: bill.currency === "IQD" ? "#fef3c7" : "#dbeafe", padding: "0.2rem 0.6rem", borderRadius: "12px", fontSize: "0.75rem", color: bill.currency === "IQD" ? "#d97706" : "#2563eb" }}>
@@ -1761,7 +2000,7 @@ export default function BoughtReturnHistory() {
                                         </div>
 
                                         <div style={{ overflowX: "auto" }}>
-                                          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+                                          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "100%" }}>
                                             <thead style={{ background: "#dbeafe" }}>
                                               <tr>
                                                 <th style={{ padding: "0.5rem", fontSize: "0.75rem", fontWeight: "600", color: "#1e3a8a", textAlign: "left" }}>Item</th>

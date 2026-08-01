@@ -594,26 +594,30 @@ export default function BuyingForm({ onBillCreated }) {
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           background: #f1f5f9;
           min-height: 100vh;
-          padding: 1.5rem;
+          padding: 0.5rem;
           color: #0f172a;
+          width: 100%;
+          overflow-x: hidden;
+          margin: 0;
         }
 
         .bf-card {
-          max-width: 1400px;
-          margin: 0 auto;
+          width: 100%;
+          max-width: 100%;
+          margin: 0;
           background: #ffffff;
-          border-radius: 16px;
-          box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+          border-radius: 8px;
+          box-shadow: 0 4px 15px -5px rgba(15, 23, 42, 0.08);
           overflow: visible;
           border: 1px solid #e2e8f0;
         }
 
         .bf-header {
           background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-          padding: 1.5rem 2rem;
+          padding: 1.25rem 1.5rem;
           color: #ffffff;
-          border-top-left-radius: 16px;
-          border-top-right-radius: 16px;
+          border-top-left-radius: 8px;
+          border-top-right-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -636,9 +640,9 @@ export default function BuyingForm({ onBillCreated }) {
         .bf-section {
           background: #ffffff;
           border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          padding: 1.25rem;
-          margin-bottom: 1.25rem;
+          border-radius: 8px;
+          padding: 0.5rem;
+          margin-bottom: 1rem;
           box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
           position: relative;
         }
@@ -764,6 +768,7 @@ export default function BuyingForm({ onBillCreated }) {
           overflow-x: auto;
           border-radius: 8px;
           border: 1px solid #e2e8f0;
+          width: 100%;
         }
 
         .bf-table {
@@ -811,7 +816,7 @@ export default function BuyingForm({ onBillCreated }) {
         .bf-summary-bar {
           background: #f8fafc;
           border: 1px solid #e2e8f0;
-          border-radius: 12px;
+          border-radius: 8px;
           padding: 1rem 1.25rem;
           display: flex;
           align-items: center;
@@ -895,7 +900,7 @@ export default function BuyingForm({ onBillCreated }) {
       <div className="bf-card">
         {/* Header */}
         <div className="bf-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <div style={{ background: "rgba(255,255,255,0.1)", padding: "0.5rem", borderRadius: "8px", display: "flex" }}>
               <FiShoppingCart size={22} color="#ffffff" />
             </div>
@@ -914,17 +919,17 @@ export default function BuyingForm({ onBillCreated }) {
           </div>
         </div>
 
-        <div style={{ padding: "1.5rem" }}>
+        <div style={{ padding: "0.75rem" }}>
           {/* Notifications */}
           {successMessage && (
-            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "0.875rem 1rem", borderRadius: "10px", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", fontWeight: 500 }}>
+            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#065f46", padding: "0.875rem 1rem", borderRadius: "8px", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", fontWeight: 500 }}>
               <FiCheckCircle size={18} />
               <span>{successMessage}</span>
             </div>
           )}
 
           {error && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "0.875rem 1rem", borderRadius: "10px", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", fontWeight: 500 }}>
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "0.875rem 1rem", borderRadius: "8px", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", fontWeight: 500 }}>
               <FiAlertTriangle size={18} />
               <span>{error}</span>
             </div>
@@ -1026,9 +1031,9 @@ export default function BuyingForm({ onBillCreated }) {
                     value={paymentStatus}
                     onChange={(e) => setPaymentStatus(e.target.value)}
                   >
-                    <option value="Unpaid">Unpaid (Credit / Debt)</option>
-                    <option value="Cash">Cash On Delivery</option>
-                    <option value="Paid">Fully Paid</option>
+                    <option value="Unpaid">Unpaid</option>
+                    <option value="Cash">Cash</option>
+                    {/* <option value="Paid">Paid</option> */}
                   </select>
                 </div>
 

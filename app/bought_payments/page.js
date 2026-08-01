@@ -12,6 +12,8 @@ import {
   getBoughtPayments,
   getBoughtBills,
 } from "@/lib/data";
+import { doc, writeBatch } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import Select from "react-select";
 
 export default function BoughtPaymentManagementPage() {
@@ -44,7 +46,6 @@ export default function BoughtPaymentManagementPage() {
   const [paymentDetails, setPaymentDetails] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   
-  // ✅ FIXED: Restored missing filters state
   const [filters, setFilters] = useState({
     paymentStatus: "all",
     startDate: "",
@@ -67,6 +68,10 @@ export default function BoughtPaymentManagementPage() {
   
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  
+  // DETAILS MODAL FOR UNPAID BILLS
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailData, setDetailData] = useState({ title: "", type: "", items: [], currency: "USD", note: "" });
 
   // IMAGE STATE
   const [billImageData, setBillImageData] = useState(null);
@@ -125,7 +130,6 @@ export default function BoughtPaymentManagementPage() {
     return `${year}-${month}-${day}`;
   };
 
-  // ✅ FIXED: Restored missing handleFilterChange function
   const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }));
   };
@@ -238,6 +242,16 @@ export default function BoughtPaymentManagementPage() {
     setImageHasChanged(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  const handleDownloadImage = () => {
+    if (!selectedImageUrl) return;
+    const link = document.createElement("a");
+    link.href = selectedImageUrl;
+    link.download = `Bill_Image_${new Date().getTime()}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const normalizeForSearch = (str) => {
@@ -502,6 +516,97 @@ export default function BoughtPaymentManagementPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
     setPaymentDate(new Date().toISOString().split("T")[0]);
+  };
+
+  const viewBoughtBillDetails = (e, bill) => {
+    e.stopPropagation();
+    setDetailData({
+      title: `Bill #${bill.billNumber || bill.id}`,
+      type: "bought",
+      items: bill.items || [],
+      currency: bill.currency || "USD",
+      note: bill.billNote || bill.note || ""
+    });
+    setShowDetailModal(true);
+  };
+
+  const viewReturnDetails = (e, ret) => {
+    e.stopPropagation();
+    setDetailData({
+      title: `Return #${ret.returnBillNumber || ret.returnNumber || ret.id?.slice(-6)}`,
+      type: "return",
+      items: ret.items || [],
+      currency: ret.currency || "USD",
+      note: ret.returnNote || ret.note || ""
+    });
+    setShowDetailModal(true);
+  };
+
+  const handleDeletePayment = async (paymentId) => {
+    if (!window.confirm("Are you sure you want to delete this payment? Associated bills and returns will be marked as unpaid. This action cannot be undone.")) {
+      return;
+    }
+    try {
+      setSubmitting(true);
+
+      const paymentToDelete = paymentHistory.find((p) => p.id === paymentId);
+      
+      if (!paymentToDelete) {
+        throw new Error("Payment not found in history.");
+      }
+
+      const batch = writeBatch(db);
+
+      // Revert Bought Bills to unpaid
+      if (paymentToDelete.selectedBoughtBills && paymentToDelete.selectedBoughtBills.length > 0) {
+        paymentToDelete.selectedBoughtBills.forEach((billId) => {
+          const billRef = doc(db, "boughtBills", billId); 
+          batch.set(billRef, {
+            status: "unpaid",
+            paymentStatus: "unpaid",
+            isPaid: false,
+            paymentId: null
+          }, { merge: true });
+        });
+      }
+
+      // Revert Returns to unprocessed
+      if (paymentToDelete.selectedBoughtReturns && paymentToDelete.selectedBoughtReturns.length > 0) {
+        paymentToDelete.selectedBoughtReturns.forEach((returnId) => {
+          const returnRef = doc(db, "returns", returnId); 
+          batch.set(returnRef, {
+            status: "unprocessed",
+            paymentStatus: "unpaid",
+            isPaid: false,
+            paymentId: null
+          }, { merge: true });
+        });
+      }
+
+      // Delete the actual payment document
+      const paymentRef = doc(db, "boughtPayments", paymentId);
+      batch.delete(paymentRef);
+
+      await batch.commit();
+
+      setSuccess("Payment deleted and bills reverted to unpaid successfully!");
+      
+      await refreshPayments();
+      
+      if (selectedCompany === paymentToDelete.companyId) {
+        setInitialLoadComplete((prev) => !prev); 
+      }
+
+      setTimeout(() => setSuccess(null), 3000);
+      if (showPaymentModal) {
+        setShowPaymentModal(false);
+      }
+    } catch (err) {
+      console.error("Error deleting payment:", err);
+      setError(err.message || "Failed to delete payment and revert bills.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -870,7 +975,6 @@ export default function BoughtPaymentManagementPage() {
       if (!basicMatch) return false;
     }
     if (!showAdvancedSearch) {
-        // Quick Filters check (only when advanced search is hidden)
         if (filters.startDate) {
             const start = new Date(filters.startDate);
             start.setHours(0, 0, 0, 0);
@@ -886,7 +990,6 @@ export default function BoughtPaymentManagementPage() {
         return true;
     }
     
-    // Advanced search logic
     if (advancedSearch.companyName && !payment.companyName?.toLowerCase().includes(advancedSearch.companyName.toLowerCase())) return false;
     if (advancedSearch.hardcopyBillNumber && !payment.hardcopyBillNumber?.toLowerCase().includes(advancedSearch.hardcopyBillNumber.toLowerCase())) return false;
     if (advancedSearch.paymentNumber && !payment.paymentNumber?.toLowerCase().includes(advancedSearch.paymentNumber.toLowerCase())) return false;
@@ -945,7 +1048,7 @@ export default function BoughtPaymentManagementPage() {
   }
 
   return (
-    <div style={{ width: "100%", minHeight: "100vh", padding: "1rem", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", fontFamily: "var(--font-nrt-reg)", boxSizing: "border-box", overflowX: "hidden" }}>
+    <div style={{ width: "100%", minHeight: "100vh", padding: "0.5rem", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", fontFamily: "var(--font-nrt-reg)", boxSizing: "border-box", overflowX: "hidden" }}>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; }
         @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
@@ -997,13 +1100,13 @@ export default function BoughtPaymentManagementPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "2rem" }}>
 
         {/* Company Information */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
           <h2 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: `2px solid ${colorScheme.primary}`, color: colorScheme.text }}>
             🏢 Company Information
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.5rem" }}>
             
-            {/* ✅ React Select Dropdown Component */}
+            {/* React Select Dropdown Component */}
             <div style={{ position: "relative", zIndex: 50 }}>
               <label style={labelStyle}>Select Company *</label>
               <Select
@@ -1050,7 +1153,7 @@ export default function BoughtPaymentManagementPage() {
         </div>
 
         {/* Bill Image Section */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
           <h2 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.6rem", borderBottom: `2px solid ${colorScheme.primary}`, color: colorScheme.text }}>
             📷 Bill Image
           </h2>
@@ -1107,8 +1210,8 @@ export default function BoughtPaymentManagementPage() {
           </div>
         </div>
 
-        {/* Bills & Returns Sections */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+        {/* Bills & Returns Sections (100% width) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", width: "100%" }}>
           {/* Bought Bills */}
           <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)" }}>
             <div style={{ background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, padding: "1rem 1.25rem" }}>
@@ -1152,8 +1255,19 @@ export default function BoughtPaymentManagementPage() {
                           </div>
                           {billNote && <div style={{ fontSize: "0.7rem", color: "#6B7280", marginTop: "0.3rem", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📝 {billNote}</div>}
                         </div>
-                        <div style={{ fontWeight: "bold", color: billCurrency === "USD" ? "#059669" : "#2563eb", fontSize: "0.95rem", textAlign: "right", whiteSpace: "nowrap", marginLeft: "0.5rem", padding: "0.25rem 0.5rem", background: billCurrency === "USD" ? "#ECFDF5" : "#DBEAFE", borderRadius: "0.5rem" }}>
-                          {billCurrency === "USD" ? formatUSD(billAmount) : formatCurrency(billAmount)}
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem", marginLeft: "0.5rem" }}>
+                          <div style={{ fontWeight: "bold", color: billCurrency === "USD" ? "#059669" : "#2563eb", fontSize: "0.95rem", textAlign: "right", whiteSpace: "nowrap", padding: "0.25rem 0.5rem", background: billCurrency === "USD" ? "#ECFDF5" : "#DBEAFE", borderRadius: "0.5rem" }}>
+                            {billCurrency === "USD" ? formatUSD(billAmount) : formatCurrency(billAmount)}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                            <div style={{ fontSize: "0.7rem", color: colorScheme.textLight, fontWeight: "600" }}>
+                              Currency: <span style={{ color: billCurrency === "USD" ? "#059669" : "#2563eb" }}>{billCurrency}</span>
+                            </div>
+                            <button onClick={(e) => viewBoughtBillDetails(e, bill)}
+                              style={{ padding: "0.3rem 0.75rem", background: "#4B5563", color: "white", borderRadius: "0.5rem", border: "none", fontSize: "0.7rem", cursor: "pointer", fontWeight: "600", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                              👁️ View Items
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1207,8 +1321,19 @@ export default function BoughtPaymentManagementPage() {
                           </div>
                           {retNote && <div style={{ fontSize: "0.7rem", color: "#6B7280", marginTop: "0.3rem", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📝 {retNote}</div>}
                         </div>
-                        <div style={{ fontWeight: "bold", color: returnCurrency === "USD" ? "#dc2626" : "#b91c1c", fontSize: "0.95rem", textAlign: "right", whiteSpace: "nowrap", marginLeft: "0.5rem", padding: "0.25rem 0.5rem", background: returnCurrency === "USD" ? "#FEF2F2" : "#FEF2F2", borderRadius: "0.5rem" }}>
-                          -{returnCurrency === "USD" ? formatUSD(returnTotal) : formatCurrency(returnTotal)}
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem", marginLeft: "0.5rem" }}>
+                          <div style={{ fontWeight: "bold", color: returnCurrency === "USD" ? "#dc2626" : "#b91c1c", fontSize: "0.95rem", textAlign: "right", whiteSpace: "nowrap", padding: "0.25rem 0.5rem", background: returnCurrency === "USD" ? "#FEF2F2" : "#FEF2F2", borderRadius: "0.5rem" }}>
+                            -{returnCurrency === "USD" ? formatUSD(returnTotal) : formatCurrency(returnTotal)}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                            <div style={{ fontSize: "0.7rem", color: colorScheme.textLight, fontWeight: "600" }}>
+                              Currency: <span style={{ color: returnCurrency === "USD" ? "#dc2626" : "#b91c1c" }}>{returnCurrency}</span>
+                            </div>
+                            <button onClick={(e) => viewReturnDetails(e, returnBill)}
+                              style={{ padding: "0.3rem 0.75rem", background: "#4B5563", color: "white", borderRadius: "0.5rem", border: "none", fontSize: "0.7rem", cursor: "pointer", fontWeight: "600", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                              👁️ View Items
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1219,8 +1344,8 @@ export default function BoughtPaymentManagementPage() {
           </div>
         </div>
 
-        {/* ✅ BEAUTIFUL PAYMENT SUMMARY SECTION - REFINED FONT SIZES */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.5rem", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}>
+        {/* BEAUTIFUL PAYMENT SUMMARY SECTION */}
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1rem", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}>
           <h2 style={{ fontSize: "1.1rem", fontWeight: "700", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottom: `2px solid ${colorScheme.secondary}`, color: colorScheme.text, display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span>💰</span> Payment Summary
           </h2>
@@ -1268,7 +1393,7 @@ export default function BoughtPaymentManagementPage() {
         </div>
 
         {/* Notes */}
-        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1.25rem" }}>
+        <div style={{ backgroundColor: colorScheme.card, borderRadius: "1rem", border: "1px solid #E5E7EB", padding: "1rem" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: "700", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `2px solid ${colorScheme.light}`, color: colorScheme.text }}>📝 Payment Notes</h2>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
             style={{ ...inputStyle, resize: "vertical", minHeight: "60px" }} placeholder="Add notes about this payment..." />
@@ -1278,7 +1403,7 @@ export default function BoughtPaymentManagementPage() {
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
           {isEditMode && (
             <button onClick={handleCancelEdit} disabled={submitting}
-              style={{ flex: "1 1 120px", padding: "0.8rem", backgroundColor: colorScheme.textLight, color: "white", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.95rem", fontWeight: "600", transition: "background 0.2s" }}
+              style={{ flex: "1 1 120px", padding: "1rem", backgroundColor: colorScheme.textLight, color: "white", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontFamily: "inherit", fontSize: "0.95rem", fontWeight: "600", transition: "background 0.2s" }}
               onMouseEnter={e => e.currentTarget.style.background = "#4B5563"}
               onMouseLeave={e => e.currentTarget.style.background = colorScheme.textLight}
             >
@@ -1286,7 +1411,7 @@ export default function BoughtPaymentManagementPage() {
             </button>
           )}
           <button onClick={handleSubmit} disabled={submitting || imageProcessing}
-            style={{ flex: "2 1 200px", padding: "0.8rem", background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, color: "white", border: "none", borderRadius: "0.75rem", cursor: submitting || imageProcessing ? "not-allowed" : "pointer", opacity: submitting || imageProcessing ? 0.8 : 1, fontFamily: "inherit", fontSize: "0.95rem", fontWeight: "700", boxShadow: "0 4px 14px rgba(124, 58, 237, 0.4)", transition: "transform 0.1s" }}
+            style={{ flex: "2 1 200px", padding: "1rem", background: "linear-gradient(135deg, #4338ca 0%, #312e81 100%)", color: "white", border: "none", borderRadius: "0.75rem", cursor: submitting || imageProcessing ? "not-allowed" : "pointer", opacity: submitting || imageProcessing ? 0.8 : 1, fontFamily: "inherit", fontSize: "1.05rem", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.05em", boxShadow: "0 10px 15px -3px rgba(67, 56, 202, 0.4), 0 4px 6px -2px rgba(67, 56, 202, 0.2)", transition: "transform 0.1s" }}
             onMouseDown={e => { if(!submitting && !imageProcessing) e.currentTarget.style.transform = "scale(0.98)" }}
             onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
             onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
@@ -1404,14 +1529,14 @@ export default function BoughtPaymentManagementPage() {
           )}
 
           {historyLoading ? (
-            <div style={{ textAlign: "center", padding: "4rem" }}>
+            <div style={{ textAlign: "center", padding: "1rem" }}>
               <div className="modern-spinner-small"></div>
               <p style={{ marginTop: "1rem", color: colorScheme.textLight, fontSize: "0.9rem" }}>Loading payment history...</p>
             </div>
           ) : filteredPayments.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "4rem", color: colorScheme.textLight }}>{paymentHistory.length === 0 ? "No payments yet" : "No payments match your search"}</div>
+            <div style={{ textAlign: "center", padding: "1rem", color: colorScheme.textLight }}>{paymentHistory.length === 0 ? "No payments yet" : "No payments match your search"}</div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: "1.25rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))", gap: "1.25rem" }}>
               {filteredPayments.map((payment) => {
                 const displayNumber = formatPaymentNumber(payment);
                 const paymentImage = getPaymentImage(payment);
@@ -1458,6 +1583,10 @@ export default function BoughtPaymentManagementPage() {
                           style={{ flex: "1 1 40px", padding: "0.45rem 0.3rem", backgroundColor: "#06B6D4", color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "600", fontSize: "0.75rem", fontFamily: "inherit" }}>
                           ✏️ Edit
                         </button>
+                        <button onClick={() => handleDeletePayment(payment.id)}
+                          style={{ flex: "1 1 40px", padding: "0.45rem 0.3rem", backgroundColor: "#EF4444", color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontWeight: "600", fontSize: "0.75rem", fontFamily: "inherit" }}>
+                          🗑️ Delete
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1468,10 +1597,60 @@ export default function BoughtPaymentManagementPage() {
         </div>
       </div>
 
-      {/* ✅ BEAUTIFUL STATEMENT MODAL - REFINED FONTS & LAYOUT */}
+      {/* DETAIL MODAL FOR UNPAID BILLS */}
+      {showDetailModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1500, padding: "1rem", backdropFilter: "blur(4px)" }} onClick={() => setShowDetailModal(false)}>
+          <div style={{ width: "100%", maxWidth: "600px", maxHeight: "85vh", display: "flex", flexDirection: "column", background: "white", borderRadius: "1.25rem", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ margin: 0, fontSize: "1.1rem", color: colorScheme.text, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                 {detailData.type === "bought" ? "📦" : "🔄"} {detailData.title}
+              </h2>
+              <button onClick={() => setShowDetailModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: colorScheme.textLight }}>✕</button>
+            </div>
+            <div style={{ padding: "1.5rem", overflowY: "auto", flex: 1 }}>
+              {detailData.items && detailData.items.length > 0 ? (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                      <th style={{ padding: "10px 12px", textAlign: "left", color: colorScheme.textLight }}>Item</th>
+                      <th style={{ padding: "10px 12px", textAlign: "center", color: colorScheme.textLight }}>Qty</th>
+                      <th style={{ padding: "10px 12px", textAlign: "right", color: colorScheme.textLight }}>Price</th>
+                      <th style={{ padding: "10px 12px", textAlign: "right", color: colorScheme.textLight }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailData.items.map((item, idx) => {
+                      const price = detailData.type === "bought" ? (item.basePrice || item.price || 0) : (item.returnPrice || 0);
+                      const qty = detailData.type === "bought" ? (item.quantity || 1) : (item.returnQuantity || 0);
+                      const total = price * qty;
+                      return (
+                        <tr key={idx} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                          <td style={{ padding: "10px 12px", fontWeight: "500", color: colorScheme.text }}>{item.name} <br/><span style={{fontSize: "0.7rem", color: colorScheme.textLight}}>{item.barcode}</span></td>
+                          <td style={{ padding: "10px 12px", textAlign: "center" }}>{qty}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right" }}>{detailData.currency === "USD" ? formatUSD(price) : formatCurrency(price)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: "600", color: detailData.type === "bought" ? "#059669" : "#DC2626" }}>{detailData.currency === "USD" ? formatUSD(total) : formatCurrency(total)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ textAlign: "center", color: colorScheme.textLight, padding: "2rem" }}>No items detailed for this record.</div>
+              )}
+              {detailData.note && (
+                <div style={{ marginTop: "1rem", padding: "0.75rem", background: "#F3F4F6", borderRadius: "0.5rem", fontSize: "0.8rem", fontStyle: "italic", color: colorScheme.textLight }}>
+                  📝 Note: {detailData.note}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BEAUTIFUL STATEMENT MODAL (Payment History) */}
       {showPaymentModal && selectedPayment && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem", overflowY: "auto", backdropFilter: "blur(4px)" }} onClick={closePaymentModal}>
-          <div style={{ width: "100%", maxWidth: "850px", maxHeight: "90vh", display: "flex", flexDirection: "column", background: "white", borderRadius: "1.25rem", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ width: "100%", maxWidth: "1000px", maxHeight: "90vh", display: "flex", flexDirection: "column", background: "white", borderRadius: "1.25rem", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }} onClick={(e) => e.stopPropagation()}>
             
             {/* Modal Header */}
             <div style={{ background: `linear-gradient(135deg, ${colorScheme.primary} 0%, ${colorScheme.dark} 100%)`, padding: "1.25rem 1.5rem", borderRadius: "1.25rem 1.25rem 0 0", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
@@ -1546,7 +1725,7 @@ export default function BoughtPaymentManagementPage() {
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
                         {nUSD !== 0 && <div style={{ color: nUSD > 0 ? "#059669" : "#DC2626", fontWeight: "700", fontSize: "1.15rem" }}>{nUSD > 0 ? "+" : ""}{formatUSD(nUSD)}</div>}
                         {nIQD !== 0 && <div style={{ color: nIQD > 0 ? "#2563eb" : "#B91C1C", fontWeight: "700", fontSize: "1.15rem" }}>{nIQD > 0 ? "+" : ""}{formatCurrency(nIQD)}</div>}
-                        {nUSD === 0 && nIQD === 0 && <div style={{ color: "#9CA3AF", fontSize: "1.15rem", fontWeight: "600" }}>$0.00</div>}
+                        {nUSD === 0 && nIQD === 0 && <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "1.15rem", fontWeight: "600" }}>$0.00</div>}
                       </div>
                     );
                   })()}
@@ -1627,19 +1806,32 @@ export default function BoughtPaymentManagementPage() {
                 </div>
               )}
 
+              {/* Delete Payment Button in Modal */}
+              <div style={{ marginTop: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
+                <button onClick={() => handleDeletePayment(selectedPayment.id)}
+                  style={{ padding: "0.7rem 1.5rem", backgroundColor: "#EF4444", color: "white", border: "none", borderRadius: "0.75rem", cursor: "pointer", fontWeight: "700", fontSize: "0.9rem", fontFamily: "inherit", boxShadow: "0 4px 6px rgba(239, 68, 68, 0.2)" }}>
+                  🗑️ Delete Payment
+                </button>
+              </div>
+
             </div>
           </div>
         </div>
       )}
 
-      {/* Image Modal */}
+      {/* Image Modal (Full Screen & Downloadable) */}
       {showImageModal && selectedImageUrl && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: "1rem" }}
           onClick={closeImageModal}>
-          <div style={{ maxWidth: "90vw", maxHeight: "90vh", background: "white", borderRadius: "0.75rem", padding: "0.75rem" }} onClick={(e) => e.stopPropagation()}>
-            <img src={selectedImageUrl} alt="Full Bill" style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain", display: "block", filter: "grayscale(100%)" }} />
-            <div style={{ textAlign: "center", marginTop: "0.6rem" }}>
-              <button onClick={closeImageModal} style={{ padding: "0.5rem 1.5rem", backgroundColor: colorScheme.primary, color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontFamily: "inherit", fontWeight: "600" }}>Close</button>
+          <div style={{ maxWidth: "90vw", maxHeight: "95vh", display: "flex", flexDirection: "column", background: "white", borderRadius: "0.75rem", padding: "0.75rem" }} onClick={(e) => e.stopPropagation()}>
+            <img src={selectedImageUrl} alt="Full Bill" style={{ width: "100%", height: "auto", maxHeight: "80vh", objectFit: "contain", display: "block", filter: "grayscale(100%)", borderRadius: "0.5rem" }} />
+            <div style={{ display: "flex", justifyContent: "center", gap: "1rem", marginTop: "1rem" }}>
+              <button onClick={handleDownloadImage} style={{ padding: "0.6rem 1.5rem", backgroundColor: "#10B981", color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontFamily: "inherit", fontWeight: "600", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                📥 Save to Gallery
+              </button>
+              <button onClick={closeImageModal} style={{ padding: "0.6rem 1.5rem", backgroundColor: colorScheme.primary, color: "white", border: "none", borderRadius: "0.5rem", cursor: "pointer", fontFamily: "inherit", fontWeight: "600", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                ✕ Close
+              </button>
             </div>
           </div>
         </div>
