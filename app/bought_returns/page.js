@@ -1736,7 +1736,7 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
             </div>
 
             <div style={styles.tableContainer}>
-              <div className="scrollable-table" style={{ minHeight: "450px", maxHeight: "60vh", overflowY: "auto", overflowX: "auto" }}>
+              <div className="scrollable-table" style={{ minHeight: "50vh", maxHeight: "85vh", overflowY: "auto", overflowX: "auto", width: "100%" }}>
                 <table style={styles.table}>
                   <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                     <tr>
@@ -1927,7 +1927,7 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
                 </div>
 
                 <div style={styles.tableContainer}>
-                  <div className="scrollable-table" style={{ maxHeight: "400px", overflowY: "auto" }}>
+                  <div className="scrollable-table" style={{ minHeight: "70vh", maxHeight: "115vh", overflowY: "auto", overflowX: "auto", width: "100%" }}>
                     <table style={styles.table}>
                       <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                         <tr>
@@ -2091,7 +2091,7 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
                                           </table>
                                         </div>
 
-                                        <div style={{ marginTop: "1rem", display: "flex", justifyContent: "flex-end" }}>
+                                        <div style={{ marginTop: "1rem", display: "flex", justifycontent: "flex-end" }}>
                                           <button 
                                             style={{
                                               ...styles.buttonSuccess,
