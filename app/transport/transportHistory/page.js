@@ -5,6 +5,18 @@ import { useRouter } from "next/navigation";
 import { getTransports, formatDate, getUsers } from "@/lib/data";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Helper function to format prices with currency
+const formatCurrency = (amount, currency) => {
+  const num = Number(amount) || 0;
+  const curr = currency || "IQD";
+  
+  if (String(curr).toUpperCase() === "IQD") {
+    return `${num.toLocaleString('en-US', { maximumFractionDigits: 0 })} IQD`;
+  } else {
+    return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+};
+
 export default function TransportHistoryPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -47,7 +59,6 @@ export default function TransportHistoryPage() {
 
   useEffect(() => {
     let filtered = transports;
-    // Filter by item name
     if (searchFilters.itemName) {
       filtered = filtered.filter(transport =>
         transport.items.some(item =>
@@ -55,11 +66,9 @@ export default function TransportHistoryPage() {
         )
       );
     }
-    // Filter by status
     if (searchFilters.status !== "all") {
       filtered = filtered.filter(transport => transport.status === searchFilters.status);
     }
-    // Filter by date range
     if (searchFilters.startDate) {
       const startDate = new Date(searchFilters.startDate);
       filtered = filtered.filter(transport => {
@@ -69,7 +78,7 @@ export default function TransportHistoryPage() {
     }
     if (searchFilters.endDate) {
       const endDate = new Date(searchFilters.endDate);
-      endDate.setHours(23, 59, 59, 999); // End of the day
+      endDate.setHours(23, 59, 59, 999);
       filtered = filtered.filter(transport => {
         const transportDate = transport.sentAt ? new Date(transport.sentAt) : new Date();
         return transportDate <= endDate;
@@ -588,7 +597,7 @@ export default function TransportHistoryPage() {
                           <table style={{ 
                             width: '100%',
                             borderCollapse: 'collapse',
-                            minWidth: '800px' // Ensure table has minimum width
+                            minWidth: '1000px'
                           }}>
                             <thead>
                               <tr style={{ 
@@ -601,7 +610,8 @@ export default function TransportHistoryPage() {
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
                                   textAlign: 'left',
-                                  whiteSpace: 'nowrap'
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '180px'
                                 }}>Item Name</th>
                                 <th style={{ 
                                   padding: '12px', 
@@ -609,47 +619,53 @@ export default function TransportHistoryPage() {
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
                                   textAlign: 'left',
-                                  whiteSpace: 'nowrap'
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '120px'
                                 }}>Barcode</th>
                                 <th style={{ 
                                   padding: '12px', 
                                   fontSize: '12px', 
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap'
-                                }}>Sent Qty</th>
+                                  textAlign: 'center',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '80px'
+                                }}>Sent</th>
                                 <th style={{ 
                                   padding: '12px', 
                                   fontSize: '12px', 
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap'
-                                }}>Received Qty</th>
+                                  textAlign: 'center',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '80px'
+                                }}>Received</th>
                                 <th style={{ 
                                   padding: '12px', 
                                   fontSize: '12px', 
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap'
-                                }}>Difference</th>
+                                  textAlign: 'center',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '70px'
+                                }}>Diff</th>
                                 <th style={{ 
                                   padding: '12px', 
                                   fontSize: '12px', 
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap'
+                                  textAlign: 'right',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '120px'
                                 }}>Net Price</th>
                                 <th style={{ 
                                   padding: '12px', 
                                   fontSize: '12px', 
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap'
+                                  textAlign: 'right',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '120px'
                                 }}>Out Price</th>
                                 <th style={{ 
                                   padding: '12px', 
@@ -657,7 +673,8 @@ export default function TransportHistoryPage() {
                                   fontWeight: '600', 
                                   color: 'var(--gray)', 
                                   textAlign: 'left',
-                                  whiteSpace: 'nowrap'
+                                  whiteSpace: 'nowrap',
+                                  minWidth: '100px'
                                 }}>Expire Date</th>
                               </tr>
                             </thead>
@@ -668,6 +685,7 @@ export default function TransportHistoryPage() {
                                   ? (item.adjustedQuantity || item.quantity) 
                                   : sentQty;
                                 const difference = receivedQty - sentQty;
+                                const currency = item.currency || item.originalCurrency || "IQD";
                                 
                                 return (
                                   <tr 
@@ -681,7 +699,7 @@ export default function TransportHistoryPage() {
                                       padding: '12px', 
                                       fontSize: '14px', 
                                       color: 'var(--dark)',
-                                      minWidth: '200px',
+                                      minWidth: '180px',
                                       maxWidth: '300px',
                                       wordWrap: 'break-word',
                                       whiteSpace: 'normal'
@@ -689,10 +707,11 @@ export default function TransportHistoryPage() {
                                     
                                     <td style={{ 
                                       padding: '12px', 
-                                      fontSize: '14px', 
+                                      fontSize: '13px', 
                                       color: 'var(--gray)',
                                       minWidth: '120px',
-                                      fontFamily: 'monospace, Consolas, Monaco, "Courier New", monospace'
+                                      fontFamily: 'monospace, Consolas, Monaco, "Courier New", monospace',
+                                      whiteSpace: 'nowrap'
                                     }}>{item.barcode}</td>
                                     
                                     <td style={{
@@ -701,6 +720,7 @@ export default function TransportHistoryPage() {
                                       color: transport.status === "pending" ? 'var(--warning)' : 'var(--gray)',
                                       fontWeight: transport.status === "pending" ? '600' : 'normal',
                                       minWidth: '80px',
+                                      textAlign: 'center',
                                       whiteSpace: 'nowrap'
                                     }}>
                                       {sentQty}
@@ -711,7 +731,8 @@ export default function TransportHistoryPage() {
                                       fontSize: '14px',
                                       color: transport.status === "received" ? 'var(--secondary)' : 'var(--gray)',
                                       fontWeight: transport.status === "received" ? '600' : 'normal',
-                                      minWidth: '100px',
+                                      minWidth: '80px',
+                                      textAlign: 'center',
                                       whiteSpace: 'nowrap'
                                     }}>
                                       {transport.status === "received" ? receivedQty : "—"}
@@ -724,7 +745,8 @@ export default function TransportHistoryPage() {
                                              difference > 0 ? 'var(--warning)' :
                                              transport.status === "pending" ? 'var(--gray-light)' : 'var(--secondary)',
                                       fontWeight: difference !== 0 ? '600' : 'normal',
-                                      minWidth: '80px',
+                                      minWidth: '70px',
+                                      textAlign: 'center',
                                       whiteSpace: 'nowrap'
                                     }}>
                                       {transport.status === "pending" ? "—" :
@@ -734,27 +756,35 @@ export default function TransportHistoryPage() {
                                     
                                     <td style={{ 
                                       padding: '12px', 
-                                      fontSize: '14px', 
+                                      fontSize: '13px', 
                                       color: 'var(--gray)',
-                                      minWidth: '100px',
+                                      minWidth: '120px',
+                                      textAlign: 'right',
                                       whiteSpace: 'nowrap'
                                     }}>
-                                      {Number(item.netPrice).toFixed(2)} IQD
+                                      {formatCurrency(item.netPrice, currency)}
+                                      <div style={{ fontSize: '10px', color: 'var(--gray)', opacity: 0.7, textAlign: 'right' }}>
+                                        {currency}
+                                      </div>
                                     </td>
                                     
                                     <td style={{ 
                                       padding: '12px', 
-                                      fontSize: '14px', 
+                                      fontSize: '13px', 
                                       color: 'var(--gray)',
-                                      minWidth: '100px',
+                                      minWidth: '120px',
+                                      textAlign: 'right',
                                       whiteSpace: 'nowrap'
                                     }}>
-                                      {Number(item.outPrice).toFixed(2)} IQD
+                                      {formatCurrency(item.outPrice, currency)}
+                                      <div style={{ fontSize: '10px', color: 'var(--gray)', opacity: 0.7, textAlign: 'right' }}>
+                                        {currency}
+                                      </div>
                                     </td>
                                     
                                     <td style={{ 
                                       padding: '12px', 
-                                      fontSize: '14px', 
+                                      fontSize: '13px', 
                                       color: 'var(--gray)',
                                       minWidth: '100px',
                                       whiteSpace: 'nowrap'
@@ -767,6 +797,45 @@ export default function TransportHistoryPage() {
                             </tbody>
                           </table>
                         </div>
+                        
+                        {/* Summary Row */}
+                        {transport.status === "received" && (
+                          <div style={{
+                            marginTop: '1rem',
+                            padding: '12px 16px',
+                            backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(16, 185, 129, 0.2)',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                            gap: '1rem'
+                          }}>
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray)' }}>Total Items</div>
+                              <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--dark)' }}>
+                                {transport.items.length}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray)' }}>Total Sent</div>
+                              <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--dark)' }}>
+                                {transport.items.reduce((sum, item) => sum + (item.sentQuantity || item.quantity), 0)}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray)' }}>Total Received</div>
+                              <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--secondary)' }}>
+                                {transport.items.reduce((sum, item) => sum + (item.adjustedQuantity || item.quantity), 0)}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray)' }}>Status</div>
+                              <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--dark)' }}>
+                                {getStatusBadge(transport.status)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   )}

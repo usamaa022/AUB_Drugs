@@ -5,6 +5,47 @@ import { useRouter } from "next/navigation";
 import { sendTransport, getStoreItems, toFirestoreTimestamp, formatDate } from "@/lib/data";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Helper function to format prices with commas and dynamic decimals
+const formatCurrency = (amount, currency) => {
+  const num = Number(amount) || 0;
+  const curr = currency || "IQD"; // Fallback if no currency is set
+  
+  if (String(curr).toUpperCase() === "IQD") {
+    // For IQD: Add commas, 0 decimal places
+    return `${num.toLocaleString('en-US', { maximumFractionDigits: 0 })} IQD`;
+  } else {
+    // For USD and others: Add commas, 2 decimal places
+    return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+};
+
+// Helper function to format date as DD/MM/YYYY
+const formatDateDisplay = (date) => {
+  if (!date) return "N/A";
+  try {
+    let dateObj = null;
+    if (typeof date === 'object') {
+      if ('toDate' in date && typeof date.toDate === 'function') {
+        dateObj = date.toDate();
+      } else if (date.seconds !== undefined) {
+        dateObj = new Date(date.seconds * 1000);
+      } else if (date instanceof Date) {
+        dateObj = date;
+      }
+    }
+    if (typeof date === 'string') {
+      dateObj = new Date(date);
+    }
+    if (!dateObj || isNaN(dateObj.getTime())) return "N/A";
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch (error) {
+    return "N/A";
+  }
+};
+
 export default function SendTransportPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -26,7 +67,6 @@ export default function SendTransportPage() {
       router.push("/login");
       return;
     }
-    // Set default branches safely (case-insensitive check)
     if (user) {
       const isSlemany = user.branch?.toLowerCase() === "slemany";
       const defaultFrom = isSlemany ? "Slemany" : "Erbil";
@@ -40,14 +80,11 @@ export default function SendTransportPage() {
   const fetchStoreItems = async () => {
     try {
       setIsLoading(true);
-      setError(null); // FIX: Clear previous errors before fetching
+      setError(null);
 
       const fetchedItems = await getStoreItems();
-      
-      // Determine which branch we are pulling inventory from
       const targetBranch = user.role === "superAdmin" ? fromBranch : user.branch;
 
-      // FIX: Case-insensitive filtering and strict Number check for quantity
       const branchItems = fetchedItems.filter((item) => {
         const itemBranch = item.branch || "";
         const branchMatch = itemBranch.toLowerCase() === targetBranch?.toLowerCase();
@@ -70,7 +107,7 @@ export default function SendTransportPage() {
   };
 
   useEffect(() => {
-    if (!user || !fromBranch) return; // Wait until fromBranch is set
+    if (!user || !fromBranch) return;
     fetchStoreItems();
   }, [user, fromBranch]);
 
@@ -101,12 +138,42 @@ export default function SendTransportPage() {
         if (expireDate && expireDate.toDate) {
           expireDate = expireDate.toDate();
         }
-        const key = `${item.netPrice}_${item.outPrice}_${expireDate?.toISOString()}`;
+        
+        // Use the actual currency stored in the database
+        const itemCurrency = item.originalCurrency || item.currency || "IQD";
+        
+        // IMPORTANT: Get the correct prices based on currency
+        let netPrice = Number(item.netPrice) || 0;
+        let outPrice = Number(item.outPrice) || 0;
+        
+        // If we have USD and IQD prices stored separately, use the right one
+        if (itemCurrency === "USD" && item.netPriceUSD) {
+          netPrice = Number(item.netPriceUSD);
+          outPrice = Number(item.outPriceUSD) || Number(item.outPrice) || netPrice * 1.5;
+        } else if (itemCurrency === "IQD" && item.netPriceIQD) {
+          netPrice = Number(item.netPriceIQD);
+          outPrice = Number(item.outPriceIQD) || Number(item.outPrice) || netPrice * 1.5;
+        }
+        
+        // Create a unique key that includes ALL distinguishing factors
+        const key = `${item.barcode}_${netPrice}_${outPrice}_${itemCurrency}_${expireDate?.toISOString() || 'no_expiry'}`;
+        
         if (!uniqueBatches[key]) {
           uniqueBatches[key] = {
-            ...item,
+            id: item.id,
+            barcode: item.barcode,
+            name: item.name,
+            netPrice: netPrice,
+            outPrice: outPrice,
+            currency: itemCurrency,
+            originalCurrency: item.originalCurrency || itemCurrency,
             expireDate: expireDate,
             quantity: 0,
+            branch: item.branch,
+            isConsignment: item.isConsignment || false,
+            consignmentOwnerId: item.consignmentOwnerId || null,
+            // Keep all the original data for reference
+            _original: item,
           };
         }
         uniqueBatches[key].quantity += Number(item.quantity);
@@ -136,9 +203,15 @@ export default function SendTransportPage() {
         netPrice: Number(item.netPrice),
         outPrice: Number(item.outPrice),
         quantity: parseInt(item.quantity),
+        currency: item.currency,
+        originalCurrency: item.originalCurrency || item.currency,
+        netPriceUSD: item.netPriceUSD || 0,
+        netPriceIQD: item.netPriceIQD || 0,
+        outPriceUSD: item.outPriceUSD || 0,
+        outPriceIQD: item.outPriceIQD || 0,
         expireDate: toFirestoreTimestamp(item.expireDate),
       }));
-// Pulls the exact database casing from the first item being sent
+
       const exactFromBranch = preparedItems[0]?.branch || fromBranch; 
       
       await sendTransport(exactFromBranch, toBranch, preparedItems, user.uid, sendDate, notes);
@@ -146,7 +219,6 @@ export default function SendTransportPage() {
       setItems([]);
       setNotes("");
 
-      // Refresh store items after sending
       await fetchStoreItems();
     } catch (err) {
       console.error("Transport submission error:", err);
@@ -175,7 +247,8 @@ export default function SendTransportPage() {
         item.barcode === batch.barcode &&
         toFirestoreTimestamp(item.expireDate).isEqual(toFirestoreTimestamp(normalizedExpireDate)) &&
         Number(item.netPrice) === Number(batch.netPrice) &&
-        Number(item.outPrice) === Number(batch.outPrice)
+        Number(item.outPrice) === Number(batch.outPrice) &&
+        item.currency === batch.currency
     );
 
     if (existingItemIndex >= 0) {
@@ -193,9 +266,16 @@ export default function SendTransportPage() {
           quantity: 1,
           netPrice: Number(batch.netPrice),
           outPrice: Number(batch.outPrice),
+          currency: batch.currency,
+          originalCurrency: batch.originalCurrency || batch.currency,
+          netPriceUSD: batch._original?.netPriceUSD || (batch.currency === "USD" ? batch.netPrice : 0),
+          netPriceIQD: batch._original?.netPriceIQD || (batch.currency === "IQD" ? batch.netPrice : 0),
+          outPriceUSD: batch._original?.outPriceUSD || (batch.currency === "USD" ? batch.outPrice : 0),
+          outPriceIQD: batch._original?.outPriceIQD || (batch.currency === "IQD" ? batch.outPrice : 0),
           expireDate: normalizedExpireDate,
           availableQuantity: batch.quantity,
-          branch: batch.branch, // Uses the exact casing from the database
+          branch: batch.branch,
+          exchangeRate: batch._original?.exchangeRate || 1500,
         },
       ]);
     }
@@ -220,12 +300,11 @@ export default function SendTransportPage() {
     setItems(newItems);
   };
   
-  // FIX: Handle SuperAdmin branch switching intelligently
   const handleFromBranchChange = (e) => {
     const newFromBranch = e.target.value;
     setFromBranch(newFromBranch);
     setToBranch(newFromBranch === "Slemany" ? "Erbil" : "Slemany");
-    setItems([]); // Clear currently selected items so they don't accidentally send wrong branch stock
+    setItems([]);
   };
 
   if (!user) {
@@ -386,6 +465,7 @@ export default function SendTransportPage() {
                           {batches.map((batch, i) => (
                             <div
                               key={i}
+                              onClick={() => handleAddItem(batch)}
                               style={{
                                 padding: '8px',
                                 border: '1px solid var(--border)',
@@ -393,25 +473,25 @@ export default function SendTransportPage() {
                                 backgroundColor: '#f9fafb',
                                 display: 'flex',
                                 justifyContent: 'space-between',
-                                alignItems: 'center'
+                                alignItems: 'center',
+                                cursor: 'pointer'
                               }}
                             >
                               <div>
                                 <div style={{ fontSize: '12px', color: 'var(--gray)' }}>
-                                  Exp: {formatDate(batch.expireDate)} | Qty: {batch.quantity}
+                                  Exp: {formatDateDisplay(batch.expireDate)} | Qty: {batch.quantity}
                                 </div>
                                 <div style={{ fontSize: '12px', color: 'var(--gray)' }}>
-                                  Net: {Number(batch.netPrice).toFixed(2)} IQD | Out: {Number(batch.outPrice).toFixed(2)} IQD
+                                  Net: {formatCurrency(batch.netPrice, batch.currency)} | Out: {formatCurrency(batch.outPrice, batch.currency)}
+                                </div>
+                                <div style={{ 
+                                  fontSize: '10px', 
+                                  color: batch.currency === 'USD' ? '#059669' : '#d97706',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {batch.currency === 'USD' ? '🇺🇸 USD' : '🇮🇶 IQD'}
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleAddItem(batch)}
-                                className="btn btn-primary"
-                                style={{ padding: '4px 12px', fontSize: '12px' }}
-                              >
-                                Add
-                              </button>
                             </div>
                           ))}
                         </div>
@@ -432,16 +512,16 @@ export default function SendTransportPage() {
               </div>
             ) : (
               <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: 'var(--rounded-lg)', border: '1px solid var(--border)' }}>
-                <table className="table">
+                <table className="table" style={{ minWidth: '900px' }}>
                   <thead>
                     <tr>
-                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left' }}>Barcode</th>
-                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left' }}>Name</th>
-                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left' }}>Quantity</th>
-                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left' }}>Expire Date</th>
-                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left' }}>Net Price</th>
-                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left' }}>Out Price</th>
-                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left' }}>Actions</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Barcode</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Name</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap' }}>Quantity</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Expire Date</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap' }}>Net Price</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap' }}>Out Price</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -449,7 +529,7 @@ export default function SendTransportPage() {
                       <tr key={index} style={{ transition: 'background-color 0.2s' }}>
                         <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>{item.barcode}</td>
                         <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>{item.name}</td>
-                        <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>
+                        <td style={{ padding: '12px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                           <input
                             type="number"
                             value={item.quantity}
@@ -459,23 +539,30 @@ export default function SendTransportPage() {
                               padding: '4px 8px',
                               border: '1px solid var(--border)',
                               borderRadius: 'var(--rounded-md)',
-                              fontSize: '14px'
+                              fontSize: '14px',
+                              textAlign: 'center'
                             }}
                             min="1"
                             max={item.availableQuantity}
                           />
-                          <div style={{ fontSize: '12px', color: 'var(--gray)', marginTop: '4px' }}>Available: {item.availableQuantity}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--gray)', marginTop: '4px', textAlign: 'center' }}>Available: {item.availableQuantity}</div>
                         </td>
                         <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>
-                          {formatDate(item.expireDate)}
+                          {formatDateDisplay(item.expireDate)}
                         </td>
-                        <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>
-                          {Number(item.netPrice).toFixed(2)} IQD
+                        <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)', textAlign: 'right' }}>
+                          {formatCurrency(item.netPrice, item.currency)}
+                          <div style={{ fontSize: '10px', color: 'var(--gray)', textAlign: 'right' }}>
+                            {item.currency || 'IQD'}
+                          </div>
                         </td>
-                        <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>
-                          {Number(item.outPrice).toFixed(2)} IQD
+                        <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)', textAlign: 'right' }}>
+                          {formatCurrency(item.outPrice, item.currency)}
+                          <div style={{ fontSize: '10px', color: 'var(--gray)', textAlign: 'right' }}>
+                            {item.currency || 'IQD'}
+                          </div>
                         </td>
-                        <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>
+                        <td style={{ padding: '12px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
@@ -504,7 +591,7 @@ export default function SendTransportPage() {
           <AnimatePresence>
             {error && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: '0', y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
                 style={{
