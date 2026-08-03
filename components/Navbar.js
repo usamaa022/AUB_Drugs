@@ -394,6 +394,21 @@ export default function Navbar() {
                     Sales History
                   </Link>
                   <Link
+                    href="/sold/detailed-report"
+                    style={{
+                      display: "block",
+                      padding: "0.5rem 1rem",
+                      color: pathname === "/sold/detailed-report" ? "#2563eb" : "#374151",
+                      fontWeight: pathname === "/sold/detailed-report" ? 600 : 400,
+                      textDecoration: "none",
+                      fontSize: "0.875rem",
+                      backgroundColor: pathname === "/sold/detailed-report" ? "#f0f9ff" : "transparent",
+                    }}
+                    onClick={() => setOpenDropdown(null)}
+                  >
+                    Detailed Report
+                  </Link>
+                  <Link
                     href="/return"
                     style={{
                       display: "block",
@@ -1155,6 +1170,7 @@ export default function Navbar() {
               <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
                 <Link href="/selling" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Create Sale</Link>
                 <Link href="/sold" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Sales History</Link>
+                <Link href="/sold/detailed-report" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Detailed Report</Link>
                 <Link href="/return" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Returns</Link>
                 <Link href="/statements" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Statements</Link>
               </div>
