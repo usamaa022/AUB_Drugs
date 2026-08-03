@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 
 export default function Navbar() {
   const { user } = useAuth();
@@ -14,10 +15,62 @@ export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  
+  // State to hold the user's role
+  const [userRole, setUserRole] = useState("");
 
   const mobileMenuRef = useRef(null);
   const menuButtonRef = useRef(null);
   const userMenuRef = useRef(null);
+
+  // Fetch the role from Firestore when the component mounts
+  useEffect(() => {
+    const fetchRole = async () => {
+      if (!user) return;
+      
+      // If your AuthContext already happens to fetch the role, use it
+      if (user.role) {
+        setUserRole(user.role);
+        return;
+      }
+
+      try {
+        // 1. Try UID first
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          setUserRole(userDocSnap.data().role || "user");
+        } else {
+          // 2. Fallback to Email
+          const usersRef = collection(db, "users");
+          const q = query(usersRef, where("email", "==", user.email));
+          const querySnapshot = await getDocs(q);
+
+          if (!querySnapshot.empty) {
+            setUserRole(querySnapshot.docs[0].data().role || "user");
+          } else {
+            setUserRole("user");
+          }
+        }
+      } catch (error) {
+        console.error("Navbar role fetch error:", error);
+        setUserRole("user");
+      }
+    };
+
+    fetchRole();
+  }, [user]);
+
+  // Case-insensitive role booleans
+  const normalizedRole = (userRole || "").toLowerCase();
+  const isSuperAdmin = normalizedRole === "superadmin" || normalizedRole === "super_admin";
+  const isAdmin = normalizedRole === "admin";
+  const isStandardUser = normalizedRole === "user";
+  const isEmployee = normalizedRole === "employee";
+  
+  // FIX: Allow standard users to also view the Accounts dropdown
+  const canViewAccounts = isSuperAdmin || isAdmin || isStandardUser;
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -141,7 +194,7 @@ export default function Navbar() {
             className="desktop-nav"
           >
             {/* Buying Dropdown - Only for superAdmin */}
-            {user?.role === "superAdmin" && (
+            {isSuperAdmin && (
               <div style={{ position: "relative" }}>
                 <button
                   onClick={() => toggleDropdown('buying')}
@@ -409,7 +462,7 @@ export default function Navbar() {
                     zIndex: 9999,
                   }}
                 >
-                  {user?.role !== "employee" && (
+                  {!isEmployee && (
                     <Link
                       href="/items"
                       style={{
@@ -510,7 +563,7 @@ export default function Navbar() {
                   >
                     Sales Payment
                   </Link>
-                  {user?.role === "superAdmin" && (
+                  {isSuperAdmin && (
                     <Link
                       href="/bought_payments/"
                       style={{
@@ -631,7 +684,7 @@ export default function Navbar() {
             </div>
 
             {/* Accounts Dropdown */}
-            {(user?.role === "admin" || user?.role === "superAdmin") && (
+            {canViewAccounts && (
               <div style={{ position: "relative" }}>
                 <button
                   onClick={() => toggleDropdown('accounts')}
@@ -816,12 +869,12 @@ export default function Navbar() {
                         borderRadius: "9999px",
                         fontSize: "0.6875rem",
                         fontWeight: "700",
-                        backgroundColor: user?.role === "superAdmin" ? "#f3e8ff" : user?.role === "admin" ? "#dbeafe" : "#d1fae5",
-                        color: user?.role === "superAdmin" ? "#7c3aed" : user?.role === "admin" ? "#1e40af" : "#065f46",
+                        backgroundColor: isSuperAdmin ? "#f3e8ff" : isAdmin ? "#dbeafe" : "#d1fae5",
+                        color: isSuperAdmin ? "#7c3aed" : isAdmin ? "#1e40af" : "#065f46",
                         textTransform: "uppercase",
                       }}
                     >
-                      {user?.role || "User"}
+                      {userRole || "User"}
                     </span>
                   </div>
 
@@ -991,19 +1044,19 @@ export default function Navbar() {
                     borderRadius: "4px",
                     fontSize: "0.6875rem",
                     fontWeight: "700",
-                    backgroundColor: user.role === "superAdmin" ? "#f3e8ff" : user.role === "admin" ? "#dbeafe" : "#d1fae5",
-                    color: user.role === "superAdmin" ? "#7c3aed" : user.role === "admin" ? "#1e40af" : "#065f46",
+                    backgroundColor: isSuperAdmin ? "#f3e8ff" : isAdmin ? "#dbeafe" : "#d1fae5",
+                    color: isSuperAdmin ? "#7c3aed" : isAdmin ? "#1e40af" : "#065f46",
                     textTransform: "uppercase",
                   }}
                 >
-                  {user.role || "User"}
+                  {userRole || "User"}
                 </span>
               </div>
             </div>
           )}
 
           {/* Buying Links */}
-          {user?.role === "superAdmin" && (
+          {isSuperAdmin && (
             <div style={{ marginBottom: "0.5rem" }}>
               <button
                 onClick={() => toggleDropdown('mobile-buying')}
@@ -1127,7 +1180,7 @@ export default function Navbar() {
             </button>
             {openDropdown === 'mobile-inventory' && (
               <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
-                {user?.role !== "employee" && (
+                {!isEmployee && (
                   <Link href="/items" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Items</Link>
                 )}
                 <Link href="/store" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Store</Link>
@@ -1172,7 +1225,7 @@ export default function Navbar() {
             {openDropdown === 'mobile-payments' && (
               <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
                 <Link href="/payments/create" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Sales Payment</Link>
-                {user?.role === "superAdmin" && (
+                {isSuperAdmin && (
                   <Link href="/bought_payments/" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Buy Payment</Link>
                 )}
               </div>
@@ -1223,7 +1276,7 @@ export default function Navbar() {
           </div>
 
           {/* Accounts Links */}
-          {(user?.role === "admin" || user?.role === "superAdmin") && (
+          {canViewAccounts && (
             <div style={{ marginBottom: "0.5rem" }}>
               <button
                 onClick={() => toggleDropdown('mobile-accounts')}

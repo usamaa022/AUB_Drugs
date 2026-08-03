@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
 import {
   TrendingUp,
   TrendingDown,
@@ -63,7 +63,8 @@ const parseDate = (dateVal) => {
 // --- Theme ---
 const THEME = {
   primary: "#4F46E5",
-  admin: "#7C3AED",
+  admin: "#2563EB", // Blue for Admin
+  superAdmin: "#7C3AED", // Purple for SuperAdmin
   usd: "#2563EB",
   usdLight: "#DBEAFE",
   iqd: "#059669",
@@ -80,13 +81,11 @@ const THEME = {
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
-export default function DetailedDashboardPage({ userRole = "admin" }) {
+export default function DetailedDashboardPage() {
   const router = useRouter();
   
-  // --- RBAC Logic ---
-  const canViewAll = userRole === "admin" || userRole === "superAdmin";
-  
   // --- State ---
+  const [userRole, setUserRole] = useState("");
   const [authLoading, setAuthLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("sales");
@@ -107,15 +106,47 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // --- Auth Guard ---
+  // --- RBAC Logic ---
+  const normalizedRole = (userRole || "").toLowerCase();
+  const isSuperAdmin = normalizedRole === "superadmin" || normalizedRole === "super_admin";
+  const isAdmin = normalizedRole === "admin";
+  const canViewAll = isSuperAdmin || isAdmin;
+
+  // --- Auth Guard & Role Fetching ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.push("/login");
-      } else {
+        return;
+      } 
+      
+      try {
+        // 1. Try fetching by UID first (Most reliable)
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          setUserRole(userDocSnap.data().role || "user");
+        } else {
+          // 2. Fallback: Search by email if UID doc isn't found
+          const usersRef = collection(db, "users");
+          const q = query(usersRef, where("email", "==", user.email));
+          const querySnapshot = await getDocs(q);
+
+          if (!querySnapshot.empty) {
+            setUserRole(querySnapshot.docs[0].data().role || "user");
+          } else {
+            setUserRole("user"); 
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user role:", error);
+        setUserRole("user");
+      } finally {
         setAuthLoading(false);
       }
     });
+    
     return () => unsubscribe();
   }, [router]);
 
@@ -153,13 +184,13 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
     const [year, month] = selectedMonth.split("-").map(Number);
     const targetYear = dateRange === "year" ? selectedYear : year;
     const targetMonth = dateRange === "month" ? month - 1 : undefined;
-    const query = searchQuery.toLowerCase();
+    const queryStr = searchQuery.toLowerCase();
 
     const applyFilters = (bill, isStoreItem = false) => {
-      if (query) {
-        const matchName = (bill.pharmacyName || bill.companyName || bill.name || "").toLowerCase().includes(query);
-        const matchNum = String(bill.billNumber || bill.barcode || "").includes(query);
-        const matchItems = !isStoreItem && bill.items?.some(i => i.name?.toLowerCase().includes(query));
+      if (queryStr) {
+        const matchName = (bill.pharmacyName || bill.companyName || bill.name || "").toLowerCase().includes(queryStr);
+        const matchNum = String(bill.billNumber || bill.barcode || "").includes(queryStr);
+        const matchItems = !isStoreItem && bill.items?.some(i => i.name?.toLowerCase().includes(queryStr));
         if (!matchName && !matchNum && !matchItems) return false;
       }
 
@@ -399,15 +430,23 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
           
           <div className="header-wrap">
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-              <div style={{ background: canViewAll ? THEME.admin : THEME.primary, padding: "0.5rem", borderRadius: "0.5rem", color: "white" }}>
+              <div style={{ 
+                background: isSuperAdmin ? THEME.superAdmin : isAdmin ? THEME.admin : THEME.iqd, 
+                padding: "0.5rem", borderRadius: "0.5rem", color: "white" 
+              }}>
                 {canViewAll ? <ShieldAlert size={20} /> : <Activity size={20} />}
               </div>
               <div>
                 <h1 style={{ fontSize: "1.25rem", fontWeight: "700", color: "#0f172a", margin: 0 }}>
-                  {canViewAll ? "Master Operation Hub" : "Sales Dashboard"}
+                  {isSuperAdmin ? "SuperAdmin Command Center" : canViewAll ? "Master Operation Hub" : "Sales Dashboard"}
                 </h1>
                 <p style={{ color: THEME.neutral, fontSize: "0.75rem", margin: 0, fontWeight: 500 }}>
-                  Role: <span style={{ color: canViewAll ? THEME.admin : THEME.primary }}>{userRole.toUpperCase()}</span>
+                  Role: <span style={{ 
+                    color: isSuperAdmin ? THEME.superAdmin : isAdmin ? THEME.admin : THEME.iqd,
+                    fontWeight: "bold"
+                  }}>
+                    {(userRole || "USER").toUpperCase()}
+                  </span>
                 </p>
               </div>
             </div>
@@ -454,7 +493,7 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
 
           {/* Contextual Tabs based on Role */}
           <div className="tabs-wrap hide-scrollbar" style={{ display: "flex", gap: "1rem", borderBottom: `2px solid ${THEME.border}` }}>
-            {canViewAll && <button onClick={() => setActiveTab("overview")} style={{ background: "none", border: "none", borderBottom: activeTab === "overview" ? `2px solid ${THEME.admin}` : "none", color: activeTab === "overview" ? THEME.admin : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Command Center</button>}
+            {canViewAll && <button onClick={() => setActiveTab("overview")} style={{ background: "none", border: "none", borderBottom: activeTab === "overview" ? `2px solid ${isSuperAdmin ? THEME.superAdmin : THEME.admin}` : "none", color: activeTab === "overview" ? (isSuperAdmin ? THEME.superAdmin : THEME.admin) : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Command Center</button>}
             <button onClick={() => setActiveTab("sales")} style={{ background: "none", border: "none", borderBottom: activeTab === "sales" ? `2px solid ${THEME.primary}` : "none", color: activeTab === "sales" ? THEME.primary : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Sales & Distribution</button>
             {canViewAll && <button onClick={() => setActiveTab("purchases")} style={{ background: "none", border: "none", borderBottom: activeTab === "purchases" ? `2px solid ${THEME.expense}` : "none", color: activeTab === "purchases" ? THEME.expense : THEME.neutral, padding: "0.5rem 0", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Procurement</button>}
           </div>
@@ -564,7 +603,7 @@ export default function DetailedDashboardPage({ userRole = "admin" }) {
         {canViewAll && activeTab === "overview" && (
           <>
             <div className="kpi-grid">
-              <Card style={{ background: THEME.admin, color: "white" }}>
+              <Card style={{ background: isSuperAdmin ? THEME.superAdmin : THEME.admin, color: "white" }}>
                 <p style={{ margin: 0, fontSize: "0.875rem", opacity: 0.9 }}>Gross Profit (USD)</p>
                 <h2 style={{ margin: "0.5rem 0", fontSize: "1.75rem" }}>{formatCurrency(metrics.profit.usd, "USD")}</h2>
                 <p style={{ margin: 0, fontSize: "0.75rem", opacity: 0.8 }}>From recorded sales</p>

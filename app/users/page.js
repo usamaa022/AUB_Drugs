@@ -70,15 +70,24 @@ export default function UserManagementPage() {
       const snap = await getDocs(collection(db, "users"));
       const userList = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
 
-      if (authUser?.uid) {
-        const loggedInDoc = userList.find((u) => u.uid === authUser.uid || u.email === authUser.email);
+      let currentFetchedRole = "user"; // Default fallback
+
+      if (authUser?.uid || authUser?.email) {
+        const loggedInDoc = userList.find((u) => u.uid === authUser?.uid || u.email === authUser?.email);
         if (loggedInDoc) {
           setCurrentUser(loggedInDoc);
+          // Grab the role directly from the fetched document instead of state
+          currentFetchedRole = (loggedInDoc.role || "user").toLowerCase();
         }
       }
 
-      // Standard users can only see their own row
-      if (isStandardUser) {
+      // Check permissions using the immediately fetched role, not the lagging React state
+      const fetchedIsSuperAdmin = currentFetchedRole === "superadmin" || currentFetchedRole === "super_admin";
+      const fetchedIsAdmin = currentFetchedRole === "admin";
+      const fetchedIsManagement = fetchedIsSuperAdmin || fetchedIsAdmin;
+
+      if (!fetchedIsManagement) {
+        // Standard users can only see their own row
         setUsers(userList.filter((u) => u.uid === authUser?.uid || u.email === authUser?.email));
       } else {
         // Admins and SuperAdmins see everyone
@@ -93,7 +102,9 @@ export default function UserManagementPage() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    if (authUser) {
+      fetchUsers();
+    }
   }, [authUser]);
 
   const showNotify = (msg, type = "success") => {
@@ -488,7 +499,7 @@ export default function UserManagementPage() {
                 >
                   <option value="Slemany">Slemany</option>
                   <option value="Erbil">Erbil</option>
-                  <option value="Duhok">Duhok</option>
+              
                 </select>
               </div>
 
