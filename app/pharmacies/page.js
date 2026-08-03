@@ -1,7 +1,22 @@
-// app/pharmacies/page.js
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useMemo } from "react";
 import * as XLSX from 'xlsx';
+import {
+  Search,
+  Plus,
+  Edit3,
+  Trash2,
+  Download,
+  AlertCircle,
+  Building2,
+  Hash,
+  Phone,
+  MapPin,
+  X,
+  CheckCircle2,
+  Loader2
+} from "lucide-react";
 import {
   getPharmacies,
   addPharmacy,
@@ -9,10 +24,33 @@ import {
   deletePharmacy
 } from "@/lib/data";
 
+// FIX: Define InputWrapper OUTSIDE the main component so it doesn't unmount on every keystroke
+const InputWrapper = ({ label, icon: Icon, children, errorMsg }) => (
+  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+    <label style={{ 
+      fontSize: "0.9rem", 
+      color: "#475569", 
+      display: "flex", 
+      alignItems: "center", 
+      gap: "0.4rem",
+      fontFamily: "var(--font-nrt-bd)" // NRT Bold font
+    }}>
+      <Icon size={16} color="#64748b" /> {label}
+    </label>
+    {children}
+    {errorMsg && (
+      <span style={{ color: "#ef4444", fontSize: "0.8rem", fontFamily: "var(--font-nrt-reg)" }}>
+        {errorMsg}
+      </span>
+    )}
+  </div>
+);
+
 export default function PharmaciesPage() {
   const [pharmacies, setPharmacies] = useState([]);
   const [filteredPharmacies, setFilteredPharmacies] = useState([]);
   const [editingPharmacy, setEditingPharmacy] = useState(null);
+  
   const [newPharmacy, setNewPharmacy] = useState({
     name: "",
     code: "",
@@ -20,16 +58,18 @@ export default function PharmaciesPage() {
     phone2: "",
     city: "سلێمانی"
   });
+  
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [codeError, setCodeError] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState({
     name: "",
     code: "",
-    phone: "",
-    phone2: "",
     city: ""
   });
+  
   const [sortConfig, setSortConfig] = useState({
     key: "code",
     direction: "desc"
@@ -41,9 +81,32 @@ export default function PharmaciesPage() {
     "دهۆک",
     "کەرکوک",
     "کەلار",
-    "بغداد",
+    "بەغداد",
     "هەڵەبجە"
   ];
+
+  // Helper: Automatically generate the next available code
+  const generateNextCode = (pharmaciesList) => {
+    if (!pharmaciesList || pharmaciesList.length === 0) return "1";
+    let max = 0;
+    pharmaciesList.forEach(p => {
+      const num = parseInt((p.code || "").toString().replace(/\D/g, ''));
+      if (!isNaN(num) && num > max) max = num;
+    });
+    return (max + 1).toString();
+  };
+
+  const resetForm = (list = pharmacies) => {
+    setEditingPharmacy(null);
+    setNewPharmacy({ 
+      name: "", 
+      code: generateNextCode(list), 
+      phone: "", 
+      phone2: "", 
+      city: "سلێمانی" 
+    });
+    setCodeError("");
+  };
 
   useEffect(() => {
     const fetchPharmacies = async () => {
@@ -52,6 +115,11 @@ export default function PharmaciesPage() {
         const data = await getPharmacies();
         setPharmacies(data);
         setFilteredPharmacies(data);
+        
+        // Auto-assign code if we are not editing
+        if (!editingPharmacy) {
+          setNewPharmacy(prev => ({ ...prev, code: generateNextCode(data) }));
+        }
       } catch (err) {
         setError(err.message);
       } finally {
@@ -61,28 +129,24 @@ export default function PharmaciesPage() {
     fetchPharmacies();
   }, [refreshTrigger]);
 
+  // Master Filter & Sort Effect
   useEffect(() => {
     let filtered = pharmacies.filter(pharmacy => {
       return (
-        pharmacy.name.toLowerCase().includes(searchQuery.name.toLowerCase()) &&
-        pharmacy.code.toLowerCase().includes(searchQuery.code.toLowerCase()) &&
-        (pharmacy.phone || "").toLowerCase().includes(searchQuery.phone.toLowerCase()) &&
-        (pharmacy.phone2 || "").toLowerCase().includes(searchQuery.phone2.toLowerCase()) &&
+        (pharmacy.name || "").toLowerCase().includes(searchQuery.name.toLowerCase()) &&
+        (pharmacy.code || "").toLowerCase().includes(searchQuery.code.toLowerCase()) &&
         (pharmacy.city || "").toLowerCase().includes(searchQuery.city.toLowerCase())
       );
     });
 
-    // Apply sorting with numeric sorting for codes
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         let aValue = a[sortConfig.key] || "";
         let bValue = b[sortConfig.key] || "";
         
-        // Special handling for code field - try numeric sorting first
         if (sortConfig.key === "code") {
-          // Extract numbers from the code
-          const aNum = parseFloat(aValue.replace(/[^\d.-]/g, ''));
-          const bNum = parseFloat(bValue.replace(/[^\d.-]/g, ''));
+          const aNum = parseFloat(aValue.toString().replace(/[^\d.-]/g, ''));
+          const bNum = parseFloat(bValue.toString().replace(/[^\d.-]/g, ''));
           
           if (!isNaN(aNum) && !isNaN(bNum)) {
             return sortConfig.direction === "asc" ? aNum - bNum : bNum - aNum;
@@ -94,12 +158,8 @@ export default function PharmaciesPage() {
         aValue = aValue.toString().toLowerCase();
         bValue = bValue.toString().toLowerCase();
         
-        if (aValue < bValue) {
-          return sortConfig.direction === "asc" ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === "asc" ? 1 : -1;
-        }
+        if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
       });
     }
@@ -107,16 +167,25 @@ export default function PharmaciesPage() {
     setFilteredPharmacies(filtered);
   }, [searchQuery, pharmacies, sortConfig]);
 
+  // Validation Helper
+  const checkDuplicateCode = (code, currentId = null) => {
+    return pharmacies.some(p => p.code.toString().toLowerCase() === code.toString().toLowerCase() && p.id !== currentId);
+  };
+
   const handleAddPharmacy = async () => {
+    if (!newPharmacy.name || !newPharmacy.code) {
+      setError("تکایە ناو و کۆد پڕبکەرەوە.");
+      return;
+    }
+    if (checkDuplicateCode(newPharmacy.code)) {
+      setCodeError("ئەم کۆدە پێشتر بەکارهاتووە! تکایە کۆدێکی تر بنووسە.");
+      return;
+    }
+    
     try {
-      if (!newPharmacy.name || !newPharmacy.code) {
-        setError("ناو و کۆد پێویستە");
-        return;
-      }
-      
       await addPharmacy(newPharmacy);
-      setNewPharmacy({ name: "", code: "", phone: "", phone2: "", city: "سلێمانی" });
       setRefreshTrigger(!refreshTrigger);
+      resetForm(pharmacies);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -124,20 +193,20 @@ export default function PharmaciesPage() {
   };
 
   const handleUpdatePharmacy = async () => {
+    if (!editingPharmacy || !editingPharmacy.id) return;
+    if (!editingPharmacy.name || !editingPharmacy.code) {
+      setError("تکایە ناو و کۆد پڕبکەرەوە.");
+      return;
+    }
+    if (checkDuplicateCode(editingPharmacy.code, editingPharmacy.id)) {
+      setCodeError("ئەم کۆدە پێشتر بۆ دەرمانخانەیەکی تر بەکارهاتووە!");
+      return;
+    }
+    
     try {
-      if (!editingPharmacy || !editingPharmacy.id) {
-        setError("هیچ دەرمانخانەیەک هەڵنەبژێردراوە");
-        return;
-      }
-      
-      if (!editingPharmacy.name || !editingPharmacy.code) {
-        setError("ناو و کۆد پێویستە");
-        return;
-      }
-      
       await updatePharmacy(editingPharmacy);
-      setEditingPharmacy(null);
       setRefreshTrigger(!refreshTrigger);
+      resetForm(pharmacies);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -146,16 +215,13 @@ export default function PharmaciesPage() {
 
   const handleEdit = (pharmacy) => {
     setEditingPharmacy({ ...pharmacy });
-    setNewPharmacy({ name: "", code: "", phone: "", phone2: "", city: "سلێمانی" });
-  };
-
-  const handleCancel = () => {
-    setEditingPharmacy(null);
-    setNewPharmacy({ name: "", code: "", phone: "", phone2: "", city: "سلێمانی" });
+    setCodeError("");
+    setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("دڵنیایت دەتەوێت ئەم دەرمانخانە بسڕیتەوە؟")) {
+    if (window.confirm("دڵنیایت دەتەوێت ئەم دەرمانخانەیە بسڕیتەوە؟")) {
       try {
         await deletePharmacy(id);
         setRefreshTrigger(!refreshTrigger);
@@ -170,14 +236,20 @@ export default function PharmaciesPage() {
     setSearchQuery(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleNewPharmacyChange = (e) => {
+  const handleFormChange = (e, isEditing) => {
     const { name, value } = e.target;
-    setNewPharmacy(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleEditingPharmacyChange = (e) => {
-    const { name, value } = e.target;
-    setEditingPharmacy(prev => ({ ...prev, [name]: value }));
+    
+    if (isEditing) {
+      setEditingPharmacy(prev => ({ ...prev, [name]: value }));
+      if (name === 'code') {
+        setCodeError(checkDuplicateCode(value, editingPharmacy.id) ? "ئەم کۆدە پێشتر بەکارهاتووە!" : "");
+      }
+    } else {
+      setNewPharmacy(prev => ({ ...prev, [name]: value }));
+      if (name === 'code') {
+        setCodeError(checkDuplicateCode(value) ? "ئەم کۆدە پێشتر بەکارهاتووە!" : "");
+      }
+    }
   };
 
   const handleSort = (key) => {
@@ -188,643 +260,301 @@ export default function PharmaciesPage() {
     setSortConfig({ key, direction });
   };
 
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return "↕";
-    return sortConfig.direction === "asc" ? "↑" : "↓";
-  };
-
-  const getSortLabel = (key) => {
-    if (sortConfig.key !== key) return "";
-    return sortConfig.direction === "asc" ? " (بچووک بۆ گەورە) " : " (گەورە بۆ بچووک) ";
-  };
-
   const handleWhatsApp = (phone) => {
-    if (!phone) {
-      alert("ژمارەی مۆبایل بۆ ئەم دەرمانخانەیە نییە");
-      return;
-    }
-    // Remove any non-digit characters
+    if (!phone) return alert("ژمارەی مۆبایل بۆ ئەم دەرمانخانەیە نییە");
     const cleanPhone = phone.replace(/\D/g, '');
-    // Ensure it starts with country code (assuming 964 for Iraq)
-    const formattedPhone = cleanPhone.startsWith('964') ? cleanPhone : `964${cleanPhone}`;
-    const whatsappUrl = `https://wa.me/${formattedPhone}`;
-    window.open(whatsappUrl, '_blank');
+    const formattedPhone = cleanPhone.startsWith('964') ? cleanPhone : `964${cleanPhone.replace(/^0+/, '')}`;
+    window.open(`https://wa.me/${formattedPhone}`, '_blank');
   };
 
   const exportToExcel = () => {
     try {
-      // Prepare data for export
       const exportData = filteredPharmacies.map((pharmacy, index) => ({
         'ژمارە': index + 1,
         'ناو': pharmacy.name,
         'کۆد': pharmacy.code,
-        'ژمارەی مۆبایل ١': pharmacy.phone || '---',
-        'ژمارەی مۆبایل ٢': pharmacy.phone2 || '---',
+        'ژمارەی مۆبایل (کڕین)': pharmacy.phone || '---',
+        'ژمارەی مۆبایل (ئەژمێردار)': pharmacy.phone2 || '---',
         'شار': pharmacy.city || '---',
       }));
 
-      // Create workbook
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
-      
-      // Set column widths
-      const colWidths = [
-        { wch: 10 },  // ژمارە
-        { wch: 25 },  // ناو
-        { wch: 15 },  // کۆد
-        { wch: 18 },  // ژمارەی مۆبایل ١
-        { wch: 18 },  // ژمارەی مۆبایل ٢
-        { wch: 15 },  // شار
-      ];
-      ws['!cols'] = colWidths;
-
+      ws['!cols'] = [{ wch: 8 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 15 }];
       XLSX.utils.book_append_sheet(wb, ws, 'دەرمانخانەکان');
-      
-      // Generate and download file
-      const fileName = `دەرمانخانەکان_${new Date().toLocaleDateString('fa-IR')}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      XLSX.writeFile(wb, `دەرمانخانەکان_${new Date().toLocaleDateString('en-GB').replace(/\//g, '-')}.xlsx`);
     } catch (err) {
-      setError('export to excel: ' + err.message);
+      setError('Export failed: ' + err.message);
     }
   };
 
+  const activeForm = editingPharmacy || newPharmacy;
+
   return (
-    <div style={{ 
-      fontFamily: "var(--font-nrt-reg)", 
-      maxWidth: "1600px", 
-      margin: "0 auto",
-      padding: "16px"
-    }}>
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "1.5rem",
-        flexWrap: "wrap",
-        gap: "16px"
-      }}>
-        <h1 style={{
-          fontSize: "1.75rem",
-          fontWeight: "bold",
-          color: "#1e293b",
-          fontFamily: "var(--font-nrt-bd)"
-        }}>
-          دەرمانخانەکان
-        </h1>
+    <div dir="rtl" style={{ fontFamily: "var(--font-nrt-reg)", maxWidth: "1500px", margin: "0 auto", padding: "24px" }}>
+      
+      {/* CSS For Enhanced Inputs & Transitions */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .nice-input {
+          width: 100%;
+          padding: 0.75rem 1rem;
+          border: 1px solid #cbd5e1;
+          border-radius: 0.5rem;
+          outline: none;
+          font-size: 0.95rem;
+          font-family: var(--font-nrt-reg);
+          background-color: #f8fafc;
+          transition: all 0.2s ease-in-out;
+          color: #0f172a;
+        }
+        .nice-input:focus {
+          border-color: #3b82f6;
+          background-color: #ffffff;
+          box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+        }
+        .nice-input::placeholder {
+          color: #94a3b8;
+        }
+        .error-input {
+          border-color: #ef4444 !important;
+          background-color: #fef2f2 !important;
+        }
+        .error-input:focus {
+          box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15) !important;
+        }
+      `}} />
+
+      {/* HEADER */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1 style={{ fontSize: "1.75rem", fontFamily: "var(--font-nrt-bd)", color: "#0f172a", margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Building2 size={28} color="#2563eb" /> دەرمانخانەکان
+          </h1>
+          <p style={{ margin: "0.25rem 0 0 0", color: "#64748b", fontSize: "0.95rem" }}>بەڕێوەبردن و تۆمارکردنی لیستی دەرمانخانەکان</p>
+        </div>
         <button
           onClick={exportToExcel}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#22c55e",
-            color: "#fff",
-            border: "none",
-            borderRadius: "0.5rem",
-            cursor: "pointer",
-            fontSize: "0.875rem",
-            fontFamily: "var(--font-nrt-bd)",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px"
-          }}
+          style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 1.25rem", backgroundColor: "#10b981", color: "white", border: "none", borderRadius: "0.5rem", fontFamily: "var(--font-nrt-bd)", cursor: "pointer", transition: "background 0.2s", boxShadow: "0 4px 6px -1px rgba(16, 185, 129, 0.2)" }}
+          onMouseOver={e => e.currentTarget.style.backgroundColor = "#059669"}
+          onMouseOut={e => e.currentTarget.style.backgroundColor = "#10b981"}
         >
-          📊 export to excel
+          <Download size={18} /> export to excel 
         </button>
       </div>
 
+      {/* ERROR MESSAGE */}
       {error && (
-        <div style={{
-          padding: "1rem",
-          backgroundColor: "#fca5a5",
-          color: "#991b1b",
-          borderRadius: "0.375rem",
-          marginBottom: "1.5rem",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontFamily: "var(--font-nrt-reg)"
-        }}>
-          {error}
-          <button
-            onClick={() => setError(null)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#991b1b",
-              fontSize: "1.25rem",
-              cursor: "pointer",
-              marginLeft: "1rem",
-              fontFamily: "var(--font-nrt-bd)"
-            }}
-          >
-            ×
-          </button>
+        <div style={{ padding: "1rem", backgroundColor: "#fef2f2", color: "#b91c1c", borderRadius: "0.5rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid #fca5a5" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "var(--font-nrt-bd)" }}>
+            <AlertCircle size={20} /> {error}
+          </div>
+          <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "#b91c1c", cursor: "pointer" }}><X size={20} /></button>
         </div>
       )}
 
-      {/* Form section */}
-      <div style={{
-        width: "100%",
-        marginBottom: "1.5rem",
-        backgroundColor: "#fff",
-        borderRadius: "0.5rem",
-        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-        padding: "1.5rem",
-        fontFamily: "var(--font-nrt-reg)"
-      }}>
-        <h2 style={{
-          fontSize: "1.25rem",
-          fontWeight: "bold",
-          marginBottom: "1rem",
-          color: "#1e293b",
-          fontFamily: "var(--font-nrt-bd)"
-        }}>
-          {editingPharmacy ? "گۆڕانکاری لە دەرمانخانە" : "دروستکردنی دەرمانخانە"}
+      {/* CREATE / EDIT FORM */}
+      <div style={{ backgroundColor: "white", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)", padding: "1.5rem", marginBottom: "2rem", border: "1px solid #e2e8f0" }}>
+        <h2 style={{ fontSize: "1.25rem", fontFamily: "var(--font-nrt-bd)", color: "#1e293b", marginBottom: "1.5rem", borderBottom: "2px solid #f1f5f9", paddingBottom: "0.75rem" }}>
+          {editingPharmacy ? "گۆڕانکاری لە دەرمانخانە" : "تۆمارکردنی دەرمانخانەی نوێ"}
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1rem" }}>
-          <div>
-            <label style={{
-              display: "block",
-              marginBottom: "0.25rem",
-              fontSize: "0.875rem",
-              color: "#4b5563",
-              fontFamily: "var(--font-nrt-reg)"
-            }}>ناو</label>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.5rem" }}>
+          <InputWrapper label="ناوی دەرمانخانە" icon={Building2}>
             <input
               type="text"
               name="name"
-              placeholder="ناوی دەرمانخانە"
-              value={editingPharmacy ? editingPharmacy.name : newPharmacy.name}
-              onChange={editingPharmacy ? handleEditingPharmacyChange : handleNewPharmacyChange}
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                border: "1px solid #e2e8f0",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                fontFamily: "var(--font-nrt-reg)"
-              }}
+              className="nice-input"
+              
+              value={activeForm.name}
+              onChange={(e) => handleFormChange(e, !!editingPharmacy)}
             />
-          </div>
-          <div>
-            <label style={{
-              display: "block",
-              marginBottom: "0.25rem",
-              fontSize: "0.875rem",
-              color: "#4b5563",
-              fontFamily: "var(--font-nrt-reg)"
-            }}>کۆد</label>
+          </InputWrapper>
+
+          <InputWrapper label="کۆدی دەرمانخانە " icon={Hash} errorMsg={codeError}>
             <input
               type="text"
               name="code"
-              placeholder="کۆدی دەرمانخانە"
-              value={editingPharmacy ? editingPharmacy.code : newPharmacy.code}
-              onChange={editingPharmacy ? handleEditingPharmacyChange : handleNewPharmacyChange}
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                border: "1px solid #e2e8f0",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                fontFamily: "var(--font-nrt-reg)"
-              }}
+              className={`nice-input ${codeError ? 'error-input' : ''}`}
+              value={activeForm.code}
+              onChange={(e) => handleFormChange(e, !!editingPharmacy)}
             />
-          </div>
-          <div>
-            <label style={{
-              display: "block",
-              marginBottom: "0.25rem",
-              fontSize: "0.875rem",
-              color: "#4b5563",
-              fontFamily: "var(--font-nrt-reg)"
-            }}>ژمارەی مۆبایل (بەرپرسی کڕین)</label>
+          </InputWrapper>
+
+          <InputWrapper label="ژمارەی مۆبایل (بەرپرسی کڕین)" icon={Phone}>
             <input
               type="text"
               name="phone"
-              placeholder="ژمارەی مۆبایل"
-              value={editingPharmacy ? editingPharmacy.phone : newPharmacy.phone}
-              onChange={editingPharmacy ? handleEditingPharmacyChange : handleNewPharmacyChange}
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                border: "1px solid #e2e8f0",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                fontFamily: "var(--font-nrt-reg)"
-              }}
+              className="nice-input"
+              placeholder="07XX XXX XXXX"
+              value={activeForm.phone}
+              onChange={(e) => handleFormChange(e, !!editingPharmacy)}
+              style={{ direction: "ltr", textAlign: "right" }}
             />
-          </div>
-          <div>
-            <label style={{
-              display: "block",
-              marginBottom: "0.25rem",
-              fontSize: "0.875rem",
-              color: "#4b5563",
-              fontFamily: "var(--font-nrt-reg)"
-            }}>ژمارەی مۆبایل (محاسب)</label>
+          </InputWrapper>
+
+          <InputWrapper label="ژمارەی مۆبایل (محاسب)" icon={Phone}>
             <input
               type="text"
               name="phone2"
-              placeholder="ژمارەی مۆبایلی محاسب"
-              value={editingPharmacy ? editingPharmacy.phone2 : newPharmacy.phone2}
-              onChange={editingPharmacy ? handleEditingPharmacyChange : handleNewPharmacyChange}
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                border: "1px solid #e2e8f0",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                fontFamily: "var(--font-nrt-reg)"
-              }}
+              className="nice-input"
+              placeholder="07XX XXX XXXX"
+              value={activeForm.phone2}
+              onChange={(e) => handleFormChange(e, !!editingPharmacy)}
+              style={{ direction: "ltr", textAlign: "right" }}
             />
-          </div>
-          <div>
-            <label style={{
-              display: "block",
-              marginBottom: "0.25rem",
-              fontSize: "0.875rem",
-              color: "#4b5563",
-              fontFamily: "var(--font-nrt-reg)"
-            }}>شار</label>
+          </InputWrapper>
+
+          <InputWrapper label="شار" icon={MapPin}>
             <select
               name="city"
-              value={editingPharmacy ? editingPharmacy.city : newPharmacy.city}
-              onChange={editingPharmacy ? handleEditingPharmacyChange : handleNewPharmacyChange}
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                border: "1px solid #e2e8f0",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                fontFamily: "var(--font-nrt-reg)",
-                backgroundColor: "#fff"
-              }}
+              className="nice-input"
+              value={activeForm.city}
+              onChange={(e) => handleFormChange(e, !!editingPharmacy)}
+              style={{ cursor: "pointer" }}
             >
-              {cities.map(city => (
-                <option key={city} value={city}>{city}</option>
-              ))}
+              {cities.map(city => <option key={city} value={city}>{city}</option>)}
             </select>
-          </div>
+          </InputWrapper>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+
+        <div style={{ display: "flex", gap: "1rem", marginTop: "2rem" }}>
           <button
             onClick={editingPharmacy ? handleUpdatePharmacy : handleAddPharmacy}
-            style={{
-              padding: "0.5rem 1.5rem",
-              backgroundColor: "#3b82f6",
-              color: "#fff",
-              border: "none",
-              borderRadius: "0.375rem",
-              cursor: "pointer",
-              fontSize: "0.875rem",
-              fontFamily: "var(--font-nrt-bd)",
-              minWidth: "80px"
-            }}
+            disabled={!!codeError}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.75rem 1.5rem", backgroundColor: codeError ? "#94a3b8" : "#2563eb", color: "white", border: "none", borderRadius: "0.5rem", fontFamily: "var(--font-nrt-bd)", cursor: codeError ? "not-allowed" : "pointer", transition: "background 0.2s" }}
           >
-            {editingPharmacy ? "نوێکردنەوە" : "زیادکردن"}
+            {editingPharmacy ? <><CheckCircle2 size={18} /> پاشەکەوتکردنی گۆڕانکاری</> : <><Plus size={18} /> زیادکردنی دەرمانخانە</>}
           </button>
-          {(editingPharmacy || (newPharmacy.name || newPharmacy.code || newPharmacy.phone || newPharmacy.phone2 || newPharmacy.city)) && (
+          
+          {(editingPharmacy || newPharmacy.name || newPharmacy.phone) && (
             <button
-              onClick={handleCancel}
-              style={{
-                padding: "0.5rem 1.5rem",
-                backgroundColor: "#9ca3af",
-                color: "#fff",
-                border: "none",
-                borderRadius: "0.375rem",
-                cursor: "pointer",
-                fontSize: "0.875rem",
-                fontFamily: "var(--font-nrt-bd)",
-                minWidth: "80px"
-              }}
+              onClick={() => resetForm(pharmacies)}
+              style={{ padding: "0.75rem 1.5rem", backgroundColor: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "0.5rem", fontFamily: "var(--font-nrt-bd)", cursor: "pointer", transition: "all 0.2s" }}
+              onMouseOver={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
+              onMouseOut={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
             >
-              پاشگەزبوونەوە
+              پاشگەزبوونەوە / پاککردنەوە
             </button>
           )}
         </div>
       </div>
 
-      {/* Advanced search and table section */}
-      <div style={{
-        width: "100%",
-        marginBottom: "1.5rem",
-        backgroundColor: "#fff",
-        borderRadius: "0.5rem",
-        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-        padding: "1.5rem",
-        fontFamily: "var(--font-nrt-reg)"
-      }}>
-        <div style={{
-          marginBottom: "1.5rem",
-          padding: "1rem",
-          backgroundColor: "#f1f5f9",
-          borderRadius: "0.375rem"
-        }}>
-          <h3 style={{
-            fontSize: "1.125rem",
-            fontWeight: "bold",
-            marginBottom: "0.75rem",
-            color: "#1e293b",
-            fontFamily: "var(--font-nrt-bd)"
-          }}>
-            گەڕان
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.75rem" }}>
-            <div>
-              <label style={{
-                display: "block",
-                marginBottom: "0.25rem",
-                fontSize: "0.875rem",
-                color: "#4b5563",
-                fontFamily: "var(--font-nrt-reg)"
-              }}>ناو</label>
-              <input
-                type="text"
-                name="name"
-                placeholder="ناو"
-                value={searchQuery.name}
-                onChange={handleSearchChange}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.875rem",
-                  fontFamily: "var(--font-nrt-reg)"
-                }}
-              />
-            </div>
-            <div>
-              <label style={{
-                display: "block",
-                marginBottom: "0.25rem",
-                fontSize: "0.875rem",
-                color: "#4b5563",
-                fontFamily: "var(--font-nrt-reg)"
-              }}>کۆد</label>
-              <input
-                type="text"
-                name="code"
-                placeholder="کۆد"
-                value={searchQuery.code}
-                onChange={handleSearchChange}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.875rem",
-                  fontFamily: "var(--font-nrt-reg)"
-                }}
-              />
-            </div>
-            <div>
-              <label style={{
-                display: "block",
-                marginBottom: "0.25rem",
-                fontSize: "0.875rem",
-                color: "#4b5563",
-                fontFamily: "var(--font-nrt-reg)"
-              }}>شار</label>
-              <input
-                type="text"
-                name="city"
-                placeholder="شار"
-                value={searchQuery.city}
-                onChange={handleSearchChange}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.875rem",
-                  fontFamily: "var(--font-nrt-reg)"
-                }}
-              />
-            </div>
+      {/* SEARCH AND FILTER SECTION */}
+      <div style={{ backgroundColor: "white", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+        
+        <div style={{ backgroundColor: "#f8fafc", padding: "1.5rem", borderBottom: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", color: "#0f172a", fontFamily: "var(--font-nrt-bd)" }}>
+            <Search size={20} color="#64748b" /> گەڕانی پێشکەوتوو
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+            <input
+              type="text"
+              name="name"
+              className="nice-input"
+              placeholder="گەڕان بەپێی ناو..."
+              value={searchQuery.name}
+              onChange={handleSearchChange}
+            />
+            <input
+              type="text"
+              name="code"
+              className="nice-input"
+              placeholder="گەڕان بەپێی کۆد..."
+              value={searchQuery.code}
+              onChange={handleSearchChange}
+            />
+            <input
+              type="text"
+              name="city"
+              className="nice-input"
+              placeholder="گەڕان بەپێی شار..."
+              value={searchQuery.city}
+              onChange={handleSearchChange}
+            />
           </div>
         </div>
 
-        <div style={{
-          marginBottom: "1rem",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "8px"
-        }}>
-          <div style={{
-            color: "#4b5563",
-            fontSize: "0.875rem",
-            fontFamily: "var(--font-nrt-reg)"
-          }}>
-            {sortConfig.key === "name" ? (
-              <>ڕیزکردن بەپێی ناو{getSortLabel("name")}</>
-            ) : sortConfig.key === "code" ? (
-              <>ڕیزکردن بەپێی کۆد{getSortLabel("code")}</>
-            ) : (
-              <>ڕیز نه‌کراوە</>
-            )}
-            <span style={{ marginLeft: "8px", color: "#94a3b8" }}>
-              (کۆی گشتی: {filteredPharmacies.length})
-            </span>
-          </div>
+        <div style={{ padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "white", borderBottom: "1px solid #e2e8f0" }}>
+          <span style={{ color: "#475569", fontFamily: "var(--font-nrt-bd)" }}>
+            کۆی گشتی دۆزراوەکان: <span style={{ color: "#2563eb", fontWeight: 800 }}>{filteredPharmacies.length}</span> دەرمانخانە
+          </span>
         </div>
-        
+
+        {/* TABLE */}
         <div style={{ overflowX: "auto" }}>
-          <table style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            minWidth: "700px",
-            fontFamily: "var(--font-nrt-reg)"
-          }}>
-            <thead style={{ backgroundColor: "#f1f5f9" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px", textAlign: "right" }}>
+            <thead style={{ backgroundColor: "#f8fafc", color: "#334155", fontFamily: "var(--font-nrt-bd)" }}>
               <tr>
-                <th style={{
-                  padding: "0.75rem",
-                  textAlign: "left",
-                  fontWeight: "bold",
-                  color: "#334155",
-                  fontFamily: "var(--font-nrt-bd)",
-                  cursor: "pointer",
-                  position: "relative"
-                }} onClick={() => handleSort("name")}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    ناو
-                    <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-                      {getSortIndicator("name")}
-                    </span>
-                  </div>
+                <th onClick={() => handleSort("name")} style={{ padding: "1rem", cursor: "pointer", borderBottom: "2px solid #e2e8f0" }}>
+                  ناو {sortConfig.key === "name" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th style={{
-                  padding: "0.75rem",
-                  textAlign: "left",
-                  fontWeight: "bold",
-                  color: "#334155",
-                  fontFamily: "var(--font-nrt-bd)",
-                  cursor: "pointer",
-                  position: "relative"
-                }} onClick={() => handleSort("code")}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    کۆد
-                    <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-                      {getSortIndicator("code")}
-                    </span>
-                  </div>
+                <th onClick={() => handleSort("code")} style={{ padding: "1rem", cursor: "pointer", borderBottom: "2px solid #e2e8f0" }}>
+                  کۆد {sortConfig.key === "code" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th style={{
-                  padding: "0.75rem",
-                  textAlign: "left",
-                  fontWeight: "bold",
-                  color: "#334155",
-                  fontFamily: "var(--font-nrt-bd)"
-                }}>
-                  ژ. مۆبایل (کڕین)
-                </th>
-                <th style={{
-                  padding: "0.75rem",
-                  textAlign: "left",
-                  fontWeight: "bold",
-                  color: "#334155",
-                  fontFamily: "var(--font-nrt-bd)"
-                }}>
-                  ژ. مۆبایل (ئەژمێردار)
-                </th>
-                <th style={{
-                  padding: "0.75rem",
-                  textAlign: "left",
-                  fontWeight: "bold",
-                  color: "#334155",
-                  fontFamily: "var(--font-nrt-bd)"
-                }}>
-                  شار
-                </th>
-                <th style={{
-                  padding: "0.75rem",
-                  textAlign: "center",
-                  fontWeight: "bold",
-                  color: "#334155",
-                  fontFamily: "var(--font-nrt-bd)"
-                }}>
-                  کردارەکان
-                </th>
+                <th style={{ padding: "1rem", borderBottom: "2px solid #e2e8f0" }}>ژ.مۆبایل (کڕین)</th>
+                <th style={{ padding: "1rem", borderBottom: "2px solid #e2e8f0" }}>ژ.مۆبایل (محاسب)</th>
+                <th style={{ padding: "1rem", borderBottom: "2px solid #e2e8f0" }}>شار</th>
+                <th style={{ padding: "1rem", borderBottom: "2px solid #e2e8f0", textAlign: "center" }}>کردارەکان</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="6" style={{
-                    padding: "1rem",
-                    textAlign: "center",
-                    color: "#64748b",
-                    fontFamily: "var(--font-nrt-reg)"
-                  }}>
-                    دەرمانخانەکان بار دەکرێن...
+                  <td colSpan="6" style={{ padding: "3rem", textAlign: "center", color: "#64748b" }}>
+                    <Loader2 size={32} style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem", color: "#2563eb" }} />
+                    زانیارییەکان باردەکرێن...
                   </td>
                 </tr>
               ) : filteredPharmacies.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{
-                    padding: "1rem",
-                    textAlign: "center",
-                    color: "#94a3b8",
-                    fontFamily: "var(--font-nrt-reg)"
-                  }}>
-                    هیچ دەرمانخانەیەک نەدۆزرایەوە.
+                  <td colSpan="6" style={{ padding: "3rem", textAlign: "center", color: "#94a3b8", fontFamily: "var(--font-nrt-bd)" }}>
+                    هیچ دەرمانخانەیەک نەدۆزرایەوە بەم زانیاریانە.
                   </td>
                 </tr>
               ) : (
                 filteredPharmacies.map((pharmacy) => (
-                  <tr
-                    key={pharmacy.id}
-                    style={{
-                      borderBottom: "1px solid #e2e8f0",
-                      transition: "background-color 0.2s"
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                  >
-                    <td style={{ padding: "0.75rem", fontFamily: "var(--font-nrt-reg)" }}>{pharmacy.name}</td>
-                    <td style={{ padding: "0.75rem", fontFamily: "var(--font-nrt-reg)" }}>{pharmacy.code}</td>
-                    <td style={{ padding: "0.75rem", fontFamily: "var(--font-nrt-reg)" }}>
+                  <tr key={pharmacy.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.2s" }} onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8fafc"} onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                    <td style={{ padding: "1rem", fontFamily: "var(--font-nrt-bd)", color: "#0f172a" }}>{pharmacy.name}</td>
+                    <td style={{ padding: "1rem", color: "#475569" }}>
+                      <span style={{ backgroundColor: "#e2e8f0", padding: "0.2rem 0.5rem", borderRadius: "0.25rem", fontSize: "0.85rem", fontFamily: "var(--font-nrt-bd)" }}>{pharmacy.code}</span>
+                    </td>
+                    <td style={{ padding: "1rem", color: "#475569", direction: "ltr", textAlign: "right" }}>
                       {pharmacy.phone ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.5rem" }}>
                           {pharmacy.phone}
-                          <button
-                            onClick={() => handleWhatsApp(pharmacy.phone)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "20px",
-                              padding: "2px 4px"
-                            }}
-                            title="بە وەتسئەپ نامەی بۆ بنێرە"
-                          >
-                            
-                            <img src="/whatsappicon.png" alt="WhatsApp" style={{ width: "20px" }} />    
+                          <button onClick={() => handleWhatsApp(pharmacy.phone)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} title="ناردنی وەتسئەپ">
+                            <img src="/whatsappicon.png" alt="WA" style={{ width: "22px", transition: "transform 0.2s" }} onMouseOver={e => e.currentTarget.style.transform="scale(1.1)"} onMouseOut={e => e.currentTarget.style.transform="scale(1)"} />    
                           </button>
                         </div>
-                      ) : '---'}
+                      ) : "---"}
                     </td>
-                    <td style={{ padding: "0.75rem", fontFamily: "var(--font-nrt-reg)" }}>
+                    <td style={{ padding: "1rem", color: "#475569", direction: "ltr", textAlign: "right" }}>
                       {pharmacy.phone2 ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.5rem" }}>
                           {pharmacy.phone2}
-                          <button
-                            onClick={() => handleWhatsApp(pharmacy.phone2)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "20px",
-                              padding: "2px 4px"
-                            }}
-                            title="بە وەتسئەپ نامەی بۆ بنێرە"
-                          >
-                             <img src="/whatsappicon.png" alt="WhatsApp" style={{ width: "20px" }} />    
+                          <button onClick={() => handleWhatsApp(pharmacy.phone2)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} title="ناردنی وەتسئەپ">
+                            <img src="/whatsappicon.png" alt="WA" style={{ width: "22px", transition: "transform 0.2s" }} onMouseOver={e => e.currentTarget.style.transform="scale(1.1)"} onMouseOut={e => e.currentTarget.style.transform="scale(1)"} />    
                           </button>
                         </div>
-                      ) : '---'}
+                      ) : "---"}
                     </td>
-                    <td style={{ padding: "0.75rem", fontFamily: "var(--font-nrt-reg)" }}>{pharmacy.city || '---'}</td>
-                    <td style={{
-                      padding: "0.75rem",
-                      display: "flex",
-                      gap: "0.5rem",
-                      justifyContent: "center",
-                      flexWrap: "wrap"
-                    }}>
+                    <td style={{ padding: "1rem", color: "#475569" }}>{pharmacy.city || "---"}</td>
+                    <td style={{ padding: "1rem", display: "flex", gap: "0.5rem", justifyContent: "center" }}>
                       <button
                         onClick={() => handleEdit(pharmacy)}
-                        style={{
-                          padding: "0.25rem 0.75rem",
-                          backgroundColor: "#3b82f6",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: "0.25rem",
-                          cursor: "pointer",
-                          fontSize: "0.75rem",
-                          fontFamily: "var(--font-nrt-bd)",
-                          minWidth: "60px"
-                        }}
+                        style={{ display: "flex", alignItems: "center", gap: "0.25rem", padding: "0.5rem 0.75rem", backgroundColor: "#eff6ff", color: "#2563eb", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontFamily: "var(--font-nrt-bd)", fontSize: "0.85rem", transition: "background 0.2s" }}
+                        onMouseOver={e => e.currentTarget.style.backgroundColor = "#dbeafe"}
+                        onMouseOut={e => e.currentTarget.style.backgroundColor = "#eff6ff"}
                       >
-                        گۆڕانکاری
+                        <Edit3 size={16} /> دەستکاری
                       </button>
                       <button
                         onClick={() => handleDelete(pharmacy.id)}
-                        style={{
-                          padding: "0.25rem 0.75rem",
-                          backgroundColor: "#ef4444",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: "0.25rem",
-                          cursor: "pointer",
-                          fontSize: "0.75rem",
-                          fontFamily: "var(--font-nrt-bd)",
-                          minWidth: "60px"
-                        }}
+                        style={{ display: "flex", alignItems: "center", gap: "0.25rem", padding: "0.5rem 0.75rem", backgroundColor: "#fef2f2", color: "#dc2626", border: "none", borderRadius: "0.375rem", cursor: "pointer", fontFamily: "var(--font-nrt-bd)", fontSize: "0.85rem", transition: "background 0.2s" }}
+                        onMouseOver={e => e.currentTarget.style.backgroundColor = "#fee2e2"}
+                        onMouseOut={e => e.currentTarget.style.backgroundColor = "#fef2f2"}
                       >
-                        سڕینەوە
+                        <Trash2 size={16} /> سڕینەوە
                       </button>
                     </td>
                   </tr>
@@ -834,6 +564,7 @@ export default function PharmaciesPage() {
           </table>
         </div>
       </div>
+      
     </div>
   );
 }

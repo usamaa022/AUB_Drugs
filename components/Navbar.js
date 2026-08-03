@@ -69,7 +69,7 @@ export default function Navbar() {
   const isStandardUser = normalizedRole === "user";
   const isEmployee = normalizedRole === "employee";
   
-  // FIX: Allow standard users to also view the Accounts dropdown
+  // Allow standard users to also view the Accounts dropdown
   const canViewAccounts = isSuperAdmin || isAdmin || isStandardUser;
 
   // Close menus when clicking outside
@@ -259,6 +259,22 @@ export default function Navbar() {
                       onClick={() => setOpenDropdown(null)}
                     >
                       Buying Form
+                    </Link>
+                    <Link
+                      href="/bought"
+                      style={{
+                        display: "block",
+                        padding: "0.5rem 1rem",
+                        color: pathname === "/bought" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/bought" ? 600 : 400,
+                        textDecoration: "none",
+                        fontSize: "0.875rem",
+                        transition: "all 0.15s ease",
+                        backgroundColor: pathname === "/bought" ? "#f0f9ff" : "transparent",
+                      }}
+                      onClick={() => setOpenDropdown(null)}
+                    >
+                      Buying History
                     </Link>
                     <Link
                       href="/bought_returns"
@@ -1093,6 +1109,7 @@ export default function Navbar() {
               {openDropdown === 'mobile-buying' && (
                 <div style={{ paddingLeft: "0.75rem", marginTop: "0.25rem" }}>
                   <Link href="/buying" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Buying Form</Link>
+                  <Link href="/bought" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Buying History</Link>
                   <Link href="/bought_returns" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Bought Returns</Link>
                   <Link href="/Bought_Statement" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Bought Statement</Link>
                 </div>
