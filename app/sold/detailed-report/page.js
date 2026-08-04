@@ -161,10 +161,54 @@ export default function DetailedSalesReport() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#f1f5f9", fontFamily: "system-ui, sans-serif", paddingBottom: "3rem" }}>
+    <div className="app-container" style={{ minHeight: "100vh", backgroundColor: "#f1f5f9", fontFamily: "system-ui, sans-serif", paddingBottom: "3rem" }}>
       
-      {/* INJECTED CSS FOR PRINTING & STYLING */}
+      {/* INJECTED CSS FOR PRINTING & RESPONSIVE MOBILE STYLING */}
       <style dangerouslySetInnerHTML={{__html: `
+        .app-container, .app-container * {
+          box-sizing: border-box; /* Crucial for preventing width overflow */
+        }
+        
+        /* Mobile Layout Fixes */
+        @media (max-width: 768px) {
+          .responsive-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 1rem;
+          }
+          .responsive-header-right {
+            text-align: left !important;
+            width: 100%;
+          }
+          .responsive-totals {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 1rem;
+          }
+          .responsive-totals-boxes {
+            width: 100%;
+            justify-content: space-between;
+          }
+          .print-container {
+            padding: 1rem !important; /* Smaller padding on mobile */
+          }
+          .combo-container {
+            width: 100% !important;
+          }
+          .filters-wrapper {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .date-filter-box {
+            width: 100%;
+            justify-content: space-between;
+          }
+          .controls-container {
+            padding: 1rem !important;
+          }
+        }
+
+        /* Print Settings */
         @media print {
           @page { margin: 10mm; size: A4 portrait; }
           body { background: white !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
@@ -182,25 +226,29 @@ export default function DetailedSalesReport() {
           }
           .no-print { display: none !important; }
           .bill-section {
-            page-break-inside: avoid; /* Prevents bills from cutting in half */
+            page-break-inside: avoid;
             border-bottom: 1px dashed #64748b !important;
             margin-bottom: 8px !important;
             padding-bottom: 8px !important;
           }
-          /* Compact Table overrides for print */
           table th, table td { padding: 4px !important; font-size: 11px !important; }
           .compact-text { font-size: 11px !important; margin: 2px 0 !important; }
+          
+          /* Un-wrap items on print */
+          .responsive-header { flex-direction: row !important; align-items: flex-end !important; }
+          .responsive-header-right { text-align: right !important; }
+          .responsive-totals { flex-direction: row !important; align-items: center !important; }
         }
         
         .paper-shadow {
           box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
         }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
       `}} />
 
       {/* TOP CONTROLS (Hidden on Print) */}
-      <div className="no-print" style={{ backgroundColor: "white", padding: "1rem 2rem", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
+      <div className="no-print controls-container" style={{ backgroundColor: "white", padding: "1rem 2rem", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
           
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
@@ -212,15 +260,15 @@ export default function DetailedSalesReport() {
             </h1>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <div className="filters-wrapper" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", width: "100%", maxWidth: "fit-content" }}>
             
             {/* ADVANCED COMBO BOX FOR PHARMACY */}
-            <div ref={comboRef} style={{ position: "relative", width: "260px" }}>
+            <div ref={comboRef} className="combo-container" style={{ position: "relative", width: "260px" }}>
               <div 
                 onClick={() => setIsComboOpen(true)}
-                style={{ display: "flex", alignItems: "center", backgroundColor: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "0.5rem", padding: "0.4rem 0.75rem", cursor: "text" }}
+                style={{ display: "flex", alignItems: "center", backgroundColor: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "0.5rem", padding: "0.4rem 0.75rem", cursor: "text", width: "100%" }}
               >
-                <Search size={16} color="#64748b" style={{ marginRight: "0.5rem" }} />
+                <Search size={16} color="#64748b" style={{ marginRight: "0.5rem", flexShrink: 0 }} />
                 <input 
                   type="text"
                   placeholder="Select Pharmacy..."
@@ -232,7 +280,7 @@ export default function DetailedSalesReport() {
                   onFocus={() => setIsComboOpen(true)}
                   style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontSize: "0.875rem", color: "#0f172a", fontWeight: 500 }}
                 />
-                <ChevronDown size={16} color="#64748b" />
+                <ChevronDown size={16} color="#64748b" style={{ flexShrink: 0 }} />
               </div>
 
               {isComboOpen && (
@@ -247,8 +295,6 @@ export default function DetailedSalesReport() {
                           setIsComboOpen(false);
                         }}
                         style={{ padding: "0.5rem 1rem", fontSize: "0.875rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9", backgroundColor: selectedPharmacy === pharm ? "#eff6ff" : "white", color: selectedPharmacy === pharm ? "#2563eb" : "#334155", fontWeight: selectedPharmacy === pharm ? 600 : 400 }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedPharmacy === pharm ? "#eff6ff" : "white"}
                       >
                         {pharm}
                       </div>
@@ -261,20 +307,20 @@ export default function DetailedSalesReport() {
             </div>
 
             {/* DATE FILTERS */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", backgroundColor: "#f8fafc", padding: "0.4rem 0.75rem", borderRadius: "0.5rem", border: "1px solid #cbd5e1" }}>
-              <Calendar size={16} color="#64748b" />
+            <div className="date-filter-box" style={{ display: "flex", alignItems: "center", gap: "0.5rem", backgroundColor: "#f8fafc", padding: "0.4rem 0.75rem", borderRadius: "0.5rem", border: "1px solid #cbd5e1" }}>
+              <Calendar size={16} color="#64748b" style={{ flexShrink: 0 }} />
               <input 
                 type="date" 
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                style={{ border: "none", background: "transparent", outline: "none", color: "#334155", fontSize: "0.875rem" }}
+                style={{ border: "none", background: "transparent", outline: "none", color: "#334155", fontSize: "0.875rem", width: "100%" }}
               />
               <span style={{ color: "#94a3b8" }}>-</span>
               <input 
                 type="date" 
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                style={{ border: "none", background: "transparent", outline: "none", color: "#334155", fontSize: "0.875rem" }}
+                style={{ border: "none", background: "transparent", outline: "none", color: "#334155", fontSize: "0.875rem", width: "100%" }}
               />
             </div>
 
@@ -282,7 +328,7 @@ export default function DetailedSalesReport() {
             <button 
               disabled={!selectedPharmacy || filteredBills.length === 0}
               onClick={handlePrint}
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 1rem", backgroundColor: (!selectedPharmacy || filteredBills.length === 0) ? "#94a3b8" : "#2563eb", color: "white", border: "none", borderRadius: "0.5rem", fontWeight: 600, cursor: (!selectedPharmacy || filteredBills.length === 0) ? "not-allowed" : "pointer", transition: "background 0.2s" }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", padding: "0.5rem 1rem", backgroundColor: (!selectedPharmacy || filteredBills.length === 0) ? "#94a3b8" : "#2563eb", color: "white", border: "none", borderRadius: "0.5rem", fontWeight: 600, cursor: (!selectedPharmacy || filteredBills.length === 0) ? "not-allowed" : "pointer", transition: "background 0.2s", width: "100%", maxWidth: "120px" }}
             >
               <Printer size={18} /> Print
             </button>
@@ -304,12 +350,12 @@ export default function DetailedSalesReport() {
         ) : (
           <div 
             className="print-container paper-shadow" 
-            style={{ maxWidth: "900px", margin: "0 auto", backgroundColor: "white", padding: "2rem", borderRadius: "0.5rem" }}
+            style={{ maxWidth: "900px", margin: "0 auto", backgroundColor: "white", padding: "2rem", borderRadius: "0.5rem", width: "100%" }}
           >
             {/* PRINT HEADER: LOGO & DETAILS */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid #0f172a", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
+            <div className="responsive-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid #0f172a", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
               
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
                 <img src="/Aranlogo.png" alt="Aran Med Store Logo" style={{ height: "60px", objectFit: "contain" }} />
                 <div>
                   <h1 style={{ margin: 0, fontSize: "1.5rem", color: "#0f172a", fontWeight: "900", letterSpacing: "0.5px" }}>ARAN MED STORE</h1>
@@ -318,7 +364,7 @@ export default function DetailedSalesReport() {
                 </div>
               </div>
 
-              <div style={{ textAlign: "right" }}>
+              <div className="responsive-header-right" style={{ textAlign: "right" }}>
                 <h2 style={{ margin: "0 0 4px 0", fontSize: "1.25rem", color: "#0f172a", textTransform: "uppercase" }}>Sales Ledger</h2>
                 <p className="compact-text" style={{ margin: "2px 0", color: "#0f172a", fontSize: "0.875rem", fontWeight: 700 }}>Client: {selectedPharmacy}</p>
                 <p className="compact-text" style={{ margin: "2px 0", color: "#475569", fontSize: "0.875rem" }}>
@@ -342,10 +388,10 @@ export default function DetailedSalesReport() {
                 const finalTotal = isIqd ? (bill.finalAmountIQD || bill.totalAmountIQD) : (bill.finalAmountUSD || bill.totalAmountUSD);
 
                 return (
-                  <div key={bill.id} className="bill-section" style={{ marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "1px dashed #cbd5e1" }}>
+                  <div key={bill.id} className="bill-section" style={{ marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "1px dashed #cbd5e1", width: "100%" }}>
                     
                     {/* Compact Bill Info Row */}
-                    <div style={{ display: "flex", justifyContent: "space-between", backgroundColor: "#f8fafc", padding: "6px 8px", borderLeft: "3px solid #2563eb", marginBottom: "8px", fontSize: "0.875rem" }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "0.5rem", backgroundColor: "#f8fafc", padding: "6px 8px", borderLeft: "3px solid #2563eb", marginBottom: "8px", fontSize: "0.875rem" }}>
                       <div>
                         <span style={{ fontWeight: 700, color: "#0f172a", marginRight: "1rem" }}>Inv #{bill.billNumber || "N/A"}</span>
                         <span style={{ color: "#475569" }}>{formatDateTime(bill.date)}</span>
@@ -358,57 +404,59 @@ export default function DetailedSalesReport() {
                       </div>
                     </div>
 
-                    {/* Compact Items Table */}
-                    <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "8px", fontSize: "0.8125rem" }}>
-                      <thead>
-                        <tr style={{ backgroundColor: "#e2e8f0", color: "#0f172a" }}>
-                          <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "left", width: "5%" }}>#</th>
-                          <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "left" }}>Item Description</th>
-                          <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "center", width: "8%" }}>Qty</th>
-                          <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "right", width: "15%" }}>Price</th>
-                          <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "right", width: "18%" }}>Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bill.items && bill.items.length > 0 ? (
-                          bill.items.map((item, idx) => {
-                            const qty = Number(item.quantity) || 0;
-                            // Pull price based on bill currency
-                            const price = isIqd ? (Number(item.outPriceIQD) || Number(item.price) || 0) : (Number(item.outPriceUSD) || Number(item.price) || 0);
-                            
-                            return (
-                              <tr key={idx}>
-                                <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "left", color: "#475569" }}>{idx + 1}</td>
-                                <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "left", fontWeight: 500, color: "#0f172a" }}>
-                                  {item.name}
-                                </td>
-                                <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "center", fontWeight: "bold" }}>{qty}</td>
-                                <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "right", color: "#475569" }}>
-                                  {formatCurrency(price, currencySymbol)}
-                                </td>
-                                <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "right", fontWeight: 600, color: "#0f172a" }}>
-                                  {formatCurrency(price * qty, currencySymbol)}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr><td colSpan="5" style={{ padding: "8px", textAlign: "center", color: "#94a3b8" }}>No items found.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
+                    {/* WRAPPED TABLE TO PREVENT HORIZONTAL SCREEN SCROLLING */}
+                    <div className="custom-scrollbar" style={{ width: "100%", overflowX: "auto", marginBottom: "8px" }}>
+                      <table style={{ width: "100%", minWidth: "500px", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
+                        <thead>
+                          <tr style={{ backgroundColor: "#e2e8f0", color: "#0f172a" }}>
+                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "left", width: "5%" }}>#</th>
+                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "left" }}>Item Description</th>
+                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "center", width: "8%" }}>Qty</th>
+                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "right", width: "15%" }}>Price</th>
+                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "right", width: "18%" }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bill.items && bill.items.length > 0 ? (
+                            bill.items.map((item, idx) => {
+                              const qty = Number(item.quantity) || 0;
+                              // Pull price based on bill currency
+                              const price = isIqd ? (Number(item.outPriceIQD) || Number(item.price) || 0) : (Number(item.outPriceUSD) || Number(item.price) || 0);
+                              
+                              return (
+                                <tr key={idx}>
+                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "left", color: "#475569" }}>{idx + 1}</td>
+                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "left", fontWeight: 500, color: "#0f172a" }}>
+                                    {item.name}
+                                  </td>
+                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "center", fontWeight: "bold" }}>{qty}</td>
+                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "right", color: "#475569" }}>
+                                    {formatCurrency(price, currencySymbol)}
+                                  </td>
+                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "right", fontWeight: 600, color: "#0f172a" }}>
+                                    {formatCurrency(price * qty, currencySymbol)}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr><td colSpan="5" style={{ padding: "8px", textAlign: "center", color: "#94a3b8" }}>No items found.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
 
                     {/* Single Currency Compact Total */}
-                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                      <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.8125rem" }}>
+                    <div style={{ display: "flex", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.8125rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
                         {Number(discount) > 0 && (
-                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                             <span style={{ color: "#64748b" }}>Subtotal:</span>
                             <span>{formatCurrency(subtotal, currencySymbol)}</span>
                             <span style={{ color: "#ef4444", marginLeft: "0.5rem" }}>Disc: -{formatCurrency(discount, currencySymbol)}</span>
                           </div>
                         )}
-                        <div style={{ display: "flex", gap: "0.5rem", fontWeight: "bold", fontSize: "0.875rem", color: "#0f172a", backgroundColor: "#f1f5f9", padding: "2px 8px", borderRadius: "4px" }}>
+                        <div style={{ display: "flex", gap: "0.5rem", fontWeight: "bold", fontSize: "0.875rem", color: "#0f172a", backgroundColor: "#f1f5f9", padding: "2px 8px", borderRadius: "4px", alignItems: "center" }}>
                           <span>Bill Total:</span>
                           <span>{formatCurrency(finalTotal, currencySymbol)}</span>
                         </div>
@@ -420,15 +468,15 @@ export default function DetailedSalesReport() {
               })
             )}
 
-            {/* GRAND TOTALS FOOTER (Always at the end of paper) */}
+            {/* GRAND TOTALS FOOTER */}
             {filteredBills.length > 0 && (
-              <div style={{ marginTop: "2rem", borderTop: "3px double #0f172a", paddingTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center", pageBreakInside: "avoid" }}>
+              <div className="responsive-totals" style={{ marginTop: "2rem", borderTop: "3px double #0f172a", paddingTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center", pageBreakInside: "avoid" }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: "1rem", color: "#475569" }}>REPORT SUMMARY</h3>
                   <p style={{ margin: "4px 0 0 0", fontSize: "0.875rem", color: "#64748b" }}>Total Bills Count: {filteredBills.length}</p>
                 </div>
                 
-                <div style={{ display: "flex", gap: "2rem", backgroundColor: "#f8fafc", padding: "1rem", borderRadius: "0.5rem", border: "1px solid #cbd5e1" }}>
+                <div className="responsive-totals-boxes" style={{ display: "flex", gap: "2rem", flexWrap: "wrap", backgroundColor: "#f8fafc", padding: "1rem", borderRadius: "0.5rem", border: "1px solid #cbd5e1" }}>
                   {grandTotals.totalUSD > 0 && (
                     <div style={{ textAlign: "right" }}>
                       <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>Grand Total USD</p>
@@ -436,8 +484,9 @@ export default function DetailedSalesReport() {
                     </div>
                   )}
                   
+                  {/* Divider hidden on mobile if they stack */}
                   {grandTotals.totalUSD > 0 && grandTotals.totalIQD > 0 && (
-                    <div style={{ width: "1px", backgroundColor: "#cbd5e1" }}></div>
+                    <div className="no-print" style={{ width: "1px", backgroundColor: "#cbd5e1" }}></div>
                   )}
 
                   {grandTotals.totalIQD > 0 && (
