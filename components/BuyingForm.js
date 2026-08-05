@@ -25,18 +25,27 @@ const formatNumber = (number) => {
   }).format(num);
 };
 
+// Formats a string to add commas but keep trailing decimals while typing
+const formatForInput = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const str = String(val).replace(/,/g, '');
+  const parts = str.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join('.');
+};
+
 const parseFormattedNumber = (formattedValue) => {
   if (!formattedValue) return '';
   return formattedValue.toString().replace(/,/g, '');
 };
 
 const handleNumberInput = (value, setter) => {
-  const rawValue = value.replace(/,/g, '');
-  if (rawValue === '' || isNaN(parseFloat(rawValue))) {
-    setter('');
-  } else {
-    setter(formatNumber(rawValue));
-  }
+  const raw = value.replace(/,/g, '');
+  const clean = raw.replace(/[^0-9.]/g, '');
+  // Prevent typing multiple decimal points
+  const dotCount = (clean.match(/\./g) || []).length;
+  if (dotCount > 1) return;
+  setter(clean);
 };
 
 // Formats ANY date representation to dd/mm/yyyy
@@ -70,14 +79,13 @@ const formatDateToDDMMYYYY = (date) => {
   return `${day}/${month}/${year}`;
 };
 
-// Parses a dd/mm/yyyy or yyyy-mm-dd string into a JavaScript Date object
-// Parses a dd/mm/yyyy string into a Date object preserving the current real time
+// Parses a dd/mm/yyyy string into a JavaScript Date object preserving the current real time
 const parseDateString = (dateStr) => {
   if (!dateStr || typeof dateStr !== 'string') return null;
   const str = dateStr.trim();
   if (!str || str === 'N/A') return null;
 
-  const now = new Date(); // Preserves real-time hours, minutes & seconds
+  const now = new Date();
 
   if (str.includes('/')) {
     const parts = str.split('/');
@@ -86,7 +94,6 @@ const parseDateString = (dateStr) => {
       const month = parseInt(parts[1], 10) - 1;
       const year = parseInt(parts[2], 10);
       
-      // Use local Date constructor with current exact time
       const parsed = new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds());
       if (!isNaN(parsed.getTime())) return parsed;
     }
@@ -127,7 +134,7 @@ export default function BuyingForm({ onBillCreated }) {
   const [billItems, setBillItems] = useState([]);
   const [transportFee, setTransportFee] = useState("0");
   const [externalExpense, setExternalExpense] = useState("0");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(""); // Starts empty, forces selection
   const [suggestions, setSuggestions] = useState([]);
   const [companySuggestions, setCompanySuggestions] = useState([]);
   const [allCompanies, setAllCompanies] = useState([]);
@@ -139,6 +146,7 @@ export default function BuyingForm({ onBillCreated }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [currencyError, setCurrencyError] = useState(false);
 
   const searchInputRef = useRef(null);
   const companySearchRef = useRef(null);
@@ -227,8 +235,8 @@ export default function BuyingForm({ onBillCreated }) {
     setExpensePercentage(String(billData.expensePercentage || 7));
     setBillNote(billData.billNote || "");
     setCurrency(billData.currency || "USD");
-    setTransportFee(formatNumber(billData.totalTransportFeeUSD || 0));
-    setExternalExpense(formatNumber(billData.totalExternalExpenseUSD || 0));
+    setTransportFee(String(billData.totalTransportFeeUSD || 0));
+    setExternalExpense(String(billData.totalExternalExpenseUSD || 0));
 
     if (billData.items && billData.items.length > 0) {
       const initializedItems = billData.items.map(item => {
@@ -246,8 +254,8 @@ export default function BuyingForm({ onBillCreated }) {
           barcode: item.barcode || "",
           name: item.name || "",
           quantity: String(item.quantity || 1),
-          price: formatNumber(price),
-          outPrice: formatNumber(outPrice),
+          price: String(price),
+          outPrice: String(outPrice),
           expireDate: formatDateToDDMMYYYY(item.expireDate),
           netPrice: item.netPrice || 0
         };
@@ -308,14 +316,38 @@ export default function BuyingForm({ onBillCreated }) {
     setCompanyCode(company.code);
     setShowCompanySuggestions(false);
     setError(null);
-  }, []);
+    
+    // Auto-select currency if company has a default, else force them to pick
+    if (company.currency) {
+      setCurrency(company.currency);
+      setCurrencyError(false);
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    } else if (!currency) {
+      setCurrencyError(true);
+      const currencyToggle = document.querySelector('.bf-currency-toggle');
+      if (currencyToggle) {
+        currencyToggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    } else {
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  }, [currency]);
 
   const handleItemSelect = useCallback((item) => {
+    if (!currency) {
+      setCurrencyError(true);
+      const currencyToggle = document.querySelector('.bf-currency-toggle');
+      if (currencyToggle) {
+        currencyToggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+    
     const newItem = {
       ...createEmptyItem(),
       barcode: item.barcode,
       name: item.name,
-      outPrice: item.outPrice ? formatNumber(item.outPrice) : "",
+      outPrice: item.outPrice ? String(item.outPrice) : "",
       expireDate: formatDateToDDMMYYYY(item.expireDate),
     };
 
@@ -337,7 +369,8 @@ export default function BuyingForm({ onBillCreated }) {
 
     setShowSuggestions(false);
     setSearchQuery("");
-  }, []);
+    setCurrencyError(false);
+  }, [currency]);
 
   const handleItemChange = useCallback((index, field, value) => {
     setBillItems(prev => {
@@ -358,7 +391,7 @@ export default function BuyingForm({ onBillCreated }) {
     setIsConsignment(false);
     setExpensePercentage("7");
     setBillNote("");
-    setCurrency("USD");
+    setCurrency("");
     setTransportFee("0");
     setExternalExpense("0");
     setBillItems([createEmptyItem()]);
@@ -366,6 +399,7 @@ export default function BuyingForm({ onBillCreated }) {
     setSuccessMessage(null);
     setIsEditing(false);
     setEditingBill(null);
+    setCurrencyError(false);
     localStorage.removeItem('editingBill');
   }, []);
 
@@ -436,6 +470,17 @@ export default function BuyingForm({ onBillCreated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!currency) {
+      setCurrencyError(true);
+      setError("Please select a currency before submitting.");
+      const currencyToggle = document.querySelector('.bf-currency-toggle');
+      if (currencyToggle) {
+        currencyToggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
@@ -688,6 +733,11 @@ export default function BuyingForm({ onBillCreated }) {
           color: #475569;
         }
 
+        .bf-label-required {
+          color: #ef4444;
+          margin-left: 0.25rem;
+        }
+
         .bf-input, .bf-select, .bf-textarea {
           width: 100%;
           padding: 0.625rem 0.875rem;
@@ -703,6 +753,11 @@ export default function BuyingForm({ onBillCreated }) {
         .bf-input:focus, .bf-select:focus, .bf-textarea:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .bf-input-error {
+          border-color: #ef4444 !important;
+          box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
         }
 
         .bf-dropdown {
@@ -736,8 +791,20 @@ export default function BuyingForm({ onBillCreated }) {
           background: #f1f5f9;
           padding: 0.25rem;
           border-radius: 10px;
-          border: 1px solid #e2e8f0;
+          border: 2px solid #e2e8f0;
           gap: 0.25rem;
+          transition: all 0.3s ease;
+        }
+
+        .bf-currency-toggle-error {
+          border: 2px solid #ef4444 !important;
+          animation: pulse-border 1.5s ease-in-out infinite;
+          box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+
+        @keyframes pulse-border {
+          0%, 100% { border-color: #ef4444; }
+          50% { border-color: #fca5a5; }
         }
 
         .bf-currency-btn {
@@ -762,6 +829,16 @@ export default function BuyingForm({ onBillCreated }) {
           background: #059669;
           color: #ffffff;
           box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+        }
+
+        .bf-currency-error-text {
+          color: #ef4444;
+          font-size: 0.75rem;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          margin-top: 0.25rem;
         }
 
         .bf-table-container {
@@ -895,6 +972,12 @@ export default function BuyingForm({ onBillCreated }) {
         .bf-btn-danger:hover {
           background: #dc2626;
         }
+
+        .bf-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none !important;
+        }
       `}</style>
 
       <div className="bf-card">
@@ -945,23 +1028,37 @@ export default function BuyingForm({ onBillCreated }) {
 
               <div className="bf-grid-3" style={{ marginBottom: "1rem" }}>
                 <div className="bf-form-group">
-                  <label className="bf-label">Operating Currency</label>
-                  <div className="bf-currency-toggle">
+                  <label className="bf-label">
+                    Operating Currency <span className="bf-label-required">*</span>
+                  </label>
+                  <div className={`bf-currency-toggle ${currencyError ? 'bf-currency-toggle-error' : ''}`}>
                     <button
                       type="button"
-                      onClick={() => setCurrency("USD")}
+                      onClick={() => {
+                        setCurrency("USD");
+                        setCurrencyError(false);
+                      }}
                       className={`bf-currency-btn ${currency === "USD" ? "active-usd" : ""}`}
                     >
                       USD ($)
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCurrency("IQD")}
+                      onClick={() => {
+                        setCurrency("IQD");
+                        setCurrencyError(false);
+                      }}
                       className={`bf-currency-btn ${currency === "IQD" ? "active-iqd" : ""}`}
                     >
                       IQD (د.ع)
                     </button>
                   </div>
+                  {currencyError && (
+                    <div className="bf-currency-error-text">
+                      <FiAlertTriangle size={14} />
+                      Please select a currency before adding items
+                    </div>
+                  )}
                 </div>
 
                 <div className="bf-form-group" style={{ gridColumn: "span 2" }}>
@@ -1033,7 +1130,6 @@ export default function BuyingForm({ onBillCreated }) {
                   >
                     <option value="Unpaid">Unpaid</option>
                     <option value="Cash">Cash</option>
-                    {/* <option value="Paid">Paid</option> */}
                   </select>
                 </div>
 
@@ -1078,11 +1174,37 @@ export default function BuyingForm({ onBillCreated }) {
                   <input
                     ref={searchInputRef}
                     type="text"
-                    className="bf-input"
-                    style={{ paddingLeft: "2.25rem", background: "#fffbeb", borderColor: "#fde68a" }}
+                    className={`bf-input ${currencyError ? 'bf-input-error' : ''}`}
+                    style={{ paddingLeft: "2.25rem", background: "#fffbeb", borderColor: currencyError ? "#ef4444" : "#fde68a" }}
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Type barcode or product name to auto-fill..."
+                    onChange={(e) => {
+                      if (!currency) return; // Prevent typing if currency not set
+                      setSearchQuery(e.target.value);
+                    }}
+                    onFocus={(e) => {
+                      if (!currency) {
+                        e.preventDefault();
+                        e.target.blur();
+                        setCurrencyError(true);
+                        const currencyToggle = document.querySelector('.bf-currency-toggle');
+                        if (currencyToggle) {
+                          currencyToggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                        return;
+                      }
+                      e.target.style.borderColor = '#4299e1';
+                      e.target.style.boxShadow = '0 0 0 4px rgba(66, 153, 225, 0.15)';
+                      e.target.style.backgroundColor = '#fff5df';
+                      e.target.select();
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#fde68a';
+                      e.target.style.boxShadow = 'none';
+                      if (!e.target.value) {
+                        e.target.style.backgroundColor = '#fffbeb';
+                      }
+                    }}
+                    placeholder={currency ? "Type barcode or product name to auto-fill..." : "⚠️ Please select a currency first..."}
                   />
                   {showSuggestions && suggestions.length > 0 && (
                     <div className="bf-dropdown">
@@ -1112,9 +1234,9 @@ export default function BuyingForm({ onBillCreated }) {
                       <th style={{ width: "15%" }}>Barcode</th>
                       <th style={{ width: "25%" }}>Product Description</th>
                       <th style={{ width: "8%", textAlign: "center" }}>Qty</th>
-                      <th style={{ width: "13%", textAlign: "right" }}>Buy Price ({currency})</th>
-                      <th style={{ width: "13%", textAlign: "right" }}>Selling Price ({currency})</th>
-                      <th style={{ width: "13%", textAlign: "right" }}>Net Cost ({currency})</th>
+                      <th style={{ width: "13%", textAlign: "right" }}>Buy Price ({currency || '?'})</th>
+                      <th style={{ width: "13%", textAlign: "right" }}>Selling Price ({currency || '?'})</th>
+                      <th style={{ width: "13%", textAlign: "right" }}>Net Cost ({currency || '?'})</th>
                       <th style={{ width: "10%" }}>Expire Date</th>
                       <th style={{ width: "3%", textAlign: "center" }}></th>
                     </tr>
@@ -1159,11 +1281,11 @@ export default function BuyingForm({ onBillCreated }) {
                             <input
                               ref={(el) => itemInputRefs.current[`${index}-quantity`] = el}
                               type="number"
-                              min="1"
+                              min="0"
                               step="1"
                               className="bf-table-input"
                               style={{ textAlign: "center", fontWeight: 600 }}
-                              value={item.quantity || 1}
+                              value={item.quantity || ''}
                               onChange={(e) => handleItemChange(index, "quantity", e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, index, 'quantity')}
                               onFocus={selectOnFocus}
@@ -1176,14 +1298,19 @@ export default function BuyingForm({ onBillCreated }) {
                               inputMode="decimal"
                               className="bf-table-input"
                               style={{ textAlign: "right" }}
-                              value={item.price}
+                              value={formatForInput(item.price)}
                               onChange={(e) => {
-                                const formatted = formatNumber(e.target.value);
-                                handleItemChange(index, "price", formatted);
-                                const rawPrice = parseFloat(e.target.value.replace(/,/g, ''));
-                                if (rawPrice && !isNaN(rawPrice) && (!item.outPrice || item.outPrice === '')) {
+                                const raw = e.target.value.replace(/,/g, '');
+                                const clean = raw.replace(/[^0-9.]/g, '');
+                                const dotCount = (clean.match(/\./g) || []).length;
+                                if (dotCount > 1) return;
+                                
+                                handleItemChange(index, "price", clean);
+                                
+                                const rawPrice = parseFloat(clean);
+                                if (!isNaN(rawPrice) && rawPrice > 0 && (!item.outPrice || item.outPrice === '')) {
                                   const autoOutPrice = rawPrice * 1.5;
-                                  handleItemChange(index, "outPrice", formatNumber(autoOutPrice));
+                                  handleItemChange(index, "outPrice", autoOutPrice.toFixed(2));
                                 }
                               }}
                               onKeyDown={(e) => handleKeyDown(e, index, 'price')}
@@ -1198,10 +1325,14 @@ export default function BuyingForm({ onBillCreated }) {
                               inputMode="decimal"
                               className="bf-table-input"
                               style={{ textAlign: "right", background: "#fffbeb", borderColor: "#fde68a" }}
-                              value={item.outPrice || ''}
+                              value={formatForInput(item.outPrice)}
                               onChange={(e) => {
-                                const formatted = formatNumber(e.target.value);
-                                handleItemChange(index, "outPrice", formatted);
+                                const raw = e.target.value.replace(/,/g, '');
+                                const clean = raw.replace(/[^0-9.]/g, '');
+                                const dotCount = (clean.match(/\./g) || []).length;
+                                if (dotCount > 1) return;
+                                
+                                handleItemChange(index, "outPrice", clean);
                               }}
                               onKeyDown={(e) => handleKeyDown(e, index, 'outPrice')}
                               onFocus={selectOnFocus}
@@ -1237,15 +1368,6 @@ export default function BuyingForm({ onBillCreated }) {
                   </tbody>
                 </table>
               </div>
-
-              {/* <button
-                type="button"
-                onClick={addItem}
-                className="bf-btn bf-btn-secondary"
-                style={{ marginTop: "0.75rem", width: "100%", justifyContent: "center" }}
-              >
-                <FiPlus size={16} /> Add Empty Line Row
-              </button> */}
             </div>
 
             {/* Section 3: Overhead & Notes */}
@@ -1257,14 +1379,20 @@ export default function BuyingForm({ onBillCreated }) {
 
               <div className="bf-grid-3" style={{ marginBottom: "1rem" }}>
                 <div className="bf-form-group">
-                  <label className="bf-label">Transport Costs ({currency})</label>
+                  <label className="bf-label">Transport Costs ({currency || '?'})</label>
                   <input
                     ref={transportFeeRef}
                     type="text"
                     inputMode="decimal"
                     className="bf-input"
-                    value={transportFee}
-                    onChange={(e) => handleNumberInput(e.target.value, setTransportFee)}
+                    value={formatForInput(transportFee)}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/,/g, '');
+                      const clean = raw.replace(/[^0-9.]/g, '');
+                      const dotCount = (clean.match(/\./g) || []).length;
+                      if (dotCount > 1) return;
+                      setTransportFee(clean);
+                    }}
                     onKeyDown={(e) => handleKeyDown(e, null, 'transportFee')}
                     onFocus={selectOnFocus}
                     placeholder="0.00"
@@ -1272,14 +1400,20 @@ export default function BuyingForm({ onBillCreated }) {
                 </div>
 
                 <div className="bf-form-group">
-                  <label className="bf-label">Other Overhead / Customs ({currency})</label>
+                  <label className="bf-label">Other Overhead / Customs ({currency || '?'})</label>
                   <input
                     ref={externalExpenseRef}
                     type="text"
                     inputMode="decimal"
                     className="bf-input"
-                    value={externalExpense}
-                    onChange={(e) => handleNumberInput(e.target.value, setExternalExpense)}
+                    value={formatForInput(externalExpense)}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/,/g, '');
+                      const clean = raw.replace(/[^0-9.]/g, '');
+                      const dotCount = (clean.match(/\./g) || []).length;
+                      if (dotCount > 1) return;
+                      setExternalExpense(clean);
+                    }}
                     onKeyDown={(e) => handleKeyDown(e, null, 'externalExpense')}
                     onFocus={selectOnFocus}
                     placeholder="0.00"
@@ -1293,8 +1427,14 @@ export default function BuyingForm({ onBillCreated }) {
                     type="text"
                     inputMode="decimal"
                     className="bf-input"
-                    value={expensePercentage}
-                    onChange={(e) => handleNumberInput(e.target.value, setExpensePercentage)}
+                    value={formatForInput(expensePercentage)}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/,/g, '');
+                      const clean = raw.replace(/[^0-9.]/g, '');
+                      const dotCount = (clean.match(/\./g) || []).length;
+                      if (dotCount > 1) return;
+                      setExpensePercentage(clean);
+                    }}
                     onKeyDown={(e) => handleKeyDown(e, null, 'expensePercentage')}
                     onFocus={selectOnFocus}
                     placeholder="7"
@@ -1324,7 +1464,7 @@ export default function BuyingForm({ onBillCreated }) {
               <div className="bf-summary-item">
                 <span className="bf-summary-label">Total Base Subtotal</span>
                 <span className="bf-summary-value" style={{ color: "#2563eb" }}>
-                  {formatNumber(totalBasePrice)} {currency}
+                  {formatNumber(totalBasePrice)} {currency || '?'}
                 </span>
               </div>
             </div>

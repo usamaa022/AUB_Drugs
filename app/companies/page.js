@@ -81,13 +81,15 @@ export default function CompaniesPage() {
 
   // Array of cities for the combo box
   const cities = [
+    "ئێران",
+    "تورکیا",
     "سلێمانی",
     "هەولێر",
     "دهۆک",
-    "کەرکوک",
-    "کەلار",
     "بەغداد",
-    "هەڵەبجە"
+    "ئەڵمانیا",
+    "سین",
+
   ];
 
   // Helper: Automatically generate the next available code

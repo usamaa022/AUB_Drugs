@@ -430,16 +430,14 @@ const styles = {
     backgroundColor: "white",
   },
   itemGroupHeader: {
-    backgroundColor: "#34495e",
-    padding: "12px 14px",
-    fontWeight: "600",
-    color: "white",
-    fontSize: "15px",
-    fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    backgroundColor: "#f8fafc",
+    padding: "14px 16px",
+    borderBottom: "2px solid #3498db",
     display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
   },
   table: {
     width: "100%",
@@ -464,29 +462,20 @@ const styles = {
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     whiteSpace: "nowrap",
   },
-  addButton: {
-    backgroundColor: "#27ae60",
-    color: "white",
-    border: "none",
-    padding: "8px 14px",
-    borderRadius: "6px",
-    fontSize: "14px",
-    cursor: "pointer",
-    fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    touchAction: "manipulation",
-    whiteSpace: "nowrap",
-  },
   historyButton: {
-    backgroundColor: "#8e44ad",
+    backgroundColor: "#34495e",
     color: "white",
     border: "none",
     padding: "8px 14px",
     borderRadius: "6px",
-    fontSize: "14px",
+    fontSize: "13px",
     fontWeight: "600",
     cursor: "pointer",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     touchAction: "manipulation",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px"
   },
   selectedItems: {
     marginTop: "20px",
@@ -765,6 +754,9 @@ const styles = {
     border: "1px solid #e1e8ed",
     marginBottom: "15px",
   },
+  filterSection: {
+    padding: "4px 0",
+  },
   filterSectionTitle: {
     fontSize: "17px",
     fontWeight: "600",
@@ -843,6 +835,7 @@ const styles = {
     marginBottom: "10px",
     borderRadius: "8px",
     border: "1px solid #e1e8ed",
+    overflow: "hidden",
   },
   billsTable: {
     width: "100%",
@@ -855,7 +848,7 @@ const styles = {
     backgroundColor: "#34495e",
     color: "white",
     padding: "12px 10px",
-    textAlign: "left",
+    textAlign: "center",
     fontSize: "14px",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     cursor: "pointer",
@@ -895,7 +888,7 @@ const styles = {
   tableCellCenterdatee: {
     padding: "12px 10px",
     borderBottom: "1px solid #e1e8ed",
-    textAlign: "left",
+    textAlign: "center",
     fontSize: "14px",
     fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     whiteSpace: "nowrap",
@@ -933,6 +926,7 @@ const styles = {
     flexDirection: "column",
     gap: "5px",
     justifyContent: "center",
+    alignItems: "center",
   },
   editButton: {
     backgroundColor: "#f39c12",
@@ -944,6 +938,7 @@ const styles = {
     cursor: "pointer",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     touchAction: "manipulation",
+    width: "100%",
   },
   printSmallButton: {
     backgroundColor: "#27ae60",
@@ -955,6 +950,7 @@ const styles = {
     cursor: "pointer",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     touchAction: "manipulation",
+    width: "100%",
   },
   attachButton: {
     backgroundColor: "#9b59b6",
@@ -1140,7 +1136,7 @@ const styles = {
     backgroundColor: "#34495e",
     color: "white",
     padding: "12px 10px",
-    textAlign: "left",
+    textAlign: "center",
     fontWeight: "600",
     fontSize: "14px",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
@@ -1152,6 +1148,7 @@ const styles = {
     borderBottom: "1px solid #e8ecef",
     fontSize: "14px",
     fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    textAlign: "center",
   },
   enhancedTableRow: {
     transition: "background-color 0.2s ease",
@@ -1219,7 +1216,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent:  "center",
-    zIndex: 99999, // ✅ FIX: Absolute top layer z-index
+    zIndex: 99999,
     padding: "10px",
   },
   modalContent: {
@@ -1377,6 +1374,54 @@ const styles = {
     gap: '10px',
     marginTop: '15px',
   },
+  consignmentContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 0',
+  },
+  consignmentCheckbox: {
+    width: '18px',
+    height: '18px',
+    accentColor: '#f39c12',
+    cursor: 'pointer',
+  },
+  consignmentLabel: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#2c3e50',
+    cursor: 'pointer',
+    fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+  },
+  historyTableContainer: {
+    padding: "20px",
+    overflowX: "auto",
+  },
+  historyTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: "14px",
+    minWidth: "700px",
+  },
+  historyTableHeader: {
+    backgroundColor: "#3498db",
+    color: "white",
+    padding: "12px",
+    textAlign: "center",
+    fontWeight: "600",
+    fontFamily: "'NRT-Bd', sans-serif",
+  },
+  historyTableCell: {
+    padding: "12px",
+    textAlign: "center",
+    borderBottom: "1px solid #e1e8ed",
+  },
+  historyTableRowEven: {
+    backgroundColor: "#f8f9fa",
+  },
+  historyTableRowOdd: {
+    backgroundColor: "white",
+  },
 };
 
 export default function SellingForm({ onBillCreated, userRole, user }) {
@@ -1390,7 +1435,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState("Unpaid");
-  const [billCurrency, setBillCurrency] = useState("USD"); // Global Bill Currency
+  const [billCurrency, setBillCurrency] = useState("USD");
   
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -1423,7 +1468,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     itemName: "",
     paymentStatus: "all",
     pharmacyName: "",
-    branch: "all", // ✅ Added branch filter
+    branch: "all",
     consignment: "all",
     fromDate: "",
     toDate: "",
@@ -1539,7 +1584,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       const netCurrencyLabel = item.originalCurrency === "IQD" ? "IQD" : "$";
       const sellingCurrencyLabel = billCurrency === "IQD" ? "IQD" : "$";
 
-      // If comparing across the same currency context or rough sanity check
       if (billCurrency === item.originalCurrency && price < net) {
         warningMessage += `• ${item.name}: Selling price (${sellingCurrencyLabel} ${price}) is below net price (${netCurrencyLabel} ${net})\n`;
       }
@@ -1560,24 +1604,31 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       );
       return;
     }
+    
     if (field === "quantity") {
       const maxQty = updatedItems[index].availableQuantity || 1;
-      updatedItems[index].quantity = Math.min(Math.max(1, parseInt(value) || 1), maxQty);
+      const val = parseInt(value);
+      if (value === "") {
+        updatedItems[index].quantity = "";
+      } else if (!isNaN(val)) {
+        updatedItems[index].quantity = Math.min(Math.max(0, val), maxQty);
+      }
     } else if (field === "price") {
       const parsedValue = value === "" ? "" : parseFloat(value);
-      updatedItems[index].price = parsedValue;
+      updatedItems[index].price = value; 
+      
+      const calcPrice = parsedValue || 0;
       if (billCurrency === "IQD") {
-        updatedItems[index].outPriceIQD = parsedValue || 0;
+        updatedItems[index].outPriceIQD = calcPrice;
         updatedItems[index].outPriceUSD = 0;
       } else {
-        updatedItems[index].outPriceUSD = parsedValue || 0;
+        updatedItems[index].outPriceUSD = calcPrice;
         updatedItems[index].outPriceIQD = 0;
       }
     }
     setSelectedItems(updatedItems);
   }, [selectedItems, billCurrency]);
 
-  // Handle Global Bill Currency Toggle
   const handleBillCurrencyChange = useCallback((e) => {
     const newCurr = e.target.value;
     setBillCurrency(newCurr);
@@ -1697,7 +1748,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       let bestBatchId = item.batchId;
       if (matchingStoreItems.length > 0) {
         const originalBatch = matchingStoreItems.find(si => si.id === item.batchId);
-        if (originalBatch && originalBatch.quantity > 0) {
+        
+        if (originalBatch) {
           bestBatchId = originalBatch.id;
         } else {
           const sorted = [...matchingStoreItems].sort((a, b) => (b.quantity || 0) - (a.quantity || 0));
@@ -1719,6 +1771,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
       return {
         ...item,
+        originalQuantity: item.quantity,
+        originalBatchId: item.batchId,
         batchId: bestBatchId || `batch-${item.barcode}-${item.expireDate}`,
         availableQuantity: availableQuantity,
         quantity: item.quantity,
@@ -1780,9 +1834,13 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       }
 
       const preparedItems = selectedItems.map((item) => ({
+        id: item.id || null,
         barcode: item.barcode,
         name: item.name,
         quantity: parseInt(item.quantity) || 0,
+        originalQuantity: item.originalQuantity !== undefined ? parseInt(item.originalQuantity) : (parseInt(item.quantity) || 0),
+        quantity_original: item.originalQuantity !== undefined ? parseInt(item.originalQuantity) : (parseInt(item.quantity) || 0),
+        originalBatchId: item.originalBatchId || item.batchId,
         netPriceUSD: item.netPriceUSD || 0,
         netPriceIQD: item.netPriceIQD || 0,
         outPriceUSD: billCurrency === "USD" ? (parseFloat(item.price) || 0) : 0,
@@ -1803,7 +1861,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         consignmentOwnerId_original: isConsignment ? pharmacyId : null,
       }));
 
-      const filteredItems = preparedItems.filter(item => item.quantity > 0);
+      const filteredItems = preparedItems.filter(item => item.quantity >= 0);
 
       if (filteredItems.length === 0) {
         setError("Cannot update bill with no items. Please add at least one item.");
@@ -1888,6 +1946,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const handleSubmit = useCallback(async () => {
     if (!pharmacyId) { setError("Please select a pharmacy."); return; }
     if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
+    
+    const validItems = selectedItems.filter(item => parseInt(item.quantity) >= 0);
+    if (validItems.length === 0) { setError("Please add at least one item."); return; }
+    
     if (!validateBillBeforeSubmit()) return;
 
     setIsLoading(true);
@@ -1905,10 +1967,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         creatorName = getDisplayName(user.displayName || user.name || user.user?.displayName || user.email);
       }
 
-      const preparedItems = selectedItems.map((item) => ({
+      const preparedItems = validItems.map((item) => ({
         barcode: item.barcode,
         name: item.name,
-        quantity: item.quantity,
+        quantity: parseInt(item.quantity),
         netPriceUSD: item.netPriceUSD || 0,
         netPriceIQD: item.netPriceIQD || 0,
         outPriceUSD: billCurrency === "USD" ? (parseFloat(item.price) || 0) : 0,
@@ -2101,42 +2163,44 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       }
       if (url) {
         const newWindow = window.open("", "_blank");
-        newWindow.document.write(`
-          <!DOCTYPE html><html><head><title>Scanned Document - Bill ${billNumber}</title><meta charset="UTF-8">
-          <style>
-            *{margin:0;padding:0;box-sizing:border-box;}
-            body{font-family:Arial,sans-serif;background:#000;height:100vh;display:flex;flex-direction:column;}
-            .header{background:#2c3e50;color:white;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;position:fixed;top:0;left:0;right:0;z-index:1000;}
-            .title{font-size:18px;font-weight:bold;}
-            .actions{display:flex;gap:10px;flex-wrap:wrap;}
-            .button{padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:14px;}
-            .print-button{background-color:#27ae60;color:white;}
-            .close-button{background-color:#e74c3c;color:white;}
-            .image-container{flex:1;display:flex;align-items:center;justify-content:center;padding:80px 20px 20px 20px;overflow:auto;}
-            .image-container img{max-width:100%;max-height:100%;object-fit:contain;}
-            @media print{.header{display:none !important;}body{background:white;padding:0;}.image-container{padding:0;margin:0;}}
-            @media (max-width: 600px) {
-              .header{flex-direction:column;gap:10px;padding:10px;}
-              .title{font-size:16px;text-align:center;}
-              .actions{width:100%;justify-content:center;}
-              .button{padding:6px 12px;font-size:12px;}
-              .image-container{padding:70px 10px 10px 10px;}
-            }
-          </style></head>
-          <body>
-            <div class="header">
-              <div class="title">Scanned Document - Bill ${billNumber}</div>
-              <div class="actions">
-                <button class="button print-button" onclick="window.print()">Print</button>
-                <button class="button close-button" onclick="window.close()">Close</button>
+        if (newWindow) {
+          newWindow.document.write(`
+            <!DOCTYPE html><html><head><title>Scanned Document - Bill ${billNumber}</title><meta charset="UTF-8">
+            <style>
+              *{margin:0;padding:0;box-sizing:border-box;}
+              body{font-family:Arial,sans-serif;background:#000;height:100vh;display:flex;flex-direction:column;}
+              .header{background:#2c3e50;color:white;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;position:fixed;top:0;left:0;right:0;z-index:1000;}
+              .title{font-size:18px;font-weight:bold;}
+              .actions{display:flex;gap:10px;flex-wrap:wrap;}
+              .button{padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:14px;}
+              .print-button{background-color:#27ae60;color:white;}
+              .close-button{background-color:#e74c3c;color:white;}
+              .image-container{flex:1;display:flex;align-items:center;justify-content:center;padding:80px 20px 20px 20px;overflow:auto;}
+              .image-container img{max-width:100%;max-height:100%;object-fit:contain;}
+              @media print{.header{display:none !important;}body{background:white;padding:0;}.image-container{padding:0;margin:0;}}
+              @media (max-width: 600px) {
+                .header{flex-direction:column;gap:10px;padding:10px;}
+                .title{font-size:16px;text-align:center;}
+                .actions{width:100%;justify-content:center;}
+                .button{padding:6px 12px;font-size:12px;}
+                .image-container{padding:70px 10px 10px 10px;}
+              }
+            </style></head>
+            <body>
+              <div class="header">
+                <div class="title">Scanned Document - Bill ${billNumber}</div>
+                <div class="actions">
+                  <button class="button print-button" onclick="window.print()">Print</button>
+                  <button class="button close-button" onclick="window.close()">Close</button>
+                </div>
               </div>
-            </div>
-            <div class="image-container">
-              <img src="${url}" alt="Scanned Document for Bill ${billNumber}" />
-            </div>
-          </body></html>
-        `);
-        newWindow.document.close();
+              <div class="image-container">
+                <img src="${url}" alt="Scanned Document for Bill ${billNumber}" />
+              </div>
+            </body></html>
+          `);
+          newWindow.document.close();
+        }
       } else {
         alert("No attachment found for this bill.");
       }
@@ -2180,26 +2244,42 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   }, [storeItems]);
 
   const handleSelectBatch = useCallback((batch) => {
-    const existingItemIndex = selectedItems.findIndex((item) => item.batchId === batch.batchId);
+    const batchCurrency = batch.originalCurrency || "USD";
+    let currentItems = [...selectedItems];
+
+    if (batchCurrency !== billCurrency) {
+      setBillCurrency(batchCurrency);
+      currentItems = currentItems.map(item => {
+        const defaultPrice = batchCurrency === "USD" ? (item.defaultOutPriceUSD || 0) : (item.defaultOutPriceIQD || 0);
+        const initialPrice = defaultPrice > 0 ? defaultPrice : "";
+        return {
+          ...item,
+          price: initialPrice,
+          outPriceUSD: batchCurrency === "USD" ? (initialPrice || 0) : 0,
+          outPriceIQD: batchCurrency === "IQD" ? (initialPrice || 0) : 0,
+        };
+      });
+    }
+
+    const existingItemIndex = currentItems.findIndex((item) => item.batchId === batch.batchId);
     
     const defaultOutPriceUSD = batch.outPriceUSD || 0;
     const defaultOutPriceIQD = batch.outPriceIQD || 0;
     
-    const initialPrice = billCurrency === "USD" 
+    const initialPrice = batchCurrency === "USD" 
       ? (defaultOutPriceUSD > 0 ? defaultOutPriceUSD : "") 
       : (defaultOutPriceIQD > 0 ? defaultOutPriceIQD : "");
 
     if (existingItemIndex >= 0) {
-      const updatedItems = [...selectedItems];
       const actualBatch = storeItems.find((item) => item.id === batch.batchId);
       const maxQty = actualBatch ? actualBatch.quantity : batch.quantity;
-      updatedItems[existingItemIndex].quantity = Math.min(updatedItems[existingItemIndex].quantity + 1, maxQty);
-      updatedItems[existingItemIndex].availableQuantity = maxQty;
-      setSelectedItems(updatedItems);
+      const currentQty = parseInt(currentItems[existingItemIndex].quantity) || 0;
+      currentItems[existingItemIndex].quantity = Math.min(currentQty + 1, maxQty);
+      currentItems[existingItemIndex].availableQuantity = maxQty;
     } else {
       const actualBatch = storeItems.find((item) => item.id === batch.batchId);
       const availableQty = actualBatch ? actualBatch.quantity : batch.quantity;
-      setSelectedItems([...selectedItems, {
+      currentItems.push({
         ...batch,
         quantity: 1,
         defaultOutPriceUSD: defaultOutPriceUSD,
@@ -2210,14 +2290,16 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         availableQuantity: availableQty,
         batchId: batch.batchId,
         originalCurrency: batch.originalCurrency || "USD",
-        outPriceUSD: billCurrency === "USD" ? (initialPrice || 0) : 0,
-        outPriceIQD: billCurrency === "IQD" ? (initialPrice || 0) : 0,
+        outPriceUSD: batchCurrency === "USD" ? (initialPrice || 0) : 0,
+        outPriceIQD: batchCurrency === "IQD" ? (initialPrice || 0) : 0,
         netPriceUSD: batch.netPriceUSD,
         netPriceIQD: batch.netPriceIQD,
         hasReturn: false,
         isLocked: false,
-      }]);
+      });
     }
+    
+    setSelectedItems(currentItems);
     setSearchQuery("");
   }, [selectedItems, storeItems, billCurrency]);
 
@@ -2280,9 +2362,12 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     if (!pharmacyId) { setError("Please select a pharmacy first."); return; }
     if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
 
+    const validItems = selectedItems.filter(i => parseInt(i.quantity) >= 0);
+    if(validItems.length === 0) { setError("Please add at least one item"); return; }
+
     const tempBill = {
       billNumber: "TEMP0000",
-      items: selectedItems.map(item => ({
+      items: validItems.map(item => ({
         ...item,
         outPriceUSD: billCurrency === "USD" ? (parseFloat(item.price) || 0) : 0,
         outPriceIQD: billCurrency === "IQD" ? (parseFloat(item.price) || 0) : 0,
@@ -2309,9 +2394,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
   const printBill = useCallback((bill) => {
     if (!bill) { alert("No bill selected for printing"); return; }
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) { alert("Please allow popups for printing"); return; }
-
+    
     const billPaymentMethod = bill.paymentStatus || paymentMethod;
 
     const financialSummary = calculatePharmacyFinancialSummary(
@@ -2345,58 +2428,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     const returnLine  = formatFinancialLine(financialSummary.totalReturnBillsUSD, financialSummary.totalReturnBillsIQD, pharmacyHasUSD, pharmacyHasIQD);
     const remainLine  = formatFinancialLine(financialSummary.remainingUnpaidUSD, financialSummary.remainingUnpaidIQD, pharmacyHasUSD, pharmacyHasIQD);
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Bill #${displayBillNumber}</title>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          @font-face { font-family: 'NRT-Reg'; src: url('/fonts/NRT-Reg.ttf') format('truetype'); }
-          @font-face { font-family: 'NRT-Bd';  src: url('/fonts/NRT-Bd.ttf')  format('truetype'); }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body {
-            font-family: 'NRT-Reg', 'Segoe UI', sans-serif;
-            padding: 15px; color: #2c3e50; background: white;
-            line-height: 1.4; font-size: 14px;
-          }
-          .bill-template { max-width: 800px; margin: 0 auto; }
-          .bill-header { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 3px solid #3498db; }
-          .header-content { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
-          .company-name { font-size: 24px; font-weight: 700; margin: 0 0 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; }
-          .bill-info-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
-          .info-box { flex: 1; min-width: 180px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed; }
-          .info-box h3 { font-size: 15px; margin: 0 0 6px 0; font-family: 'NRT-Bd', sans-serif; }
-          .info-row { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px; flex-wrap: wrap; }
-          .info-label { font-weight: 600; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; min-width: 80px; }
-          .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: white; }
-          .items-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; min-width: 450px; }
-          .items-table th { background-color: #3498db; color: white; padding: 8px; font-family: 'NRT-Bd', sans-serif; font-size: 13px; }
-          .items-table td { padding: 6px 8px; border-bottom: 1px solid #e1e8ed; font-size: 13px; }
-          .items-table tr:nth-child(even) td { background-color: #f8f9fa; }
-          .total-row td { background-color: #34495e !important; color: white; font-weight: 700; font-size: 15px; font-family: 'NRT-Bd', sans-serif; }
-          .fin-summary { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #e1e8ed; margin-bottom: 12px; }
-          .fin-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 13px; flex-wrap: wrap; }
-          .fin-row:last-child { border-bottom: none; font-weight: 700; color: #e74c3c; font-size: 14px; }
-          .fin-label { font-family: 'NRT-Reg', sans-serif; }
-          .fin-value { font-family: 'NRT-Bd', sans-serif; font-weight: 600; }
-          .note-section { background: #fff8e1; padding: 10px; border-radius: 8px; border: 1px solid #ffecb3; margin-bottom: 12px; }
-          @media print {
-            body { padding: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .bill-template { max-width: 100%; }
-          }
-          @media (max-width: 600px) {
-            body { padding: 10px; font-size: 12px; }
-            .company-name { font-size: 20px; }
-            .header-content { flex-direction: column; align-items: center; text-align: center; }
-            .info-box { min-width: 100%; }
-            .items-table { font-size: 12px; min-width: 350px; }
-            .items-table th, .items-table td { padding: 5px; }
-          }
-        </style>
-      </head>
-      <body>
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const numCopies = isMobile ? 1 : 2;
+
+    const singleBillHTML = `
         <div class="bill-template">
           <div class="bill-header">
             <div class="header-content">
@@ -2498,6 +2533,123 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
             <p style="font-size:12px;color:#7f8c8d;font-style:italic">Receiver Signature (Stamp)</p>
           </div>
         </div>
+    `;
+
+    if (isMobile) {
+      if (!window.html2pdf) {
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+        script.onload = () => generatePDF();
+        document.head.appendChild(script);
+      } else {
+        generatePDF();
+      }
+
+      function generatePDF() {
+        const container = document.createElement("div");
+        container.style.position = "absolute";
+        container.style.left = "-9999px";
+        container.style.top = "0";
+        container.innerHTML = `
+          <div id="pdf-wrap" style="width: 800px; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: white; color: #2c3e50;">
+            <style>
+              .bill-header { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 3px solid #3498db; }
+              .header-content { display: flex; justify-content: space-between; align-items: flex-start; }
+              .company-name { font-size: 24px; font-weight: 700; margin: 0 0 3px 0; color: #2c3e50; }
+              .bill-info-grid { display: flex; gap: 12px; margin-bottom: 12px; }
+              .info-box { flex: 1; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed; }
+              .info-box h3 { font-size: 15px; margin: 0 0 6px 0; }
+              .info-row { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px; }
+              .info-label { font-weight: 600; color: #2c3e50; min-width: 80px; }
+              .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: white; }
+              .items-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
+              .items-table th { background-color: #3498db; color: white; padding: 8px; font-size: 13px; text-align: left; }
+              .items-table td { padding: 6px 8px; border-bottom: 1px solid #e1e8ed; font-size: 13px; }
+              .total-row td { background-color: #34495e !important; color: white; font-weight: 700; font-size: 15px; }
+              .fin-summary { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #e1e8ed; margin-bottom: 12px; }
+              .fin-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 13px; }
+              .fin-row:last-child { border-bottom: none; font-weight: 700; color: #e74c3c; font-size: 14px; }
+            </style>
+            ${singleBillHTML}
+          </div>
+        `;
+        document.body.appendChild(container);
+
+        const opt = {
+          margin: 10,
+          filename: `Bill_${displayBillNumber}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        window.html2pdf().set(opt).from(container.querySelector('#pdf-wrap')).save().then(() => {
+          document.body.removeChild(container);
+        });
+      }
+      return;
+    }
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) { alert("Please allow popups for printing"); return; }
+    const fullHTML = Array(numCopies).fill(singleBillHTML).join('<div style="page-break-after: always;"></div>');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Bill #${displayBillNumber}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          @font-face { font-family: 'NRT-Reg'; src: url('/fonts/NRT-Reg.ttf') format('truetype'); }
+          @font-face { font-family: 'NRT-Bd';  src: url('/fonts/NRT-Bd.ttf')  format('truetype'); }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'NRT-Reg', 'Segoe UI', sans-serif;
+            padding: 15px; color: #2c3e50; background: white;
+            line-height: 1.4; font-size: 14px;
+          }
+          .bill-template { max-width: 800px; margin: 0 auto; page-break-inside: avoid; }
+          .bill-header { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 3px solid #3498db; }
+          .header-content { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+          .company-name { font-size: 24px; font-weight: 700; margin: 0 0 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; }
+          .bill-info-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+          .info-box { flex: 1; min-width: 180px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed; }
+          .info-box h3 { font-size: 15px; margin: 0 0 6px 0; font-family: 'NRT-Bd', sans-serif; }
+          .info-row { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px; flex-wrap: wrap; }
+          .info-label { font-weight: 600; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; min-width: 80px; }
+          .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: white; }
+          .items-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; min-width: 450px; }
+          .items-table th { background-color: #3498db; color: white; padding: 8px; font-family: 'NRT-Bd', sans-serif; font-size: 13px; }
+          .items-table td { padding: 6px 8px; border-bottom: 1px solid #e1e8ed; font-size: 13px; }
+          .items-table tr:nth-child(even) td { background-color: #f8f9fa; }
+          .total-row td { background-color: #34495e !important; color: white; font-weight: 700; font-size: 15px; font-family: 'NRT-Bd', sans-serif; }
+          .fin-summary { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #e1e8ed; margin-bottom: 12px; }
+          .fin-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 13px; flex-wrap: wrap; }
+          .fin-row:last-child { border-bottom: none; font-weight: 700; color: #e74c3c; font-size: 14px; }
+          .note-section { background: #fff8e1; padding: 10px; border-radius: 8px; border: 1px solid #ffecb3; margin-bottom: 12px; }
+          
+          @media print {
+            body { padding: 10px; }
+            .bill-template { max-width: 100%; }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+          @media (max-width: 600px) {
+            body { padding: 10px; font-size: 12px; }
+            .company-name { font-size: 20px; }
+            .header-content { flex-direction: column; align-items: center; text-align: center; }
+            .info-box { min-width: 100%; }
+            .items-table { font-size: 12px; min-width: 350px; }
+            .items-table th, .items-table td { padding: 5px; }
+          }
+        </style>
+      </head>
+      <body>
+         ${fullHTML}
       </body>
       </html>
     `);
@@ -2899,7 +3051,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
             </div>
           </div>
 
-          {/* Date, Bill Currency, Payment, Consignment row */}
           <div style={styles.rowContainer}>
             <div style={styles.dateField}>
               <label style={styles.fieldLabel}>Sale Date</label>
@@ -2982,14 +3133,19 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                 {groupSearchResults(searchResults).map((item) => (
                   <div key={item.barcode} style={styles.itemGroup}>
                     <div style={styles.itemGroupHeader}>
-                      {item.name} - {item.barcode}
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "16px", fontWeight: "700", color: "#2c3e50" }}>{item.name}</span>
+                        <span style={{ fontSize: "13px", color: "#3498db", backgroundColor: "#ebf5fb", padding: "2px 8px", borderRadius: "12px", display: "inline-block", fontWeight: "600", width: "fit-content" }}>
+                          Barcode: {item.barcode}
+                        </span>
+                      </div>
                       {pharmacyId && (
                         <button style={styles.historyButton} onClick={(e) => {
                           e.stopPropagation();
                           setSelectedItemForHistory(item);
                           fetchItemSalesHistory(item.barcode, pharmacyId);
                         }}>
-                          View History
+                          📊 View History
                         </button>
                       )}
                     </div>
@@ -3001,13 +3157,18 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                             <th style={{ ...styles.tableHeader, textAlign: "center" }}>Branch</th>
                             <th style={{ ...styles.tableHeader, textAlign: "right" }}>Net Price</th>
                             <th style={{ ...styles.tableHeader, textAlign: "right" }}>Selling Price</th>
-                            <th style={{ ...styles.tableHeader, textAlign: "right" }}>Available</th>
-                            <th style={{ ...styles.tableHeader, textAlign: "center" }}>Action</th>
+                            <th style={{ ...styles.tableHeader, textAlign: "center" }}>Available</th>
                           </tr>
                         </thead>
                         <tbody>
                           {item.batches.map((batch, batchIndex) => (
-                            <tr key={`${item.id}-${batchIndex}`}>
+                            <tr 
+                              key={`${item.id}-${batchIndex}`}
+                              onClick={() => handleSelectBatch(batch)}
+                              style={{ cursor: "pointer", transition: "background-color 0.2s" }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f1f5f9"}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                            >
                               <td style={styles.tableCell}>{formatExpireDate(batch.expireDate)}</td>
                               <td style={{ 
                                 ...styles.tableCell, 
@@ -3040,10 +3201,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                   ? Math.round(batch.outPriceDisplay).toLocaleString() + " IQD"
                                   : "$" + batch.outPriceDisplay.toFixed(2)}
                               </td>
-                              <td style={{ ...styles.tableCell, textAlign: "right" }}>{batch.quantity}</td>
-                              <td style={{ ...styles.tableCell, textAlign: "center" }}>
-                                <button style={styles.addButton} onClick={() => handleSelectBatch(batch)}>Add</button>
-                              </td>
+                              <td style={{ ...styles.tableCell, textAlign: "center", fontWeight: "600" }}>{batch.quantity}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3075,7 +3233,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
               {selectedItems.map((item, index) => {
                 const activePrice = parseFloat(item.price) || 0;
 
-                // ✅ FIX 1: Display net price intrinsically based on item.originalCurrency
                 const isItemIQD = item.originalCurrency === "IQD";
                 const netVal = isItemIQD ? (item.netPriceIQD || item.netPrice || 0) : (item.netPriceUSD || item.netPrice || 0);
                 const netDisplay = isItemIQD
@@ -3083,8 +3240,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                   : "$" + netVal.toFixed(2);
 
                 const totalDisplay = billCurrency === "IQD"
-                  ? Math.round(activePrice * item.quantity).toLocaleString() + " IQD"
-                  : "$" + (activePrice * item.quantity).toFixed(2);
+                  ? Math.round(activePrice * (item.quantity || 0)).toLocaleString('en-US') + " IQD"
+                  : "$" + (activePrice * (item.quantity || 0)).toFixed(2);
 
                 const isLocked = item.isLocked || false;
                 const returnQty = item.returnQuantity || 0;
@@ -3127,7 +3284,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                         <span style={styles.itemControlLabel}>Qty:</span>
                         <input
                           type="number"
-                          min="1"
+                          min="0"
                           max={item.availableQuantity}
                           style={{
                             ...styles.quantityInput,
@@ -3152,23 +3309,30 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                       <div style={styles.itemControlGroup}>
                         <span style={styles.itemControlLabel}>Price:</span>
                         <input
-                          type="number"
-                          min="0"
-                          step={billCurrency === "IQD" ? "100" : "0.01"}
+                          type="text"
+                          inputMode="decimal"
                           style={{
                             ...styles.priceInput,
-                            width: "80px",
+                            width: "90px",
                             ...(isLocked ? { backgroundColor: "#f0f0f0", cursor: "not-allowed", borderColor: "#e74c3c", opacity: "0.65" } : {})
                           }}
-                          value={item.price === "" ? "" : item.price}
+                          value={
+                            item.price === "" || item.price === undefined
+                              ? ""
+                              : (billCurrency === "IQD" 
+                                  ? Number(item.price).toLocaleString('en-US') 
+                                  : item.price)
+                          }
                           placeholder="0"
-                          onChange={(e) => handleItemChange(index, "price", e.target.value)}
+                          onChange={(e) => {
+                            const rawVal = e.target.value.replace(/,/g, '');
+                            handleItemChange(index, "price", rawVal);
+                          }}
                           onFocus={(e) => {
                             e.target.select();
                             if (isLocked) { e.target.blur(); alert(`🔒 Locked.`); }
                           }}
                           readOnly={isLocked}
-                          inputMode="decimal"
                         />
                         <span style={{ fontSize: "13px", color: "#7f8c8d" }}>{billCurrency === "IQD" ? "IQD" : "USD"}</span>
                       </div>
@@ -3195,8 +3359,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
               })}
               <div style={styles.total}>
                 Total: {(() => {
-                  const totalAmount = selectedItems.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * item.quantity), 0);
-                  return billCurrency === "IQD" ? Math.round(totalAmount).toLocaleString() + " IQD" : "$" + totalAmount.toFixed(2);
+                  const totalAmount = selectedItems.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * (item.quantity || 0)), 0);
+                  return billCurrency === "IQD" ? Math.round(totalAmount).toLocaleString('en-US') + " IQD" : "$" + totalAmount.toFixed(2);
                 })()}
               </div>
             </div>
@@ -3320,16 +3484,12 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                     </select>
                   </div>
 
-                  {/* ✅ FIX 2: Added Branch Filter Dropdown */}
                   <div style={styles.filterGroup}>
                     <label style={styles.filterLabel}>Branch</label>
                     <select style={styles.filterSelect} value={filters.branch} onChange={(e) => setFilters(prev => ({ ...prev, branch: e.target.value }))}>
                       <option value="all">All Branches</option>
                       <option value="Slemany">Slemany</option>
                       <option value="Erbil">Erbil</option>
-                      <option value="Duhok">Duhok</option>
-                      <option value="Kirkuk">Kirkuk</option>
-                      <option value="Kalar">Kalar</option>
                     </select>
                   </div>
 
@@ -3372,7 +3532,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                       <th style={styles.tableHeaderSortable} onClick={() => handleSort('pharmacy')}>
                         Pharmacy {getSortIcon('pharmacy')}
                       </th>
-                      {/* ✅ FIX 2: Added Sortable Branch Column */}
                       <th style={styles.tableHeaderSortable} onClick={() => handleSort('branch')}>
                         Branch {getSortIcon('branch')}
                       </th>
@@ -3426,7 +3585,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                             </td>
                             <td style={styles.tableCell}>{bill.pharmacyName || "N/A"}</td>
                             
-                            {/* ✅ FIX 2: Rendered Branch Cell */}
                             <td style={styles.tableCellCenter}>
                               <span style={{
                                 ...styles.branchBadge,
@@ -3561,8 +3719,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                           <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Barcode</th>
                                           <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Branch</th>
                                           <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Quantity</th>
-                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "right" }}>Unit Price</th>
-                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "right" }}>Total Amount</th>
+                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Unit Price</th>
+                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Total Amount</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -3584,10 +3742,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                                 ...(idx % 2 === 0 ? styles.enhancedTableRowEven : styles.enhancedTableRowOdd),
                                               }}
                                             >
-                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontWeight: "600" }}>
+                                              <td style={{ ...styles.enhancedTableCell, fontWeight: "600" }}>
                                                 {idx + 1}
                                               </td>
-                                              <td style={styles.enhancedTableCell}>
+                                              <td style={{ ...styles.enhancedTableCell, textAlign: "left" }}>
                                                 <div style={{ fontWeight: "600", marginBottom: "4px", fontFamily: "'NRT-Bd', sans-serif" }}>
                                                   {item.name}
                                                 </div>
@@ -3595,19 +3753,19 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                                   Exp: {formatExpireDate(item.expireDate)}
                                                 </div>
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontFamily: "'NRT-Reg', monospace" }}>
+                                              <td style={{ ...styles.enhancedTableCell, fontFamily: "'NRT-Reg', monospace" }}>
                                                 {item.barcode}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center" }}>
+                                              <td style={styles.enhancedTableCell}>
                                                 {item.branch || "N/A"}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontWeight: "600" }}>
+                                              <td style={{ ...styles.enhancedTableCell, fontWeight: "600" }}>
                                                 {item.quantity}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, textAlign: "right", ...styles.amountCell }}>
+                                              <td style={{ ...styles.enhancedTableCell, ...styles.amountCell }}>
                                                 {priceDisplay}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, textAlign: "right", ...styles.amountCell }}>
+                                              <td style={{ ...styles.enhancedTableCell, ...styles.amountCell }}>
                                                 {totalDisplayItem}
                                               </td>
                                             </tr>
@@ -3617,7 +3775,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                           <td colSpan="6" style={{ ...styles.enhancedTableCell, textAlign: "right", fontWeight: "600", color: "white" }}>
                                             GRAND TOTAL:
                                           </td>
-                                          <td style={{ ...styles.enhancedTableCell, textAlign: "right", fontWeight: "600", color: "white", fontSize: "18px" }}>
+                                          <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontWeight: "600", color: "white", fontSize: "18px" }}>
                                             {formatTotalLine(totalAmountUSD, totalAmountIQD)}
                                           </td>
                                         </tr>
@@ -3806,60 +3964,63 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
         {showHistoryModal && selectedItemForHistory && (
           <div style={styles.modalOverlay}>
-            <div style={styles.modalContent}>
+            <div style={{ ...styles.modalContent, maxWidth: "900px" }}>
               <div style={styles.modalHeader}>
                 <h2 style={styles.modalTitle}>Sales History for {selectedItemForHistory.name}</h2>
                 <button style={styles.closeButton} onClick={() => setShowHistoryModal(false)}>Close</button>
               </div>
-              <div className="table-responsive" style={{ padding: "20px" }}>
+              <div style={styles.historyTableContainer}>
                 {selectedItemHistory.length === 0 ? (
-                  <p>No sales history found for this item to the selected pharmacy.</p>
+                  <p style={{ textAlign: "center", padding: "20px" }}>No sales history found for this item to the selected pharmacy.</p>
                 ) : (
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "15px", minWidth: "500px" }}>
-                    <thead>
-                      <tr style={{ backgroundColor: "#3498db", color: "white" }}>
-                        <th style={{ padding: "12px", textAlign: "left" }}>Bill #</th>
-                        <th style={{ padding: "12px", textAlign: "left" }}>Date</th>
-                        <th style={{ padding: "12px", textAlign: "right" }}>Net Price</th>
-                        <th style={{ padding: "12px", textAlign: "right" }}>Sale Price</th>
-                        <th style={{ padding: "12px", textAlign: "right" }}>Quantity</th>
-                        <th style={{ padding: "12px", textAlign: "right" }}>Total</th>
-                        <th style={{ padding: "12px", textAlign: "left" }}>Payment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedItemHistory.map((entry, index) => (
-                        <tr key={index} style={{ backgroundColor: index % 2 === 0 ? "#f8f9fa" : "white" }}>
-                          <td style={{ padding: "12px" }}>{formatBillNumber(entry.billNumber)}</td>
-                          <td style={{ padding: "12px" }}>{formatDate(entry.billDate)}</td>
-                          <td style={{ padding: "12px", textAlign: "right" }}>
-                            {entry.originalCurrency === "IQD"
-                              ? Math.round(entry.netPriceIQD || entry.netPrice).toLocaleString() + " IQD"
-                              : "$" + (entry.netPriceUSD || entry.netPrice).toFixed(2)}
-                          </td>
-                          <td style={{ padding: "12px", textAlign: "right" }}>
-                            {entry.originalCurrency === "IQD"
-                              ? Math.round(entry.outPriceIQD || entry.price).toLocaleString() + " IQD"
-                              : "$" + (entry.outPriceUSD || entry.price).toFixed(2)}
-                          </td>
-                          <td style={{ padding: "12px", textAlign: "right" }}>{entry.quantity}</td>
-                          <td style={{ padding: "12px", textAlign: "right" }}>
-                            {entry.originalCurrency === "IQD"
-                              ? Math.round((entry.outPriceIQD || entry.price) * entry.quantity).toLocaleString() + " IQD"
-                              : "$" + ((entry.outPriceUSD || entry.price) * entry.quantity).toFixed(2)}
-                          </td>
-                          <td style={{ padding: "12px" }}>
-                            <span style={{
-                              padding: "6px 10px", borderRadius: "4px", color: "white",
-                              backgroundColor: entry.paymentStatus === "Cash" ? "#27ae60" : entry.paymentStatus === "Paid" ? "#3498db" : "#e74c3c",
-                            }}>
-                              {entry.paymentStatus}
-                            </span>
-                          </td>
+                  <div className="table-responsive">
+                    <table style={styles.historyTable}>
+                      <thead>
+                        <tr>
+                          <th style={styles.historyTableHeader}>Bill #</th>
+                          <th style={styles.historyTableHeader}>Date</th>
+                          <th style={styles.historyTableHeader}>Net Price</th>
+                          <th style={styles.historyTableHeader}>Sale Price</th>
+                          <th style={styles.historyTableHeader}>Quantity</th>
+                          <th style={styles.historyTableHeader}>Total</th>
+                          <th style={styles.historyTableHeader}>Payment</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {selectedItemHistory.map((entry, index) => (
+                          <tr key={index} style={index % 2 === 0 ? styles.historyTableRowEven : styles.historyTableRowOdd}>
+                            <td style={styles.historyTableCell}>{formatBillNumber(entry.billNumber)}</td>
+                            <td style={styles.historyTableCell}>{formatDate(entry.billDate)}</td>
+                            <td style={styles.historyTableCell}>
+                              {entry.originalCurrency === "IQD"
+                                ? Math.round(entry.netPriceIQD || entry.netPrice).toLocaleString() + " IQD"
+                                : "$" + (entry.netPriceUSD || entry.netPrice).toFixed(2)}
+                            </td>
+                            <td style={styles.historyTableCell}>
+                              {entry.originalCurrency === "IQD"
+                                ? Math.round(entry.outPriceIQD || entry.price).toLocaleString() + " IQD"
+                                : "$" + (entry.outPriceUSD || entry.price).toFixed(2)}
+                            </td>
+                            <td style={styles.historyTableCell}>{entry.quantity}</td>
+                            <td style={styles.historyTableCell}>
+                              {entry.originalCurrency === "IQD"
+                                ? Math.round((entry.outPriceIQD || entry.price) * entry.quantity).toLocaleString() + " IQD"
+                                : "$" + ((entry.outPriceUSD || entry.price) * entry.quantity).toFixed(2)}
+                            </td>
+                            <td style={styles.historyTableCell}>
+                              <span style={{
+                                padding: "4px 10px", borderRadius: "4px", color: "white",
+                                backgroundColor: entry.paymentStatus === "Cash" ? "#27ae60" : entry.paymentStatus === "Paid" ? "#3498db" : "#e74c3c",
+                                display: "inline-block",
+                              }}>
+                                {entry.paymentStatus}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>
