@@ -835,7 +835,8 @@ const styles = {
     marginBottom: "10px",
     borderRadius: "8px",
     border: "1px solid #e1e8ed",
-    overflow: "hidden",
+    overflowX: "auto",
+    WebkitOverflowScrolling: "touch",
   },
   billsTable: {
     width: "100%",
@@ -848,7 +849,7 @@ const styles = {
     backgroundColor: "#34495e",
     color: "white",
     padding: "12px 10px",
-    textAlign: "center",
+    textAlign: "left",
     fontSize: "14px",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     cursor: "pointer",
@@ -888,7 +889,7 @@ const styles = {
   tableCellCenterdatee: {
     padding: "12px 10px",
     borderBottom: "1px solid #e1e8ed",
-    textAlign: "center",
+    textAlign: "left",
     fontSize: "14px",
     fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     whiteSpace: "nowrap",
@@ -926,7 +927,6 @@ const styles = {
     flexDirection: "column",
     gap: "5px",
     justifyContent: "center",
-    alignItems: "center",
   },
   editButton: {
     backgroundColor: "#f39c12",
@@ -938,7 +938,6 @@ const styles = {
     cursor: "pointer",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     touchAction: "manipulation",
-    width: "100%",
   },
   printSmallButton: {
     backgroundColor: "#27ae60",
@@ -950,7 +949,6 @@ const styles = {
     cursor: "pointer",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     touchAction: "manipulation",
-    width: "100%",
   },
   attachButton: {
     backgroundColor: "#9b59b6",
@@ -1136,7 +1134,7 @@ const styles = {
     backgroundColor: "#34495e",
     color: "white",
     padding: "12px 10px",
-    textAlign: "center",
+    textAlign: "left",
     fontWeight: "600",
     fontSize: "14px",
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
@@ -1148,7 +1146,6 @@ const styles = {
     borderBottom: "1px solid #e8ecef",
     fontSize: "14px",
     fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    textAlign: "center",
   },
   enhancedTableRow: {
     transition: "background-color 0.2s ease",
@@ -1374,6 +1371,7 @@ const styles = {
     gap: '10px',
     marginTop: '15px',
   },
+  // Missing styles added here
   consignmentContainer: {
     display: 'flex',
     alignItems: 'center',
@@ -1861,6 +1859,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         consignmentOwnerId_original: isConsignment ? pharmacyId : null,
       }));
 
+      // Allow saving with quantity 0
       const filteredItems = preparedItems.filter(item => item.quantity >= 0);
 
       if (filteredItems.length === 0) {
@@ -1945,10 +1944,14 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
   const handleSubmit = useCallback(async () => {
     if (!pharmacyId) { setError("Please select a pharmacy."); return; }
-    if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
     
-    const validItems = selectedItems.filter(item => parseInt(item.quantity) >= 0);
-    if (validItems.length === 0) { setError("Please add at least one item."); return; }
+    // Check items directly, allowing 0 quantity
+    const validItems = selectedItems.filter(item => {
+      const q = parseInt(item.quantity);
+      return !isNaN(q) && q >= 0;
+    });
+
+    if (validItems.length === 0) { setError("Please add at least one item with a valid quantity."); return; }
     
     if (!validateBillBeforeSubmit()) return;
 
@@ -1970,7 +1973,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       const preparedItems = validItems.map((item) => ({
         barcode: item.barcode,
         name: item.name,
-        quantity: parseInt(item.quantity),
+        quantity: parseInt(item.quantity) || 0,
         netPriceUSD: item.netPriceUSD || 0,
         netPriceIQD: item.netPriceIQD || 0,
         outPriceUSD: billCurrency === "USD" ? (parseFloat(item.price) || 0) : 0,
@@ -2360,10 +2363,14 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
   const showBillTemplate = useCallback(() => {
     if (!pharmacyId) { setError("Please select a pharmacy first."); return; }
-    if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
+    
+    // Check items directly, allowing 0 quantity
+    const validItems = selectedItems.filter(item => {
+      const q = parseInt(item.quantity);
+      return !isNaN(q) && q >= 0;
+    });
 
-    const validItems = selectedItems.filter(i => parseInt(i.quantity) >= 0);
-    if(validItems.length === 0) { setError("Please add at least one item"); return; }
+    if (validItems.length === 0) { setError("Please add at least one item."); return; }
 
     const tempBill = {
       billNumber: "TEMP0000",
@@ -2481,7 +2488,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                 </tr>
               </thead>
               <tbody>
-                ${bill.items?.map((item, idx) => {
+          ${bill.items?.map((item, idx) => {
                   const price = billCurr === "IQD" ? (item.outPriceIQD || item.price || 0) : (item.outPriceUSD || item.price || 0);
                   const priceFormatted = billCurr === "IQD" ? Math.round(price).toLocaleString() + " IQD" : "$" + price.toFixed(2);
                   const totalFormatted = billCurr === "IQD" ? Math.round(price * item.quantity).toLocaleString() + " IQD" : "$" + (price * item.quantity).toFixed(2);
@@ -2545,14 +2552,23 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         generatePDF();
       }
 
-      function generatePDF() {
+function generatePDF() {
         const container = document.createElement("div");
+        
+        // Put the container at the very top-left so mobile browsers don't clip it, 
+        // but push it behind your app's background so the user can't see it.
         container.style.position = "absolute";
-        container.style.left = "-9999px";
         container.style.top = "0";
+        container.style.left = "0";
+        container.style.width = "800px";
+        container.style.zIndex = "-9999"; 
+        
         container.innerHTML = `
           <div id="pdf-wrap" style="width: 800px; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: white; color: #2c3e50;">
             <style>
+              /* Scope this to only the PDF wrap so it doesn't break your app */
+              #pdf-wrap * { overflow: visible !important; overflow-x: visible !important; }
+              
               .bill-header { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 3px solid #3498db; }
               .header-content { display: flex; justify-content: space-between; align-items: flex-start; }
               .company-name { font-size: 24px; font-weight: 700; margin: 0 0 3px 0; color: #2c3e50; }
@@ -2576,10 +2592,17 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         document.body.appendChild(container);
 
         const opt = {
-          margin: 10,
+          margin: [10, 10, 10, 10], // Top, Left, Bottom, Right margins
           filename: `Bill_${displayBillNumber}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true },
+          image: { type: 'jpeg', quality: 1 },
+          html2canvas: { 
+            scale: 2, 
+            useCORS: true, 
+            windowWidth: 800, // Forces html2canvas to act like it's on a desktop monitor
+            width: 800,
+            scrollX: 0,
+            scrollY: 0
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
@@ -3051,6 +3074,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
             </div>
           </div>
 
+          {/* Date, Bill Currency, Payment, Consignment row */}
           <div style={styles.rowContainer}>
             <div style={styles.dateField}>
               <label style={styles.fieldLabel}>Sale Date</label>
@@ -3719,8 +3743,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                           <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Barcode</th>
                                           <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Branch</th>
                                           <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Quantity</th>
-                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Unit Price</th>
-                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "center" }}>Total Amount</th>
+                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "right" }}>Unit Price</th>
+                                          <th style={{ ...styles.enhancedTableHeader, textAlign: "right" }}>Total Amount</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -3742,10 +3766,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                                 ...(idx % 2 === 0 ? styles.enhancedTableRowEven : styles.enhancedTableRowOdd),
                                               }}
                                             >
-                                              <td style={{ ...styles.enhancedTableCell, fontWeight: "600" }}>
+                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontWeight: "600" }}>
                                                 {idx + 1}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, textAlign: "left" }}>
+                                              <td style={styles.enhancedTableCell}>
                                                 <div style={{ fontWeight: "600", marginBottom: "4px", fontFamily: "'NRT-Bd', sans-serif" }}>
                                                   {item.name}
                                                 </div>
@@ -3753,19 +3777,19 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                                   Exp: {formatExpireDate(item.expireDate)}
                                                 </div>
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, fontFamily: "'NRT-Reg', monospace" }}>
+                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontFamily: "'NRT-Reg', monospace" }}>
                                                 {item.barcode}
                                               </td>
-                                              <td style={styles.enhancedTableCell}>
+                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center" }}>
                                                 {item.branch || "N/A"}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, fontWeight: "600" }}>
+                                              <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontWeight: "600" }}>
                                                 {item.quantity}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, ...styles.amountCell }}>
+                                              <td style={{ ...styles.enhancedTableCell, textAlign: "right", ...styles.amountCell }}>
                                                 {priceDisplay}
                                               </td>
-                                              <td style={{ ...styles.enhancedTableCell, ...styles.amountCell }}>
+                                              <td style={{ ...styles.enhancedTableCell, textAlign: "right", ...styles.amountCell }}>
                                                 {totalDisplayItem}
                                               </td>
                                             </tr>
@@ -3775,7 +3799,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                                           <td colSpan="6" style={{ ...styles.enhancedTableCell, textAlign: "right", fontWeight: "600", color: "white" }}>
                                             GRAND TOTAL:
                                           </td>
-                                          <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontWeight: "600", color: "white", fontSize: "18px" }}>
+                                          <td style={{ ...styles.enhancedTableCell, textAlign: "right", fontWeight: "600", color: "white", fontSize: "18px" }}>
                                             {formatTotalLine(totalAmountUSD, totalAmountIQD)}
                                           </td>
                                         </tr>
@@ -3884,7 +3908,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                     </div>
 
                     <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-                      <img src="/scann.png" alt="scan me" style="margin-top:10px; width: 100px; max-width: 100%;" />
+                      <img src="/scann.png" alt="scan me" style="margin-top:10px; width: 130px; max-width: 100%;" />
                     </div>
                   </div>
 
@@ -3964,7 +3988,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
 
         {showHistoryModal && selectedItemForHistory && (
           <div style={styles.modalOverlay}>
-            <div style={{ ...styles.modalContent, maxWidth: "900px" }}>
+            <div style={{ ...styles.modalContent, maxWidth: "700px" }}>
               <div style={styles.modalHeader}>
                 <h2 style={styles.modalTitle}>Sales History for {selectedItemForHistory.name}</h2>
                 <button style={styles.closeButton} onClick={() => setShowHistoryModal(false)}>Close</button>
