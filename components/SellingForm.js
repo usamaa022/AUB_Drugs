@@ -184,6 +184,7 @@ const formatFinancialLine = (usd, iqd, hasUSD, hasIQD) => {
 };
 
 // Calculate Financial Summary
+// Calculate Financial Summary
 const calculatePharmacyFinancialSummary = (
   pharmacyId,
   allBills = [],
@@ -201,13 +202,18 @@ const calculatePharmacyFinancialSummary = (
     if (bill.pharmacyId !== pharmacyId) return;
     if (bill.paymentStatus !== "Unpaid") return;
 
+    // FIX: Always use the Bill's currency, not the item's original currency
+    const billCurrency = bill.currency || "USD";
+
     bill.items?.forEach((item) => {
-      if (item.originalCurrency === "IQD") {
+      if (billCurrency === "IQD") {
         pharmacyHasIQD = true;
-        totalUnpaidBillsIQD += (item.outPriceIQD || 0) * item.quantity;
+        const price = item.outPriceIQD || item.price || 0;
+        totalUnpaidBillsIQD += price * item.quantity;
       } else {
         pharmacyHasUSD = true;
-        totalUnpaidBillsUSD += (item.outPriceUSD || 0) * item.quantity;
+        const price = item.outPriceUSD || item.price || 0;
+        totalUnpaidBillsUSD += price * item.quantity;
       }
     });
   });
@@ -215,12 +221,20 @@ const calculatePharmacyFinancialSummary = (
   if (isPreview && currentBillItems.length > 0) {
     currentBillItems.forEach((item) => {
       const price = item.price || 0;
-      if (item.originalCurrency === "IQD") {
+      if ((item.outPriceIQD || 0) > 0 && !(item.outPriceUSD > 0)) {
         pharmacyHasIQD = true;
         totalUnpaidBillsIQD += price * item.quantity;
-      } else {
+      } else if ((item.outPriceUSD || 0) > 0) {
         pharmacyHasUSD = true;
         totalUnpaidBillsUSD += price * item.quantity;
+      } else {
+        if (item.originalCurrency === "IQD") {
+          pharmacyHasIQD = true;
+          totalUnpaidBillsIQD += price * item.quantity;
+        } else {
+          pharmacyHasUSD = true;
+          totalUnpaidBillsUSD += price * item.quantity;
+        }
       }
     });
   }
@@ -230,6 +244,13 @@ const calculatePharmacyFinancialSummary = (
 
   allReturnBills.forEach((ret) => {
     if (ret.pharmacyId !== pharmacyId) return;
+
+    // FIX: Safely use the precise totals already calculated by data.js if available
+    if (ret.totalReturnAmountUSD !== undefined && ret.totalReturnAmountIQD !== undefined) {
+      totalReturnBillsUSD += ret.totalReturnAmountUSD || 0;
+      totalReturnBillsIQD += ret.totalReturnAmountIQD || 0;
+      return;
+    }
 
     let itemsToProcess = [];
 
@@ -245,13 +266,13 @@ const calculatePharmacyFinancialSummary = (
       const qty = item.returnQuantity || item.quantity || 0;
       if (qty === 0) return;
 
-      const currency = item.originalCurrency || item.currency || "USD";
+      // FIX: Rely on the return's explicitly saved currency
+      const currency = item.currency || ret.currency || "IQD";
+      const price = item.returnPrice || item.price || 0;
 
       if (currency === "IQD") {
-        const price = item.returnPriceIQD || item.outPriceIQD || item.returnPrice || item.price || 0;
         totalReturnBillsIQD += price * qty;
       } else {
-        const price = item.returnPriceUSD || item.outPriceUSD || item.returnPrice || item.price || 0;
         totalReturnBillsUSD += price * qty;
       }
     });
