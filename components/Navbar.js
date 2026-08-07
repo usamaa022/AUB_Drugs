@@ -448,9 +448,9 @@ export default function Navbar() {
               <button
                 onClick={() => toggleDropdown('inventory')}
                 style={{
-                  background: (pathname.includes("/items") || pathname.includes("/store")) ? "#eff6ff" : "none",
+                  background: (pathname.includes("/items") || pathname.includes("/store") || pathname.includes("/inventory_ledger")) ? "#eff6ff" : "none",
                   border: "none",
-                  color: (pathname.includes("/items") || pathname.includes("/store")) ? "#2563eb" : "#4b5563",
+                  color: (pathname.includes("/items") || pathname.includes("/store") || pathname.includes("/inventory_ledger")) ? "#2563eb" : "#4b5563",
                   fontSize: "0.875rem",
                   fontWeight: 600,
                   cursor: "pointer",
@@ -525,6 +525,25 @@ export default function Navbar() {
                   >
                     Store
                   </Link>
+                  
+                  {/* Ledger link hidden from standard users and admins */}
+                  {(!isStandardUser && !isAdmin) && (
+                    <Link
+                      href="/inventory_ledger"
+                      style={{
+                        display: "block",
+                        padding: "0.5rem 1rem",
+                        color: pathname === "/inventory_ledger" ? "#2563eb" : "#374151",
+                        fontWeight: pathname === "/inventory_ledger" ? 600 : 400,
+                        textDecoration: "none",
+                        fontSize: "0.875rem",
+                        backgroundColor: pathname === "/inventory_ledger" ? "#f0f9ff" : "transparent",
+                      }}
+                      onClick={() => setOpenDropdown(null)}
+                    >
+                      Ledger
+                    </Link>
+                  )}
                 </div>
               )}
             </div>
@@ -1217,6 +1236,11 @@ export default function Navbar() {
                   <Link href="/items" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Items</Link>
                 )}
                 <Link href="/store" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Store</Link>
+                
+                {/* Ledger link hidden from standard users and admins */}
+                {(!isStandardUser && !isAdmin) && (
+                  <Link href="/inventory_ledger" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none", fontSize: "0.875rem" }} onClick={closeMobileMenu}>Ledger</Link>
+                )}
               </div>
             )}
           </div>

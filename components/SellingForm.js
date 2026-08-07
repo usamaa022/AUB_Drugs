@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   searchInitializedItems,
   createSoldBill,
@@ -7,21 +7,17 @@ import {
   searchPharmacies,
   searchSoldBills,
   updateSoldBill,
-  uploadBillAttachmentWithMetadata,
-  getBillAttachmentUrlEnhanced,
-  deleteBillAttachment,
   storeBase64Image,
   getAllReturns,
   getBase64BillAttachment,
   deleteBase64Attachment,
   getPharmacyReturns,
+  getBillAttachmentUrlEnhanced
 } from "@/lib/data";
 import { auth } from "@/lib/firebase";
 import Select from "react-select";
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { getFirestore, doc, updateDoc, getDoc, collection, getDocs, query, limit, orderBy, setDoc, where, serverTimestamp, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
+import { getFirestore, collection, getDocs } from "firebase/firestore";
 
-const storage = getStorage();
 const db = getFirestore();
 
 // Helper function to extract username from email
@@ -170,7 +166,7 @@ const formatTotalLine = (usd, iqd) => {
   if (usd && Math.abs(usd) > 0.001) parts.push(`$${usd.toFixed(2)}`);
   if (iqd && Math.abs(iqd) > 0.5) parts.push(`${Math.round(iqd).toLocaleString()} IQD`);
   if (parts.length === 0) return "$0.00";
-  if (parts.length === 2) return `${parts[0]}  |  ${parts[1]}`;
+  if (parts.length === 2) return `${parts[0]} | ${parts[1]}`;
   return parts[0];
 };
 
@@ -179,11 +175,10 @@ const formatFinancialLine = (usd, iqd, hasUSD, hasIQD) => {
   if (hasUSD) parts.push(`$${(usd || 0).toFixed(2)}`);
   if (hasIQD) parts.push(`${Math.round(iqd || 0).toLocaleString()} IQD`);
   if (parts.length === 0) return "$0.00";
-  if (parts.length === 2) return `${parts[0]}  |  ${parts[1]}`;
+  if (parts.length === 2) return `${parts[0]} | ${parts[1]}`;
   return parts[0];
 };
 
-// Calculate Financial Summary
 // Calculate Financial Summary
 const calculatePharmacyFinancialSummary = (
   pharmacyId,
@@ -202,7 +197,6 @@ const calculatePharmacyFinancialSummary = (
     if (bill.pharmacyId !== pharmacyId) return;
     if (bill.paymentStatus !== "Unpaid") return;
 
-    // FIX: Always use the Bill's currency, not the item's original currency
     const billCurrency = bill.currency || "USD";
 
     bill.items?.forEach((item) => {
@@ -245,7 +239,6 @@ const calculatePharmacyFinancialSummary = (
   allReturnBills.forEach((ret) => {
     if (ret.pharmacyId !== pharmacyId) return;
 
-    // FIX: Safely use the precise totals already calculated by data.js if available
     if (ret.totalReturnAmountUSD !== undefined && ret.totalReturnAmountIQD !== undefined) {
       totalReturnBillsUSD += ret.totalReturnAmountUSD || 0;
       totalReturnBillsIQD += ret.totalReturnAmountIQD || 0;
@@ -266,7 +259,6 @@ const calculatePharmacyFinancialSummary = (
       const qty = item.returnQuantity || item.quantity || 0;
       if (qty === 0) return;
 
-      // FIX: Rely on the return's explicitly saved currency
       const currency = item.currency || ret.currency || "IQD";
       const price = item.returnPrice || item.price || 0;
 
@@ -971,6 +963,43 @@ const styles = {
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     touchAction: "manipulation",
   },
+  whatsappButton: {
+    backgroundColor: "#25D366",
+    color: "white",
+    border: "none",
+    padding: "8px 12px",
+    borderRadius: "4px",
+    fontSize: "13px",
+    cursor: "pointer",
+    fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    touchAction: "manipulation",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "5px",
+    transition: "all 0.3s ease",
+    width: "100%",
+  },
+  whatsappButtonHover: {
+    backgroundColor: "#128C7E",
+  },
+  whatsappButtonDisabled: {
+    backgroundColor: "#a8e6c1",
+    color: "white",
+    border: "none",
+    padding: "8px 12px",
+    borderRadius: "4px",
+    fontSize: "13px",
+    cursor: "not-allowed",
+    fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    touchAction: "manipulation",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "5px",
+    opacity: 0.6,
+    width: "100%",
+  },
   attachButton: {
     backgroundColor: "#9b59b6",
     color: "white",
@@ -1233,7 +1262,7 @@ const styles = {
     backgroundColor: "rgba(0, 0, 0, 0.8)",
     display: "flex",
     alignItems: "center",
-    justifyContent:  "center",
+    justifyContent: "center",
     zIndex: 99999,
     padding: "10px",
   },
@@ -1392,7 +1421,6 @@ const styles = {
     gap: '10px',
     marginTop: '15px',
   },
-  // Missing styles added here
   consignmentContainer: {
     display: 'flex',
     alignItems: 'center',
@@ -1443,6 +1471,17 @@ const styles = {
   },
 };
 
+// WhatsApp Icon SVG Component
+const WhatsAppIcon = ({ size = 14, color = "white" }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 448 512" 
+    style={{ width: size, height: size, fill: color, flexShrink: 0 }}
+  >
+    <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.7 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
+  </svg>
+);
+
 export default function SellingForm({ onBillCreated, userRole, user }) {
   const [allPharmacies, setAllPharmacies] = useState([]);
   const [showPharmacyList, setShowPharmacyList] = useState(false);
@@ -1482,6 +1521,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const [isScanning, setIsScanning] = useState(false);
   const [returnedItemsMap, setReturnedItemsMap] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: 'billNumber', direction: 'desc' });
+  const [sharingWhatsApp, setSharingWhatsApp] = useState({});
   const [filters, setFilters] = useState({
     billNumber: "",
     itemName: "",
@@ -1880,7 +1920,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         consignmentOwnerId_original: isConsignment ? pharmacyId : null,
       }));
 
-      // Allow saving with quantity 0
       const filteredItems = preparedItems.filter(item => item.quantity >= 0);
 
       if (filteredItems.length === 0) {
@@ -1966,7 +2005,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const handleSubmit = useCallback(async () => {
     if (!pharmacyId) { setError("Please select a pharmacy."); return; }
     
-    // Check items directly, allowing 0 quantity
     const validItems = selectedItems.filter(item => {
       const q = parseInt(item.quantity);
       return !isNaN(q) && q >= 0;
@@ -2385,7 +2423,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const showBillTemplate = useCallback(() => {
     if (!pharmacyId) { setError("Please select a pharmacy first."); return; }
     
-    // Check items directly, allowing 0 quantity
     const validItems = selectedItems.filter(item => {
       const q = parseInt(item.quantity);
       return !isNaN(q) && q >= 0;
@@ -2420,9 +2457,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     if (currentBill && currentBill.billNumber !== "TEMP0000") resetForm();
   }, [currentBill, resetForm]);
 
-  const printBill = useCallback((bill) => {
-    if (!bill) { alert("No bill selected for printing"); return; }
-    
+  // Builds the printable bill HTML markup shared by printBill()
+  const buildBillHTML = useCallback((bill) => {
     const billPaymentMethod = bill.paymentStatus || paymentMethod;
 
     const financialSummary = calculatePharmacyFinancialSummary(
@@ -2456,56 +2492,53 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     const returnLine  = formatFinancialLine(financialSummary.totalReturnBillsUSD, financialSummary.totalReturnBillsIQD, pharmacyHasUSD, pharmacyHasIQD);
     const remainLine  = formatFinancialLine(financialSummary.remainingUnpaidUSD, financialSummary.remainingUnpaidIQD, pharmacyHasUSD, pharmacyHasIQD);
 
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const numCopies = isMobile ? 1 : 2;
-
     const singleBillHTML = `
         <div class="bill-template">
-          <div class="bill-header">
-            <div class="header-content">
-              <div>
-                <h1 class="company-name">ARAN MED STORE</h1>
-                <p style="font-size:14px;color:#34495e;margin:0 0 2px 0">سلێمانی - بەرامبەر تاوەری تەندروستی سمارت</p>
+          <div class="bill-header" style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 3px solid #3498db;">
+            <div class="header-content" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: nowrap; width: 100%;">
+              <div style="flex: 1; min-width: 0;">
+                <h1 class="company-name" style="margin: 0; font-size: 28px; font-weight: bold; color: #2c3e50; font-family: 'NRT-Bd', sans-serif;">ARAN MED STORE</h1>
+                <p style="font-size:14px;color:#34495e;margin:2px 0 0 0">سلێمانی - بەرامبەر تاوەری تەندروستی سمارت</p>
                 <p style="font-size:13px;color:#34495e;margin:0">+964 772 533 5252 | +964 751 741 2241</p>
               </div>
-              <div>
-                <img src="/Aranlogo.png" alt="Aran Logo" style="width:160px;max-width:100%;object-fit:contain;" />
+              <div style="flex-shrink: 0; margin-left: 15px;">
+                <img src="/Aranlogo.png" alt="Aran Logo" style="height: 70px; object-fit: contain;" />
               </div>
             </div>
           </div>
 
-          <div class="bill-info-grid">
-            <div class="info-box">
-              <h3>Bill To: ${bill.pharmacyName}</h3>
-              <div class="info-row">
-                <span class="info-label">Payment:</span>
-                <span class="badge" style="background-color:${getPaymentStatusColor(billPaymentMethod)}">${billPaymentMethod.toUpperCase()}</span>
+          <div class="bill-info-grid" style="display: flex; flex-wrap: nowrap; gap: 12px; margin-bottom: 12px; justify-content: space-between;">
+            <div class="info-box" style="flex: 1; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed;">
+              <h3 style="font-size: 15px; margin: 0 0 6px 0;">Bill To: ${bill.pharmacyName}</h3>
+              <div class="info-row" style="display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px;">
+                <span class="info-label" style="font-weight: 600; min-width: 80px;">Payment:</span>
+                <span class="badge" style="background-color:${getPaymentStatusColor(billPaymentMethod)}; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: white;">${billPaymentMethod.toUpperCase()}</span>
               </div>
-              <div class="info-row">
-                <span class="info-label">Consignment:</span>
+              <div class="info-row" style="display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px;">
+                <span class="info-label" style="font-weight: 600; min-width: 80px;">Consignment:</span>
                 <span>${bill.isConsignment ? 'تحت صرف' : 'Owned'}</span>
               </div>
             </div>
-            <div class="info-box">
-              <div class="info-row"><span class="info-label">Invoice #:</span><span>${displayBillNumber}</span></div>
-              <div class="info-row"><span class="info-label">Date:</span><span>${formatDate(bill.date)}</span></div>
-              <div class="info-row"><span class="info-label">Created By:</span><span>${creatorDisplayName}</span></div>
+            <div class="info-box" style="flex: 1; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed;">
+              <div class="info-row" style="display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px;"><span class="info-label" style="font-weight: 600; min-width: 80px;">Invoice #:</span><span>${displayBillNumber}</span></div>
+              <div class="info-row" style="display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px;"><span class="info-label" style="font-weight: 600; min-width: 80px;">Date:</span><span>${formatDate(bill.date)}</span></div>
+              <div class="info-row" style="display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px;"><span class="info-label" style="font-weight: 600; min-width: 80px;">Created By:</span><span>${creatorDisplayName}</span></div>
             </div>
-            <div style="flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-              <img src="/scann.png" alt="scan me" style="width:80px;max-width:100%;" />
+            <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 15px;">
+               <img src="/scann.png" alt="QR Code" style="width: 105px; height: 125px; object-fit: contain;" />
             </div>
           </div>
 
           <div style="overflow-x:auto;">
-            <table class="items-table">
+            <table class="items-table" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px;">
               <thead>
                 <tr>
-                  <th style="text-align:center">#</th>
-                  <th style="text-align:left">Item Details</th>
-                  <th style="text-align:center">Barcode</th>
-                  <th style="text-align:center">Qty</th>
-                  <th style="text-align:right">Unit Price</th>
-                  <th style="text-align:right">Total</th>
+                  <th style="background-color: #3498db; color: white; padding: 8px; text-align: center;">#</th>
+                  <th style="background-color: #3498db; color: white; padding: 8px; text-align: left;">Item Details</th>
+                  <th style="background-color: #3498db; color: white; padding: 8px; text-align: center;">Barcode</th>
+                  <th style="background-color: #3498db; color: white; padding: 8px; text-align: center;">Qty</th>
+                  <th style="background-color: #3498db; color: white; padding: 8px; text-align: right;">Unit Price</th>
+                  <th style="background-color: #3498db; color: white; padding: 8px; text-align: right;">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -2515,97 +2548,269 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                   const totalFormatted = billCurr === "IQD" ? Math.round(price * item.quantity).toLocaleString() + " IQD" : "$" + (price * item.quantity).toFixed(2);
                   return `
                     <tr>
-                      <td style="text-align:center;font-weight:600">${idx + 1}</td>
-                      <td>
-                        <div style="font-weight:600;font-family:'NRT-Bd',sans-serif;font-size:13px;">${item.name}</div>
+                      <td style="padding: 6px 8px; border-bottom: 1px solid #e1e8ed; text-align: center; font-weight: 600;">${idx + 1}</td>
+                      <td style="padding: 6px 8px; border-bottom: 1px solid #e1e8ed;">
+                        <div style="font-weight: 600; font-family: 'NRT-Bd', sans-serif; font-size: 13px;">${item.name}</div>
                       </td>
-                      <td style="text-align:center;font-family:monospace;font-size:13px;">${item.barcode}</td>
-                      <td style="text-align:center;font-weight:600">${item.quantity}</td>
-                      <td style="text-align:right;font-weight:600">${priceFormatted}</td>
-                      <td style="text-align:right;font-weight:600">${totalFormatted}</td>
+                      <td style="padding: 6px 8px; border-bottom: 1px solid #e1e8ed; text-align: center; font-family: monospace; font-size: 13px;">${item.barcode}</td>
+                      <td style="padding: 6px 8px; border-bottom: 1px solid #e1e8ed; text-align: center; font-weight: 600;">${item.quantity}</td>
+                      <td style="padding: 6px 8px; border-bottom: 1px solid #e1e8ed; text-align: right; font-weight: 600;">${priceFormatted}</td>
+                      <td style="padding: 6px 8px; border-bottom: 1px solid #e1e8ed; text-align: right; font-weight: 600;">${totalFormatted}</td>
                     </tr>
                   `;
                 }).join("")}
                 <tr class="total-row">
-                  <td colspan="5" style="text-align:right;padding:8px;">CURRENT TOTAL:</td>
-                  <td style="text-align:right;padding:8px;font-size:15px">${formatTotalLine(currentBillTotalUSD, currentBillTotalIQD)}</td>
+                  <td colspan="5" style="background-color: #34495e !important; color: white; text-align: right; padding: 8px; font-weight: 700; font-size: 15px;">CURRENT TOTAL:</td>
+                  <td style="background-color: #34495e !important; color: white; text-align: right; padding: 8px; font-size: 15px; font-weight: 700;">${formatTotalLine(currentBillTotalUSD, currentBillTotalIQD)}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          <div class="fin-summary">
-            <div class="fin-row">
+          <div class="fin-summary" style="background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #e1e8ed; margin-bottom: 12px;">
+            <div class="fin-row" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 13px;">
               <span class="fin-label">Total Unpaid Bills:</span>
               <span class="fin-value">${unpaidLine}</span>
             </div>
-            <div class="fin-row">
+            <div class="fin-row" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 13px;">
               <span class="fin-label">Total Return Bills:</span>
               <span class="fin-value" style="color:#e74c3c">- ${returnLine}</span>
             </div>
-            <div class="fin-row">
+            <div class="fin-row" style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; font-weight: 700; color: #e74c3c;">
               <span class="fin-label">Remaining Unpaid Balance:</span>
-              <span class="fin-value" style="color:#e74c3c">${remainLine}</span>
+              <span class="fin-value">${remainLine}</span>
             </div>
           </div>
 
           ${bill.note ? `
-            <div class="note-section">
-              <h4 style="font-weight:600;margin:0 0 4px 0;color:#e67e22;font-size:14px;font-family:'NRT-Bd',sans-serif">Note:</h4>
-              <p style="font-size:13px;color:#2c3e50;margin:0">${bill.note}</p>
+            <div class="note-section" style="background: #fff8e1; padding: 10px; border-radius: 8px; border: 1px solid #ffecb3; margin-bottom: 12px;">
+              <h4 style="font-weight: 600; margin: 0 0 4px 0; color: #e67e22; font-size: 14px; font-family: 'NRT-Bd', sans-serif;">Note:</h4>
+              <p style="font-size: 13px; color: #2c3e50; margin: 0;">${bill.note}</p>
             </div>
           ` : ""}
 
-          <div style="margin-top:20px;text-align:right">
-            <div style="width:200px;height:1px;background:#3498db;margin:10px 0 5px auto;"></div>
-            <p style="font-size:12px;color:#7f8c8d;font-style:italic">Receiver Signature (Stamp)</p>
+          <div style="margin-top: 20px; text-align: right;">
+            <div style="width: 200px; height: 1px; background: #3498db; margin: 10px 0 5px auto;"></div>
+            <p style="font-size: 12px; color: #7f8c8d; font-style: italic;">Receiver Signature (Stamp)</p>
           </div>
         </div>
     `;
 
-    if (isMobile) {
-      if (!window.html2pdf) {
+    return { singleBillHTML, displayBillNumber };
+  }, [paymentMethod, recentBills, returnBills]);
+
+  const loadHtml2Pdf = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      if (window.html2pdf) { resolve(); return; }
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load PDF library"));
+      document.head.appendChild(script);
+    });
+  }, []);
+const shareViaWhatsApp = useCallback(async (bill) => {
+  if (!bill) {
+    alert("No bill selected");
+    return;
+  }
+
+  const billKey = bill.billNumber;
+  setSharingWhatsApp((prev) => ({ ...prev, [billKey]: true }));
+
+  try {
+    const displayBillNumber = formatBillNumber(bill.billNumber);
+    const shareText = `Invoice #${displayBillNumber}`;
+
+    // Create a container for A4 size
+    const container = document.createElement("div");
+    container.style.position = "absolute";
+    container.style.top = "0";
+    container.style.left = "0";
+    container.style.width = "794px"; // A4 width in px
+    container.style.height = "1123px"; // A4 height in px
+    container.style.zIndex = "99999";
+    container.style.background = "white";
+    container.style.display = "flex";
+    container.style.justifyContent = "center";
+    container.style.alignItems = "center";
+    container.style.overflow = "visible"; // Avoid clipping
+    container.style.opacity = "1";
+    container.style.visibility = "visible";
+    container.style.pointerEvents = "none";
+
+    // Build the bill HTML using the existing `buildBillHTML` function
+    const { singleBillHTML } = buildBillHTML(bill);
+
+    // Insert HTML content into the container
+    container.innerHTML = `
+      <div id="bill-image-wrap" style="
+        width: 794px;
+        height: 1123px;
+        background: white;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        padding: 50px 60px;
+        margin: 0;
+        overflow: visible;
+      ">
+        ${singleBillHTML}
+      </div>
+    `;
+
+    // Append to body
+    document.body.appendChild(container);
+
+    // Force layout update
+    container.offsetHeight;
+
+    // Wait for DOM to fully render (longer delay for mobile)
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const delay = isMobile ? 1500 : 500; // Longer delay for mobile
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        setTimeout(resolve, delay);
+      });
+    });
+
+    // Load html2canvas if needed
+    if (typeof window.html2canvas !== 'function') {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+        script.onload = () => {
+          setTimeout(resolve, 300);
+        };
+        script.onerror = () => reject(new Error('Failed to load html2canvas'));
+        document.head.appendChild(script);
+      });
+    }
+
+    // Get the element
+    const element = document.getElementById('bill-image-wrap');
+    if (!element) {
+      throw new Error('Bill element not found');
+    }
+
+    // Debug: Log the element's dimensions
+    console.log("Element dimensions:", element.offsetWidth, element.offsetHeight);
+
+    // Capture the element with mobile-optimized options
+    const canvas = await window.html2canvas(element, {
+      scale: isMobile ? 3 : 2.5, // Higher scale for mobile
+      useCORS: true, // Enable CORS for images
+      backgroundColor: '#ffffff',
+      logging: true,
+      width: 794,
+      height: 1123,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
+      allowTaint: true, // Allow tainted canvas (if CORS fails)
+      windowWidth: 794, // Explicitly set window width
+      windowHeight: 1123, // Explicitly set window height
+      onclone: (clonedDoc) => {
+        const clonedEl = clonedDoc.getElementById('bill-image-wrap');
+        if (clonedEl) {
+          clonedEl.style.width = '794px';
+          clonedEl.style.height = '1123px';
+          clonedEl.style.margin = '0';
+          clonedEl.style.opacity = '1';
+          clonedEl.style.visibility = 'visible';
+          clonedEl.style.overflow = 'visible';
+        }
+      }
+    });
+
+    // Debug: Log the canvas dimensions
+    console.log("Canvas dimensions:", canvas.width, canvas.height);
+
+    // Check if canvas is blank
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const isBlank = !imageData.data.some(channel => channel !== 0);
+    console.log("Is canvas blank?", isBlank);
+
+    if (isBlank) {
+      throw new Error('Captured canvas is blank');
+    }
+
+    // Remove container after capture
+    document.body.removeChild(container);
+
+    // Download the image
+    const fileName = `Bill_${displayBillNumber}.jpg`;
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = imageDataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Open WhatsApp
+    setTimeout(() => {
+      const encodedText = encodeURIComponent(shareText);
+      window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    }, 500);
+
+  } catch (err) {
+    console.error('Error sharing bill:', err);
+    alert('⚠️ Failed to share the bill. Please try again.');
+  } finally {
+    setSharingWhatsApp((prev) => ({ ...prev, [billKey]: false }));
+  }
+}, [buildBillHTML, recentBills, returnBills]);
+const printBill = useCallback((bill) => {
+  if (!bill) { alert("No bill selected for printing"); return; }
+
+  const { singleBillHTML, displayBillNumber } = buildBillHTML(bill);
+
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const numCopies = isMobile ? 1 : 2;
+
+  if (isMobile) {
+    // 🔥 FIX: Load html2pdf if not available
+    const loadHtml2Pdf = () => {
+      return new Promise((resolve, reject) => {
+        if (window.html2pdf) { resolve(); return; }
         const script = document.createElement("script");
         script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-        script.onload = () => generatePDF();
+        script.onload = () => {
+          // Wait a bit for initialization
+          setTimeout(resolve, 200);
+        };
+        script.onerror = () => reject(new Error("Failed to load PDF library"));
         document.head.appendChild(script);
-      } else {
-        generatePDF();
-      }
+      });
+    };
 
-function generatePDF() {
-        const container = document.createElement("div");
+    const generatePDF = async () => {
+      try {
+        await loadHtml2Pdf();
         
-        // Put the container at the very top-left so mobile browsers don't clip it, 
-        // but push it behind your app's background so the user can't see it.
-        container.style.position = "absolute";
-        container.style.top = "0";
-        container.style.left = "0";
+        // 🔥 FIX: Centered container
+        const container = document.createElement("div");
+        container.style.position = "fixed";
+        container.style.top = "50%";
+        container.style.left = "50%";
+        container.style.transform = "translate(-50%, -50%)";
+        container.style.zIndex = "-9999";
+        container.style.visibility = "hidden";
         container.style.width = "800px";
-        container.style.zIndex = "-9999"; 
+        container.style.background = "white";
+        container.style.padding = "20px";
+        container.style.boxSizing = "border-box";
         
         container.innerHTML = `
-          <div id="pdf-wrap" style="width: 800px; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: white; color: #2c3e50;">
+          <div id="pdf-wrap" style="width: 100%; max-width: 800px; margin: 0 auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: white; color: #2c3e50; box-sizing: border-box;">
             <style>
-              /* Scope this to only the PDF wrap so it doesn't break your app */
-              #pdf-wrap * { overflow: visible !important; overflow-x: visible !important; }
-              
-              .bill-header { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 3px solid #3498db; }
-              .header-content { display: flex; justify-content: space-between; align-items: flex-start; }
-              .company-name { font-size: 24px; font-weight: 700; margin: 0 0 3px 0; color: #2c3e50; }
-              .bill-info-grid { display: flex; gap: 12px; margin-bottom: 12px; }
-              .info-box { flex: 1; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed; }
-              .info-box h3 { font-size: 15px; margin: 0 0 6px 0; }
-              .info-row { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px; }
-              .info-label { font-weight: 600; color: #2c3e50; min-width: 80px; }
-              .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: white; }
-              .items-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
-              .items-table th { background-color: #3498db; color: white; padding: 8px; font-size: 13px; text-align: left; }
-              .items-table td { padding: 6px 8px; border-bottom: 1px solid #e1e8ed; font-size: 13px; }
-              .total-row td { background-color: #34495e !important; color: white; font-weight: 700; font-size: 15px; }
-              .fin-summary { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #e1e8ed; margin-bottom: 12px; }
-              .fin-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 13px; }
-              .fin-row:last-child { border-bottom: none; font-weight: 700; color: #e74c3c; font-size: 14px; }
+              #pdf-wrap * { overflow: visible !important; overflow-x: visible !important; box-sizing: border-box; }
+              #pdf-wrap .bill-template { max-width: 100%; margin: 0 auto; }
             </style>
             ${singleBillHTML}
           </div>
@@ -2613,98 +2818,82 @@ function generatePDF() {
         document.body.appendChild(container);
 
         const opt = {
-          margin: [10, 10, 10, 10], // Top, Left, Bottom, Right margins
+          margin: [5, 5, 5, 5],
           filename: `Bill_${displayBillNumber}.pdf`,
           image: { type: 'jpeg', quality: 1 },
           html2canvas: { 
             scale: 2, 
             useCORS: true, 
-            windowWidth: 800, // Forces html2canvas to act like it's on a desktop monitor
+            windowWidth: 800,
             width: 800,
+            x: 0,
+            y: 0,
             scrollX: 0,
             scrollY: 0
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        window.html2pdf().set(opt).from(container.querySelector('#pdf-wrap')).save().then(() => {
-          document.body.removeChild(container);
-        });
+        await window.html2pdf().set(opt).from(container.querySelector('#pdf-wrap')).save();
+        document.body.removeChild(container);
+      } catch (error) {
+        console.error('PDF generation error:', error);
+        alert('Failed to generate PDF. Please try again.');
       }
-      return;
-    }
+    };
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) { alert("Please allow popups for printing"); return; }
-    const fullHTML = Array(numCopies).fill(singleBillHTML).join('<div style="page-break-after: always;"></div>');
+    generatePDF();
+    return;
+  }
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Bill #${displayBillNumber}</title>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          @font-face { font-family: 'NRT-Reg'; src: url('/fonts/NRT-Reg.ttf') format('truetype'); }
-          @font-face { font-family: 'NRT-Bd';  src: url('/fonts/NRT-Bd.ttf')  format('truetype'); }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body {
-            font-family: 'NRT-Reg', 'Segoe UI', sans-serif;
-            padding: 15px; color: #2c3e50; background: white;
-            line-height: 1.4; font-size: 14px;
-          }
-          .bill-template { max-width: 800px; margin: 0 auto; page-break-inside: avoid; }
-          .bill-header { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 3px solid #3498db; }
-          .header-content { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
-          .company-name { font-size: 24px; font-weight: 700; margin: 0 0 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; }
-          .bill-info-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
-          .info-box { flex: 1; min-width: 180px; padding: 10px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed; }
-          .info-box h3 { font-size: 15px; margin: 0 0 6px 0; font-family: 'NRT-Bd', sans-serif; }
-          .info-row { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; font-size: 13px; flex-wrap: wrap; }
-          .info-label { font-weight: 600; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; min-width: 80px; }
-          .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: white; }
-          .items-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; min-width: 450px; }
-          .items-table th { background-color: #3498db; color: white; padding: 8px; font-family: 'NRT-Bd', sans-serif; font-size: 13px; }
-          .items-table td { padding: 6px 8px; border-bottom: 1px solid #e1e8ed; font-size: 13px; }
-          .items-table tr:nth-child(even) td { background-color: #f8f9fa; }
-          .total-row td { background-color: #34495e !important; color: white; font-weight: 700; font-size: 15px; font-family: 'NRT-Bd', sans-serif; }
-          .fin-summary { background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #e1e8ed; margin-bottom: 12px; }
-          .fin-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #e1e8ed; font-size: 13px; flex-wrap: wrap; }
-          .fin-row:last-child { border-bottom: none; font-weight: 700; color: #e74c3c; font-size: 14px; }
-          .note-section { background: #fff8e1; padding: 10px; border-radius: 8px; border: 1px solid #ffecb3; margin-bottom: 12px; }
-          
-          @media print {
-            body { padding: 10px; }
-            .bill-template { max-width: 100%; }
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-          }
-          @media (max-width: 600px) {
-            body { padding: 10px; font-size: 12px; }
-            .company-name { font-size: 20px; }
-            .header-content { flex-direction: column; align-items: center; text-align: center; }
-            .info-box { min-width: 100%; }
-            .items-table { font-size: 12px; min-width: 350px; }
-            .items-table th, .items-table td { padding: 5px; }
-          }
-        </style>
-      </head>
-      <body>
-         ${fullHTML}
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-      setTimeout(() => printWindow.close(), 1000);
-    }, 500);
-  }, [paymentMethod, recentBills, returnBills]);
+  // Desktop: Print normally
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) { alert("Please allow popups for printing"); return; }
+  const fullHTML = Array(numCopies).fill(singleBillHTML).join('<div style="page-break-after: always;"></div>');
 
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Bill #${displayBillNumber}</title>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        @font-face { font-family: 'NRT-Reg'; src: url('/fonts/NRT-Reg.ttf') format('truetype'); }
+        @font-face { font-family: 'NRT-Bd';  src: url('/fonts/NRT-Bd.ttf')  format('truetype'); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: 'NRT-Reg', 'Segoe UI', sans-serif;
+          padding: 15px; color: #2c3e50; background: white;
+          line-height: 1.4; font-size: 14px;
+        }
+        .bill-template { max-width: 800px; margin: 0 auto; page-break-inside: avoid; }
+        @media print {
+          body { padding: 10px; }
+          .bill-template { max-width: 100%; }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+        @media (max-width: 600px) {
+          body { padding: 10px; font-size: 12px; }
+          .bill-template { max-width: 100%; }
+        }
+      </style>
+    </head>
+    <body>
+       ${fullHTML}
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  setTimeout(() => {
+    printWindow.focus();
+    printWindow.print();
+    setTimeout(() => printWindow.close(), 1000);
+  }, 500);
+}, [buildBillHTML]);
   const fetchItemSalesHistory = useCallback(async (barcode, pharId) => {
     if (!pharId) { alert("Please select a pharmacy first to view sales history."); return; }
     try {
@@ -3716,6 +3905,34 @@ function generatePDF() {
                                 >
                                   Print
                                 </button>
+                                <button
+                                  style={sharingWhatsApp[bill.billNumber] ? styles.whatsappButtonDisabled : styles.whatsappButton}
+                                  disabled={!!sharingWhatsApp[bill.billNumber]}
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    shareViaWhatsApp(bill); 
+                                  }}
+                                  title="Send via WhatsApp"
+                                  onMouseEnter={(e) => {
+                                    if (!sharingWhatsApp[bill.billNumber]) {
+                                      e.currentTarget.style.backgroundColor = "#128C7E";
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!sharingWhatsApp[bill.billNumber]) {
+                                      e.currentTarget.style.backgroundColor = "#25D366";
+                                    }
+                                  }}
+                                >
+                                  {sharingWhatsApp[bill.billNumber] ? (
+                                    "⏳..."
+                                  ) : (
+                                    <>
+                                      <WhatsAppIcon size={14} color="white" />
+                                      WhatsApp
+                                    </>
+                                  )}
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -3727,6 +3944,37 @@ function generatePDF() {
                                     <h4 style={styles.billDetailsTitle}>Bill #{formatBillNumber(bill.billNumber)} Details</h4>
                                     <div style={styles.billDetailsActions}>
                                       <button style={styles.printButton} onClick={() => printBill(bill)}>Print Bill</button>
+                                      <button
+                                        style={{
+                                          ...styles.printButton,
+                                          backgroundColor: sharingWhatsApp[bill.billNumber] ? "#a8e6c1" : "#25D366",
+                                          cursor: sharingWhatsApp[bill.billNumber] ? "not-allowed" : "pointer",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "8px",
+                                        }}
+                                        disabled={!!sharingWhatsApp[bill.billNumber]}
+                                        onClick={() => shareViaWhatsApp(bill)}
+                                        onMouseEnter={(e) => {
+                                          if (!sharingWhatsApp[bill.billNumber]) {
+                                            e.currentTarget.style.backgroundColor = "#128C7E";
+                                          }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (!sharingWhatsApp[bill.billNumber]) {
+                                            e.currentTarget.style.backgroundColor = "#25D366";
+                                          }
+                                        }}
+                                      >
+                                        {sharingWhatsApp[bill.billNumber] ? (
+                                          "⏳ Preparing..."
+                                        ) : (
+                                          <>
+                                            <WhatsAppIcon size={16} color="white" />
+                                            Send via WhatsApp
+                                          </>
+                                        )}
+                                      </button>
                                       <button style={styles.closeDetailsButton} onClick={() => setSelectedBill(null)}>×</button>
                                     </div>
                                   </div>
@@ -3870,6 +4118,37 @@ function generatePDF() {
                 </h2>
                 <div style={styles.modalActions}>
                   <button style={styles.printButton} onClick={() => printBill(currentBill)}>Print Bill</button>
+                  <button
+                    style={{
+                      ...styles.printButton,
+                      backgroundColor: sharingWhatsApp[currentBill.billNumber] ? "#a8e6c1" : "#25D366",
+                      cursor: sharingWhatsApp[currentBill.billNumber] ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                    disabled={!!sharingWhatsApp[currentBill.billNumber]}
+                    onClick={() => shareViaWhatsApp(currentBill)}
+                    onMouseEnter={(e) => {
+                      if (!sharingWhatsApp[currentBill.billNumber]) {
+                        e.currentTarget.style.backgroundColor = "#128C7E";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!sharingWhatsApp[currentBill.billNumber]) {
+                        e.currentTarget.style.backgroundColor = "#25D366";
+                      }
+                    }}
+                  >
+                    {sharingWhatsApp[currentBill.billNumber] ? (
+                      "⏳ Preparing..."
+                    ) : (
+                      <>
+                        <WhatsAppIcon size={16} color="white" />
+                        Send via WhatsApp
+                      </>
+                    )}
+                  </button>
                   <button style={styles.closeButton} onClick={closeBillPreview}>Close</button>
                 </div>
               </div>
@@ -3929,7 +4208,7 @@ function generatePDF() {
                     </div>
 
                     <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-                      <img src="/scann.png" alt="scan me" style="margin-top:10px; width: 130px; max-width: 100%;" />
+                      <img src="/scann.png" alt="QR Code" style="margin-top:10px; width: 110px; max-width: 90%;" />
                     </div>
                   </div>
 
