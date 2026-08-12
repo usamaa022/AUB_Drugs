@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { getStoreItems, updateStoreItem } from "@/lib/data";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import * as XLSX from 'xlsx';
@@ -167,7 +166,7 @@ export default function StorePage() {
   const { user } = useAuth();
   const router = useRouter();
   const [storeItems, setStoreItems] = useState([]);
-  
+
   // Cleaned up Global Search States
   const [searchQuery, setSearchQuery] = useState("");
   const [barcodeSearch, setBarcodeSearch] = useState("");
@@ -175,7 +174,7 @@ export default function StorePage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [expireBefore, setExpireBefore] = useState("");
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
@@ -191,13 +190,40 @@ export default function StorePage() {
     outPriceIQD: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [branchFilter, setBranchFilter] = useState(
-    user?.role === "superAdmin" ? "All Stores" : user?.branch || "Slemany"
-  );
+
+  // NOTE: this can no longer safely be initialized from `user` here, because
+  // `user` from useAuth() is almost always still null on first render (auth
+  // resolves async). useState's initializer only runs once, so it used to
+  // permanently lock everyone (including superAdmin) to "Slemany" until they
+  // manually touched the dropdown. It's now synced via the effect below.
+  const [branchFilter, setBranchFilter] = useState("Slemany");
+  const [branchFilterInitialized, setBranchFilterInitialized] = useState(false);
 
   // Column Filters State
   const [columnFilters, setColumnFilters] = useState({});
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+
+  // Whether the current user is allowed to see Base Price (cost) data at all.
+  // Admin/user roles should never see purchase/base cost — only superAdmin.
+  const canSeeBasePrice = user?.role === "superAdmin";
+
+  // Sync branchFilter to the real user once auth resolves (or if the
+  // logged-in user's role/branch changes, e.g. after switching accounts).
+  useEffect(() => {
+    if (!user) return;
+
+    if (!branchFilterInitialized) {
+      // First time we actually know who the user is: set the correct default.
+      setBranchFilter(user.role === "superAdmin" ? "All Stores" : (user.branch || "Slemany"));
+      setBranchFilterInitialized(true);
+      return;
+    }
+
+    // If a non-superAdmin's branch changes later, keep them pinned to it.
+    if (user.role !== "superAdmin") {
+      setBranchFilter(user.branch || "Slemany");
+    }
+  }, [user, branchFilterInitialized]);
 
   // Handle outside click for dropdowns safely with touch support
   useEffect(() => {
@@ -221,6 +247,10 @@ export default function StorePage() {
       return;
     }
 
+    // Wait until we've resolved the correct default branchFilter before
+    // firing the first query, so superAdmin doesn't briefly query "Slemany".
+    if (!branchFilterInitialized) return;
+
     setIsLoading(true);
     setError(null);
 
@@ -235,19 +265,27 @@ export default function StorePage() {
             orderBy("createdAt", "desc")
           );
         } else if (user.role !== "superAdmin") {
+          // Non-superAdmin (admin, user, etc.) are ALWAYS scoped to their own
+          // branch, regardless of branchFilter — branchFilter is not even
+          // exposed to them in the UI (see the branch <select> below).
+          // This is enforced at the query level, so it can never leak other
+          // branches' data to the client.
           q = query(
             collection(db, "storeItems"),
             where("branch", "==", user.branch),
             orderBy("createdAt", "desc")
           );
         } else {
+          // superAdmin + "All Stores"
           q = query(
             collection(db, "storeItems"),
             orderBy("createdAt", "desc")
           );
         }
 
-        return onSnapshot(
+        let fallbackUnsubscribe = null;
+
+        const mainUnsubscribe = onSnapshot(
           q,
           (querySnapshot) => {
             const items = [];
@@ -283,7 +321,7 @@ export default function StorePage() {
                 );
               }
 
-              return onSnapshot(
+              fallbackUnsubscribe = onSnapshot(
                 fallbackQuery,
                 (fallbackSnapshot) => {
                   const allItems = [];
@@ -304,6 +342,13 @@ export default function StorePage() {
             }
           }
         );
+
+        // Return a combined cleanup so both listeners (main + fallback, if any)
+        // get torn down when the effect re-runs or unmounts.
+        return () => {
+          mainUnsubscribe();
+          if (fallbackUnsubscribe) fallbackUnsubscribe();
+        };
       } catch (err) {
         console.error("Error setting up query:", err);
         setError("Failed to set up data connection. Please refresh the page.");
@@ -323,7 +368,7 @@ export default function StorePage() {
           let basePriceIQD = 0;
           let netPriceIQD = 0;
           let outPriceIQD = 0;
-          
+
           if (item.basePriceUSD || item.netPriceUSD || item.outPriceUSD) {
             priceType = 'USD';
             basePriceUSD = item.basePriceUSD || 0;
@@ -335,7 +380,7 @@ export default function StorePage() {
             netPriceIQD = item.netPriceIQD || 0;
             outPriceIQD = item.outPriceIQD || 0;
           }
-          
+
           const key = `${item.barcode}-${priceType}-${basePriceUSD}-${netPriceUSD}-${outPriceUSD}-${basePriceIQD}-${netPriceIQD}-${outPriceIQD}-${item.branch}-${item.boughtBillNumber}`;
 
           if (!grouped[key]) {
@@ -374,7 +419,7 @@ export default function StorePage() {
         unsubscribe();
       }
     };
-  }, [user, router, branchFilter]);
+  }, [user, router, branchFilter, branchFilterInitialized]);
 
   // Sort items
   const sortItems = useCallback((items) => {
@@ -438,6 +483,7 @@ export default function StorePage() {
   };
 
   const handleBranchChange = (e) => {
+    // Only reachable by superAdmin — the <select> below is gated on that role.
     setBranchFilter(e.target.value);
   };
 
@@ -462,6 +508,10 @@ export default function StorePage() {
 
   // Setup Column Filters
   const handleUpdateColumnFilter = (columnKey, updates) => {
+    // Guard: non-superAdmin can never filter on base price columns, since
+    // those columns aren't rendered for them at all.
+    if (!canSeeBasePrice && (columnKey === 'basePriceUSD' || columnKey === 'basePriceIQD')) return;
+
     setColumnFilters(prev => {
       const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
       const next = { ...current, ...updates };
@@ -477,7 +527,7 @@ export default function StorePage() {
   const evaluateFilter = (itemValue, filterData, type = "string") => {
     if (!filterData) return true;
     const { operator, textValue, selectedValues } = filterData;
-    
+
     if (selectedValues && selectedValues.length > 0) {
       if (!selectedValues.includes(String(itemValue))) return false;
     }
@@ -546,6 +596,10 @@ export default function StorePage() {
 
       // 2. Column Header Filters
       for (const [columnKey, filterData] of Object.entries(columnFilters)) {
+        // Safety net: never evaluate a base-price filter for non-superAdmin,
+        // even if one somehow ended up in state.
+        if (!canSeeBasePrice && (columnKey === 'basePriceUSD' || columnKey === 'basePriceIQD')) continue;
+
         let itemValue = "";
         if (columnKey === 'barcode') itemValue = item.barcode;
         if (columnKey === 'name') itemValue = item.name;
@@ -569,14 +623,14 @@ export default function StorePage() {
 
       return true;
     });
-  }, [storeItems, searchQuery, barcodeSearch, billSearch, fromDate, toDate, expireBefore, sortItems, columnFilters]);
+  }, [storeItems, searchQuery, barcodeSearch, billSearch, fromDate, toDate, expireBefore, sortItems, columnFilters, canSeeBasePrice]);
 
   // Header Dropdown Component
   const ExcelFilterDropdown = ({ columnKey, type = "string" }) => {
     const [search, setSearch] = useState("");
     const isOpen = activeFilterDropdown === columnKey;
     const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
-    
+
     const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
     const { operator, textValue, selectedValues } = filterState;
 
@@ -619,7 +673,7 @@ export default function StorePage() {
 
     return (
       <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
-        <div 
+        <div
           onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
           style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.25rem", borderRadius: "0.375rem", background: isActive ? "#dbeafe" : "transparent", color: isActive ? "#2563eb" : "#bdc3c7" }}
         >
@@ -631,18 +685,18 @@ export default function StorePage() {
             <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
               <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <select 
-                  value={operator || operators[0].value} 
+                <select
+                  value={operator || operators[0].value}
                   onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
                   style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
                 >
                   {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
                 </select>
                 {!['isEmpty', 'isNotEmpty'].includes(operator) && (
-                  <input 
-                    type={type === "number" ? "number" : "text"} 
-                    placeholder="Value..." 
-                    value={textValue || ""} 
+                  <input
+                    type={type === "number" ? "number" : "text"}
+                    placeholder="Value..."
+                    value={textValue || ""}
                     onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
                     style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none" }}
                   />
@@ -654,19 +708,19 @@ export default function StorePage() {
               <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
               <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem", boxSizing: "border-box" }}>
                 <Search size={14} color="#94a3b8" />
-                <input 
-                  type="text" 
-                  placeholder="Search values..." 
-                  value={search} 
-                  onChange={e => setSearch(e.target.value)} 
-                  style={{ border: "none", outline: "none", width: "100%", boxSizing: "border-box", fontSize: "0.875rem", marginLeft: "0.5rem" }} 
+                <input
+                  type="text"
+                  placeholder="Search values..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ border: "none", outline: "none", width: "100%", boxSizing: "border-box", fontSize: "0.875rem", marginLeft: "0.5rem" }}
                 />
               </div>
 
               <div style={{ maxHeight: "180px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9" }}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
                     onChange={(e) => handleSelectAll(e.target.checked)}
                     style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
@@ -675,8 +729,8 @@ export default function StorePage() {
                 </label>
                 {displayValues.map(val => (
                   <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={selectedValues.includes(val)}
                       onChange={(e) => handleCheckbox(val, e.target.checked)}
                       style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
@@ -702,11 +756,11 @@ export default function StorePage() {
   };
 
   const TableHeader = ({ title, columnKey, type = "string", colWidth }) => (
-    <th style={{ 
-      backgroundColor: "#34495e", color: "white", padding: "12px 10px", 
-      textAlign: "left", fontSize: "14px", fontFamily: "'NRT-Bd', sans-serif", 
+    <th style={{
+      backgroundColor: "#34495e", color: "white", padding: "12px 10px",
+      textAlign: "left", fontSize: "14px", fontFamily: "'NRT-Bd', sans-serif",
       whiteSpace: "nowrap", borderRight: "1px solid #576574",
-      width: colWidth || "auto", 
+      width: colWidth || "auto",
       minWidth: colWidth || "auto"
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
@@ -742,32 +796,49 @@ export default function StorePage() {
     return filteredItems.reduce((sum, item) => sum + (item.netPriceIQD * item.totalQuantity), 0);
   }, [filteredItems]);
 
-  // Export to Excel
+  // Export to Excel — base price columns are stripped out for non-superAdmin
+  // so exported files can't leak cost data either.
   const exportToExcel = () => {
     try {
       const exportData = filteredItems.map(item => {
         const expiryStyle = getExpiryStyle(item.expireDate);
-        return {
+        const row = {
           'Item Name': item.name,
           'Barcode': item.barcode,
           'Branch': item.branch,
           'Bought Bill #': item.boughtBillNumber,
           'Added Date': formatDateTime(item.createdAt),
           'Currency': item.priceType,
-          'Base Price (USD)': item.basePriceUSD ? formatUSD(item.basePriceUSD) : '-',
-          'Net Price (USD)': item.netPriceUSD ? formatUSD(item.netPriceUSD) : '-',
-          'Out Price (USD)': item.outPriceUSD ? formatUSD(item.outPriceUSD) : '-',
-          'Base Price (IQD)': item.basePriceIQD ? formatIQD(item.basePriceIQD) : '-',
-          'Net Price (IQD)': item.netPriceIQD ? formatIQD(item.netPriceIQD) : '-',
-          'Out Price (IQD)': item.outPriceIQD ? formatIQD(item.outPriceIQD) : '-',
-          'Total Quantity': item.totalQuantity,
-          'Total Base Value (USD)': item.basePriceUSD ? formatUSD(item.basePriceUSD * item.totalQuantity) : '-',
-          'Total Net Value (USD)': item.netPriceUSD ? formatUSD(item.netPriceUSD * item.totalQuantity) : '-',
-          'Total Base Value (IQD)': item.basePriceIQD ? formatIQD(item.basePriceIQD * item.totalQuantity) : '-',
-          'Total Net Value (IQD)': item.netPriceIQD ? formatIQD(item.netPriceIQD * item.totalQuantity) : '-',
-          'Expiry Date': item.expireDate ? formatDate(item.expireDate) : 'N/A',
-          'Expiry Status': item.expireDate ? expiryStyle.status : 'N/A'
         };
+
+        if (canSeeBasePrice) {
+          row['Base Price (USD)'] = item.basePriceUSD ? formatUSD(item.basePriceUSD) : '-';
+        }
+        row['Net Price (USD)'] = item.netPriceUSD ? formatUSD(item.netPriceUSD) : '-';
+        row['Out Price (USD)'] = item.outPriceUSD ? formatUSD(item.outPriceUSD) : '-';
+
+        if (canSeeBasePrice) {
+          row['Base Price (IQD)'] = item.basePriceIQD ? formatIQD(item.basePriceIQD) : '-';
+        }
+        row['Net Price (IQD)'] = item.netPriceIQD ? formatIQD(item.netPriceIQD) : '-';
+        row['Out Price (IQD)'] = item.outPriceIQD ? formatIQD(item.outPriceIQD) : '-';
+
+        row['Total Quantity'] = item.totalQuantity;
+
+        if (canSeeBasePrice) {
+          row['Total Base Value (USD)'] = item.basePriceUSD ? formatUSD(item.basePriceUSD * item.totalQuantity) : '-';
+        }
+        row['Total Net Value (USD)'] = item.netPriceUSD ? formatUSD(item.netPriceUSD * item.totalQuantity) : '-';
+
+        if (canSeeBasePrice) {
+          row['Total Base Value (IQD)'] = item.basePriceIQD ? formatIQD(item.basePriceIQD * item.totalQuantity) : '-';
+        }
+        row['Total Net Value (IQD)'] = item.netPriceIQD ? formatIQD(item.netPriceIQD * item.totalQuantity) : '-';
+
+        row['Expiry Date'] = item.expireDate ? formatDate(item.expireDate) : 'N/A';
+        row['Expiry Status'] = item.expireDate ? expiryStyle.status : 'N/A';
+
+        return row;
       });
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -803,13 +874,10 @@ export default function StorePage() {
   }
 
   return (
-    // 0 margins, 0 padding on the outermost container to ensure 100% full screen width
     <div style={{ width: '100%', margin: 0, padding: 0, boxSizing: 'border-box', backgroundColor: 'white', ...nrtFontStyle, minHeight: '100vh' }}>
-      
-      {/* Wrapper with no card edges, just pure full width */}
+
       <div style={{ width: '100%', boxSizing: 'border-box' }}>
-        
-        {/* Header and controls (A tiny bit of padding here so the text doesn't hit the physical screen edge) */}
+
         <div style={{ padding: '15px 15px 0 15px', width: '100%', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#1f2937', margin: 0, ...nrtFontBoldStyle }}>Store Inventory</h2>
@@ -873,7 +941,8 @@ export default function StorePage() {
             </div>
           )}
 
-          {/* Branch filter for superAdmin */}
+          {/* Branch filter — superAdmin only. Admin/user never see this and are
+              always locked to their own branch via the query itself. */}
           {user?.role === "superAdmin" && (
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Branch:</label>
@@ -895,7 +964,6 @@ export default function StorePage() {
             </div>
           )}
 
-          {/* Date Search Section */}
           <div style={{
             padding: '10px',
             backgroundColor: '#f9fafb',
@@ -966,7 +1034,6 @@ export default function StorePage() {
           </div>
         </div>
 
-        {/* Table Area (0 horizontal margin/padding to stretch 100%) */}
         {filteredItems.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem', margin: '0 15px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb', ...nrtFontStyle }}>
             <div style={{ margin: '0 auto 16px', height: '48px', width: '48px', borderRadius: '9999px', backgroundColor: '#e5e7eb' }}>
@@ -984,31 +1051,36 @@ export default function StorePage() {
             </p>
           </div>
         ) : (
-          <div style={{ 
+          <div style={{
             width: '100%',
-            overflowX: 'auto', 
-            overflowY: 'auto', 
-            minHeight: '65vh', 
-            maxHeight: '85vh', 
+            overflowX: 'auto',
+            overflowY: 'auto',
+            minHeight: '65vh',
+            maxHeight: '85vh',
             borderTop: '1px solid #e5e7eb',
             borderBottom: '1px solid #e5e7eb'
           }}>
-            {/* Table margins set strictly to 0 */}
             <table style={{ width: '100%', margin: 0, borderCollapse: 'collapse', minWidth: '1000px' }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr style={{ backgroundColor: '#f9fafb' }}>
                   <TableHeader title="Barcode" columnKey="barcode" colWidth="100px" />
                   <TableHeader title="Item Name" columnKey="name" colWidth="auto" />
-                  {user?.role === "superAdmin" && (
-                    <TableHeader title="Branch" columnKey="branch" colWidth="90px" />
-                  )}
+                  {/* Branch column: visible to everyone now. Admin/user simply
+                      always see their own single branch here, which matches
+                      what the Firestore query already scopes them to. */}
+                  <TableHeader title="Branch" columnKey="branch" colWidth="90px" />
                   <TableHeader title="Bought Bill #" columnKey="boughtBill" colWidth="120px" />
                   <TableHeader title="Added Date" columnKey="createdAt" colWidth="140px" />
                   <TableHeader title="Currency" columnKey="priceType" colWidth="90px" />
-                  <TableHeader title="Base Price (USD)" columnKey="basePriceUSD" type="number" colWidth="110px" />
+                  {/* Base Price columns: superAdmin only — admin/user must never see cost/purchase price. */}
+                  {canSeeBasePrice && (
+                    <TableHeader title="Base Price (USD)" columnKey="basePriceUSD" type="number" colWidth="110px" />
+                  )}
                   <TableHeader title="Net Price (USD)" columnKey="netPriceUSD" type="number" colWidth="110px" />
                   <TableHeader title="Out Price (USD)" columnKey="outPriceUSD" type="number" colWidth="110px" />
-                  <TableHeader title="Base Price (IQD)" columnKey="basePriceIQD" type="number" colWidth="110px" />
+                  {canSeeBasePrice && (
+                    <TableHeader title="Base Price (IQD)" columnKey="basePriceIQD" type="number" colWidth="110px" />
+                  )}
                   <TableHeader title="Net Price (IQD)" columnKey="netPriceIQD" type="number" colWidth="110px" />
                   <TableHeader title="Out Price (IQD)" columnKey="outPriceIQD" type="number" colWidth="110px" />
                   <TableHeader title="Quantity" columnKey="quantity" type="number" colWidth="90px" />
@@ -1021,21 +1093,19 @@ export default function StorePage() {
                   const expiryStyle = getExpiryStyle(item.expireDate);
                   const isUSD = item.priceType === 'USD';
                   const isZeroQuantity = item.totalQuantity === 0;
-                  
+
                   return (
-                    <tr key={index} style={{ 
-                      borderBottom: '1px solid #e5e7eb', 
+                    <tr key={index} style={{
+                      borderBottom: '1px solid #e5e7eb',
                       ...nrtFontStyle,
                       opacity: isZeroQuantity ? '0.6' : '1',
                       backgroundColor: isZeroQuantity ? '#f9fafb' : 'transparent'
                     }}>
                       <td style={{ padding: '12px', fontFamily: 'monospace', borderRight: '1px solid #e5e7eb', ...nrtFontStyle }}>{item.barcode}</td>
                       <td style={{ padding: '12px', fontWeight: '500', borderRight: '1px solid #e5e7eb', wordBreak: 'break-word', whiteSpace: 'normal', ...nrtFontStyle }}>{item.name}</td>
-                      {user?.role === "superAdmin" && (
-                        <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
-                          <span style={getBranchStyle(item.branch)}>{item.branch}</span>
-                        </td>
-                      )}
+                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
+                        <span style={getBranchStyle(item.branch)}>{item.branch}</span>
+                      </td>
                       <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
                         <span style={{
                           backgroundColor: '#dbeafe',
@@ -1062,50 +1132,52 @@ export default function StorePage() {
                           {item.priceType}
                         </span>
                       </td>
-                      {/* USD Columns */}
-                      <td style={{ 
-                        padding: '12px', borderRight: '1px solid #e5e7eb', 
-                        backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
-                        color: isUSD ? '#065f46' : '#9ca3af',
-                        ...nrtFontStyle
-                      }}>
-                        {isUSD ? formatUSD(item.basePriceUSD) : '-'}
-                      </td>
-                      <td style={{ 
-                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                      {canSeeBasePrice && (
+                        <td style={{
+                          padding: '12px', borderRight: '1px solid #e5e7eb',
+                          backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
+                          color: isUSD ? '#065f46' : '#9ca3af',
+                          ...nrtFontStyle
+                        }}>
+                          {isUSD ? formatUSD(item.basePriceUSD) : '-'}
+                        </td>
+                      )}
+                      <td style={{
+                        padding: '12px', borderRight: '1px solid #e5e7eb',
                         backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
                         color: isUSD ? '#065f46' : '#9ca3af',
                         ...nrtFontStyle
                       }}>
                         {isUSD ? formatUSD(item.netPriceUSD) : '-'}
                       </td>
-                      <td style={{ 
-                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                      <td style={{
+                        padding: '12px', borderRight: '1px solid #e5e7eb',
                         backgroundColor: isUSD ? '#f0fdf4' : '#f9fafb',
                         color: isUSD ? '#065f46' : '#9ca3af',
                         ...nrtFontStyle
                       }}>
                         {isUSD ? formatUSD(item.outPriceUSD) : '-'}
                       </td>
-                      {/* IQD Columns */}
-                      <td style={{ 
-                        padding: '12px', borderRight: '1px solid #e5e7eb', 
-                        backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
-                        color: !isUSD ? '#92400e' : '#9ca3af',
-                        ...nrtFontStyle
-                      }}>
-                        {!isUSD ? formatIQD(item.basePriceIQD) : '-'}
-                      </td>
-                      <td style={{ 
-                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                      {canSeeBasePrice && (
+                        <td style={{
+                          padding: '12px', borderRight: '1px solid #e5e7eb',
+                          backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
+                          color: !isUSD ? '#92400e' : '#9ca3af',
+                          ...nrtFontStyle
+                        }}>
+                          {!isUSD ? formatIQD(item.basePriceIQD) : '-'}
+                        </td>
+                      )}
+                      <td style={{
+                        padding: '12px', borderRight: '1px solid #e5e7eb',
                         backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
                         color: !isUSD ? '#92400e' : '#9ca3af',
                         ...nrtFontStyle
                       }}>
                         {!isUSD ? formatIQD(item.netPriceIQD) : '-'}
                       </td>
-                      <td style={{ 
-                        padding: '12px', borderRight: '1px solid #e5e7eb', 
+                      <td style={{
+                        padding: '12px', borderRight: '1px solid #e5e7eb',
                         backgroundColor: !isUSD ? '#fef3c7' : '#f9fafb',
                         color: !isUSD ? '#92400e' : '#9ca3af',
                         ...nrtFontStyle
@@ -1201,19 +1273,22 @@ export default function StorePage() {
               </tbody>
               <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 1 }}>
                 <tr style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb', boxShadow: '0 -2px 4px rgba(0,0,0,0.05)' }}>
-                  <td colSpan={user.role === "superAdmin" ? 6 : 5} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
+                  {/* Barcode, Item Name, Branch, Bought Bill #, Added Date, Currency = 6 columns */}
+                  <td colSpan={6} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
                     Totals:
+                  </td>
+                  {/* USD group: Base(if superAdmin)+Net+Out */}
+                  <td colSpan={canSeeBasePrice ? 3 : 2} style={{ padding: '12px', fontWeight: '600', color: '#065f46', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
+                    {canSeeBasePrice && <>USD Base: {formatUSD(totalBaseValueUSD)}<br/></>}
+                    USD Net: {formatUSD(totalNetValueUSD)}
+                  </td>
+                  {/* IQD group: Base(if superAdmin)+Net+Out */}
+                  <td colSpan={canSeeBasePrice ? 3 : 2} style={{ padding: '12px', fontWeight: '600', color: '#92400e', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
+                    {canSeeBasePrice && <>IQD Base: {formatIQD(totalBaseValueIQD)}<br/></>}
+                    IQD Net: {formatIQD(totalNetValueIQD)}
                   </td>
                   <td style={{ padding: '12px', fontWeight: '600', color: '#1f2937', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
                     {totalQuantity}
-                  </td>
-                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#065f46', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
-                    USD Base: {formatUSD(totalBaseValueUSD)}<br/>
-                    USD Net: {formatUSD(totalNetValueUSD)}
-                  </td>
-                  <td colSpan="2" style={{ padding: '12px', fontWeight: '600', color: '#92400e', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
-                    IQD Base: {formatIQD(totalBaseValueIQD)}<br/>
-                    IQD Net: {formatIQD(totalNetValueIQD)}
                   </td>
                   <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}></td>
                   <td style={{ padding: '12px', borderRight: 'none' }}></td>
@@ -1224,7 +1299,6 @@ export default function StorePage() {
         )}
       </div>
 
-      {/* Edit Modal */}
       {editingItem && (
         <div style={{
           position: 'fixed',
@@ -1258,7 +1332,7 @@ export default function StorePage() {
                 setIsSubmitting(true);
 
                 const newQuantity = parseInt(editForm.quantity);
-                
+
                 if (isNaN(newQuantity) || newQuantity < 0) {
                   setError("Please enter a valid quantity");
                   return;
@@ -1270,18 +1344,23 @@ export default function StorePage() {
                 };
 
                 if (editForm.priceType === 'USD') {
-                  const basePriceUSD = parseFloat(editForm.basePriceUSD);
+                  // Non-superAdmin never sees/edits base price — preserve
+                  // whatever base price already existed on the document
+                  // instead of trusting client input for it.
+                  const basePriceUSD = canSeeBasePrice
+                    ? parseFloat(editForm.basePriceUSD)
+                    : (editingItem.basePriceUSD || 0);
                   const netPriceUSD = parseFloat(editForm.netPriceUSD);
                   const outPriceUSD = parseFloat(editForm.outPriceUSD);
 
-                  if (isNaN(basePriceUSD) || basePriceUSD < 0 || 
-                      isNaN(netPriceUSD) || netPriceUSD < 0 || 
+                  if (isNaN(basePriceUSD) || basePriceUSD < 0 ||
+                      isNaN(netPriceUSD) || netPriceUSD < 0 ||
                       isNaN(outPriceUSD) || outPriceUSD < 0) {
                     setError("Please enter valid USD prices");
                     return;
                   }
 
-                  if (netPriceUSD < basePriceUSD) {
+                  if (canSeeBasePrice && netPriceUSD < basePriceUSD) {
                     setError("Net price cannot be less than base price");
                     return;
                   }
@@ -1298,18 +1377,20 @@ export default function StorePage() {
                   updateData.netPriceIQD = null;
                   updateData.outPriceIQD = null;
                 } else {
-                  const basePriceIQD = parseFloat(editForm.basePriceIQD);
+                  const basePriceIQD = canSeeBasePrice
+                    ? parseFloat(editForm.basePriceIQD)
+                    : (editingItem.basePriceIQD || 0);
                   const netPriceIQD = parseFloat(editForm.netPriceIQD);
                   const outPriceIQD = parseFloat(editForm.outPriceIQD);
 
-                  if (isNaN(basePriceIQD) || basePriceIQD < 0 || 
-                      isNaN(netPriceIQD) || netPriceIQD < 0 || 
+                  if (isNaN(basePriceIQD) || basePriceIQD < 0 ||
+                      isNaN(netPriceIQD) || netPriceIQD < 0 ||
                       isNaN(outPriceIQD) || outPriceIQD < 0) {
                     setError("Please enter valid IQD prices");
                     return;
                   }
 
-                  if (netPriceIQD < basePriceIQD) {
+                  if (canSeeBasePrice && netPriceIQD < basePriceIQD) {
                     setError("Net price cannot be less than base price");
                     return;
                   }
@@ -1327,7 +1408,6 @@ export default function StorePage() {
                   updateData.outPriceUSD = null;
                 }
 
-                // DIRECT FIRESTORE UPDATE TO BYPASS MISSING IMPORT
                 await updateDoc(doc(db, "storeItems", editingItem.id), updateData);
 
                 setEditingItem(null);
@@ -1365,18 +1445,20 @@ export default function StorePage() {
 
               {editForm.priceType === 'USD' ? (
                 <>
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Base Price (USD) - Purchase Price</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={editForm.basePriceUSD}
-                      onChange={(e) => setEditForm({...editForm, basePriceUSD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
-                      required
-                      min="0"
-                    />
-                  </div>
+                  {canSeeBasePrice && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Base Price (USD) - Purchase Price</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editForm.basePriceUSD}
+                        onChange={(e) => setEditForm({...editForm, basePriceUSD: e.target.value})}
+                        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
+                        required
+                        min="0"
+                      />
+                    </div>
+                  )}
 
                   <div style={{ marginBottom: '1rem' }}>
                     <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Net Price (USD) - Including Expenses</label>
@@ -1389,7 +1471,9 @@ export default function StorePage() {
                       required
                       min="0"
                     />
-                    <small style={{ color: '#6b7280', ...nrtFontStyle }}>Must be greater than or equal to base price</small>
+                    {canSeeBasePrice && (
+                      <small style={{ color: '#6b7280', ...nrtFontStyle }}>Must be greater than or equal to base price</small>
+                    )}
                   </div>
 
                   <div style={{ marginBottom: '1rem' }}>
@@ -1408,17 +1492,19 @@ export default function StorePage() {
                 </>
               ) : (
                 <>
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Base Price (IQD) - Purchase Price</label>
-                    <input
-                      type="number"
-                      value={editForm.basePriceIQD}
-                      onChange={(e) => setEditForm({...editForm, basePriceIQD: e.target.value})}
-                      style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
-                      required
-                      min="0"
-                    />
-                  </div>
+                  {canSeeBasePrice && (
+                    <div style={{ marginBottom: '1rem' }}>
+                      <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Base Price (IQD) - Purchase Price</label>
+                      <input
+                        type="number"
+                        value={editForm.basePriceIQD}
+                        onChange={(e) => setEditForm({...editForm, basePriceIQD: e.target.value})}
+                        style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
+                        required
+                        min="0"
+                      />
+                    </div>
+                  )}
 
                   <div style={{ marginBottom: '1rem' }}>
                     <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Net Price (IQD) - Including Expenses</label>
@@ -1430,7 +1516,9 @@ export default function StorePage() {
                       required
                       min="0"
                     />
-                    <small style={{ color: '#6b7280', ...nrtFontStyle }}>Must be greater than or equal to base price</small>
+                    {canSeeBasePrice && (
+                      <small style={{ color: '#6b7280', ...nrtFontStyle }}>Must be greater than or equal to base price</small>
+                    )}
                   </div>
 
                   <div style={{ marginBottom: '1rem' }}>
