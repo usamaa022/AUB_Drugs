@@ -161,6 +161,222 @@ const getExpiryStyle = (expireDate) => {
   }
 };
 
+// =========================================================================
+// DEFINED OUTSIDE TO PREVENT RE-RENDERS & FIX TEXT BOX FOCUS BUGS
+// =========================================================================
+const ExcelFilterDropdown = ({ 
+  columnKey, 
+  type = "string",
+  alignLeft = false,
+  storeItems,
+  columnFilters,
+  activeFilterDropdown,
+  setActiveFilterDropdown,
+  handleUpdateColumnFilter,
+  clearColumnFilter
+}) => {
+  const [search, setSearch] = useState("");
+  const isOpen = activeFilterDropdown === columnKey;
+  const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
+
+  const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
+  const { operator, textValue, selectedValues } = filterState;
+
+  const uniqueValues = useMemo(() => {
+    const vals = new Set();
+    storeItems.forEach(item => {
+      let val = "";
+      if (columnKey === 'barcode') val = item.barcode;
+      if (columnKey === 'name') val = item.name;
+      if (columnKey === 'branch') val = item.branch;
+      if (columnKey === 'boughtBill') val = item.boughtBillNumber || 'N/A';
+      if (columnKey === 'createdAt') val = formatDateTime(item.createdAt);
+      if (columnKey === 'priceType') val = item.priceType;
+      if (columnKey === 'basePriceUSD') val = item.basePriceUSD;
+      if (columnKey === 'netPriceUSD') val = item.netPriceUSD;
+      if (columnKey === 'outPriceUSD') val = item.outPriceUSD;
+      if (columnKey === 'basePriceIQD') val = item.basePriceIQD;
+      if (columnKey === 'netPriceIQD') val = item.netPriceIQD;
+      if (columnKey === 'outPriceIQD') val = item.outPriceIQD;
+      if (columnKey === 'quantity') val = item.totalQuantity;
+      if (columnKey === 'expireDate') val = formatDate(item.expireDate);
+
+      vals.add(String(val ?? ""));
+    });
+    return Array.from(vals).sort();
+  }, [storeItems, columnKey]);
+
+  const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+  const isActive = !!(textValue || (selectedValues && selectedValues.length > 0) || ['isEmpty', 'isNotEmpty'].includes(operator));
+
+  const handleCheckbox = (val, checked) => {
+    const current = selectedValues || [];
+    const updated = checked ? [...current, val] : current.filter(v => v !== val);
+    handleUpdateColumnFilter(columnKey, { selectedValues: updated });
+  };
+
+  const handleSelectAll = (checked) => {
+    handleUpdateColumnFilter(columnKey, { selectedValues: checked ? [...uniqueValues] : [] });
+  };
+
+  return (
+    <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
+      <div
+        onClick={(e) => { 
+          e.stopPropagation(); 
+          setActiveFilterDropdown(isOpen ? null : columnKey); 
+        }}
+        style={{ 
+          cursor: "pointer", 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center", 
+          padding: "0.25rem", 
+          borderRadius: "0.375rem", 
+          background: isActive ? "#dbeafe" : "transparent", 
+          color: isActive ? "#2563eb" : "#bdc3c7" 
+        }}
+      >
+        <Filter size={14} />
+      </div>
+
+      {isOpen && (
+        <div 
+          style={{ 
+            position: "absolute", 
+            top: "100%", 
+            ...(alignLeft ? { left: 0, right: "auto" } : { right: 0, left: "auto" }),
+            marginTop: "0.5rem", 
+            background: "white", 
+            border: "1px solid #cbd5e1", 
+            borderRadius: "0.5rem", 
+            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)", 
+            zIndex: 9999, 
+            width: "260px", 
+            maxWidth: "85vw", 
+            display: "flex", 
+            flexDirection: "column", 
+            cursor: "default", 
+            overflow: "hidden", 
+            color: "#2c3e50" 
+          }} 
+          onClick={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <p style={{ margin: "0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
+            <select
+              value={operator || operators[0].value}
+              onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
+              style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
+            >
+              {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+            </select>
+            {!['isEmpty', 'isNotEmpty'].includes(operator) && (
+              <input
+                type={type === "number" ? "number" : "text"}
+                placeholder="Value..."
+                value={textValue || ""}
+                onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
+                style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none" }}
+              />
+            )}
+          </div>
+
+          <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", flex: 1, boxSizing: "border-box" }}>
+            <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
+            <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem", boxSizing: "border-box" }}>
+              <Search size={14} color="#94a3b8" />
+              <input
+                type="text"
+                placeholder="Search values..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                style={{ border: "none", outline: "none", width: "100%", boxSizing: "border-box", fontSize: "0.875rem", marginLeft: "0.5rem" }}
+              />
+            </div>
+
+            <div style={{ maxHeight: "180px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                  style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                />
+                <span>(Select All)</span>
+              </label>
+              {displayValues.map(val => (
+                <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedValues.includes(val)}
+                    onChange={(e) => handleCheckbox(val, e.target.checked)}
+                    style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                  />
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "" ? "(Blank)" : val}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
+            <button onClick={() => clearColumnFilter(columnKey)} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
+            <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TableHeader = ({ 
+  title, 
+  columnKey, 
+  type = "string", 
+  colWidth,
+  alignLeft = false,
+  sortConfig,
+  handleSort,
+  getSortIcon,
+  storeItems,
+  columnFilters,
+  activeFilterDropdown,
+  setActiveFilterDropdown,
+  handleUpdateColumnFilter,
+  clearColumnFilter
+}) => (
+  <th style={{
+    backgroundColor: "#34495e", color: "white", padding: "12px 10px",
+    textAlign: "left", fontSize: "14px", fontFamily: "'NRT-Bd', sans-serif",
+    whiteSpace: "nowrap", borderRight: "1px solid #576574",
+    width: colWidth || "auto",
+    minWidth: colWidth || "auto"
+  }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+      <div onClick={() => handleSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
+        {title}
+        <span style={{ fontSize: "11px", color: "#bdc3c7" }}>
+          {getSortIcon(columnKey)}
+        </span>
+      </div>
+      <ExcelFilterDropdown 
+        columnKey={columnKey} 
+        type={type} 
+        alignLeft={alignLeft}
+        storeItems={storeItems}
+        columnFilters={columnFilters}
+        activeFilterDropdown={activeFilterDropdown}
+        setActiveFilterDropdown={setActiveFilterDropdown}
+        handleUpdateColumnFilter={handleUpdateColumnFilter}
+        clearColumnFilter={clearColumnFilter}
+      />
+    </div>
+  </th>
+);
+
 // Main component
 export default function StorePage() {
   const { user } = useAuth();
@@ -191,11 +407,6 @@ export default function StorePage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // NOTE: this can no longer safely be initialized from `user` here, because
-  // `user` from useAuth() is almost always still null on first render (auth
-  // resolves async). useState's initializer only runs once, so it used to
-  // permanently lock everyone (including superAdmin) to "Slemany" until they
-  // manually touched the dropdown. It's now synced via the effect below.
   const [branchFilter, setBranchFilter] = useState("Slemany");
   const [branchFilterInitialized, setBranchFilterInitialized] = useState(false);
 
@@ -203,29 +414,22 @@ export default function StorePage() {
   const [columnFilters, setColumnFilters] = useState({});
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
 
-  // Whether the current user is allowed to see Base Price (cost) data at all.
-  // Admin/user roles should never see purchase/base cost — only superAdmin.
   const canSeeBasePrice = user?.role === "superAdmin";
 
-  // Sync branchFilter to the real user once auth resolves (or if the
-  // logged-in user's role/branch changes, e.g. after switching accounts).
   useEffect(() => {
     if (!user) return;
 
     if (!branchFilterInitialized) {
-      // First time we actually know who the user is: set the correct default.
       setBranchFilter(user.role === "superAdmin" ? "All Stores" : (user.branch || "Slemany"));
       setBranchFilterInitialized(true);
       return;
     }
 
-    // If a non-superAdmin's branch changes later, keep them pinned to it.
     if (user.role !== "superAdmin") {
       setBranchFilter(user.branch || "Slemany");
     }
   }, [user, branchFilterInitialized]);
 
-  // Handle outside click for dropdowns safely with touch support
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!e.target.closest('.filter-dropdown-container')) {
@@ -240,15 +444,12 @@ export default function StorePage() {
     };
   }, []);
 
-  // Fetch store items with proper error handling and fallback
   useEffect(() => {
     if (!user) {
       router.push("/login");
       return;
     }
 
-    // Wait until we've resolved the correct default branchFilter before
-    // firing the first query, so superAdmin doesn't briefly query "Slemany".
     if (!branchFilterInitialized) return;
 
     setIsLoading(true);
@@ -265,18 +466,12 @@ export default function StorePage() {
             orderBy("createdAt", "desc")
           );
         } else if (user.role !== "superAdmin") {
-          // Non-superAdmin (admin, user, etc.) are ALWAYS scoped to their own
-          // branch, regardless of branchFilter — branchFilter is not even
-          // exposed to them in the UI (see the branch <select> below).
-          // This is enforced at the query level, so it can never leak other
-          // branches' data to the client.
           q = query(
             collection(db, "storeItems"),
             where("branch", "==", user.branch),
             orderBy("createdAt", "desc")
           );
         } else {
-          // superAdmin + "All Stores"
           q = query(
             collection(db, "storeItems"),
             orderBy("createdAt", "desc")
@@ -343,8 +538,6 @@ export default function StorePage() {
           }
         );
 
-        // Return a combined cleanup so both listeners (main + fallback, if any)
-        // get torn down when the effect re-runs or unmounts.
         return () => {
           mainUnsubscribe();
           if (fallbackUnsubscribe) fallbackUnsubscribe();
@@ -421,24 +614,17 @@ export default function StorePage() {
     };
   }, [user, router, branchFilter, branchFilterInitialized]);
 
-  // Sort items
   const sortItems = useCallback((items) => {
     return [...items].sort((a, b) => {
       const key = sortConfig.key;
       const direction = sortConfig.direction;
 
       if (key === 'name') {
-        return direction === 'asc'
-          ? a.name?.localeCompare(b.name)
-          : b.name?.localeCompare(a.name);
+        return direction === 'asc' ? a.name?.localeCompare(b.name) : b.name?.localeCompare(a.name);
       } else if (key === 'barcode') {
-        return direction === 'asc'
-          ? a.barcode?.localeCompare(b.barcode)
-          : b.barcode?.localeCompare(a.barcode);
+        return direction === 'asc' ? a.barcode?.localeCompare(b.barcode) : b.barcode?.localeCompare(a.barcode);
       } else if (key === 'quantity') {
-        return direction === 'asc'
-          ? a.totalQuantity - b.totalQuantity
-          : b.totalQuantity - a.totalQuantity;
+        return direction === 'asc' ? a.totalQuantity - b.totalQuantity : b.totalQuantity - a.totalQuantity;
       } else if (key === 'basePriceUSD') {
         return direction === 'asc' ? a.basePriceUSD - b.basePriceUSD : b.basePriceUSD - a.basePriceUSD;
       } else if (key === 'netPriceUSD') {
@@ -452,13 +638,9 @@ export default function StorePage() {
       } else if (key === 'outPriceIQD') {
         return direction === 'asc' ? a.outPriceIQD - b.outPriceIQD : b.outPriceIQD - a.outPriceIQD;
       } else if (key === 'branch') {
-        return direction === 'asc'
-          ? a.branch.localeCompare(b.branch)
-          : b.branch.localeCompare(a.branch);
+        return direction === 'asc' ? a.branch.localeCompare(b.branch) : b.branch.localeCompare(a.branch);
       } else if (key === 'boughtBill') {
-        return direction === 'asc'
-          ? String(a.boughtBillNumber).localeCompare(String(b.boughtBillNumber))
-          : String(b.boughtBillNumber).localeCompare(String(a.boughtBillNumber));
+        return direction === 'asc' ? String(a.boughtBillNumber).localeCompare(String(b.boughtBillNumber)) : String(b.boughtBillNumber).localeCompare(String(a.boughtBillNumber));
       } else if (key === 'createdAt') {
         const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
         const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
@@ -483,7 +665,6 @@ export default function StorePage() {
   };
 
   const handleBranchChange = (e) => {
-    // Only reachable by superAdmin — the <select> below is gated on that role.
     setBranchFilter(e.target.value);
   };
 
@@ -506,10 +687,7 @@ export default function StorePage() {
     setExpireBefore(e.target.value);
   };
 
-  // Setup Column Filters
-  const handleUpdateColumnFilter = (columnKey, updates) => {
-    // Guard: non-superAdmin can never filter on base price columns, since
-    // those columns aren't rendered for them at all.
+  const handleUpdateColumnFilter = useCallback((columnKey, updates) => {
     if (!canSeeBasePrice && (columnKey === 'basePriceUSD' || columnKey === 'basePriceIQD')) return;
 
     setColumnFilters(prev => {
@@ -522,7 +700,15 @@ export default function StorePage() {
       }
       return { ...prev, [columnKey]: next };
     });
-  };
+  }, [canSeeBasePrice]);
+
+  const clearColumnFilter = useCallback((columnKey) => {
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      delete next[columnKey];
+      return next;
+    });
+  }, []);
 
   const evaluateFilter = (itemValue, filterData, type = "string") => {
     if (!filterData) return true;
@@ -556,12 +742,10 @@ export default function StorePage() {
     return true;
   };
 
-  // Filter items based on ALL search criteria (global + columns)
   const filteredItems = useMemo(() => {
     const sorted = sortItems(storeItems);
 
     return sorted.filter(item => {
-      // 1. Global Filters
       const matchesName = !searchQuery || item.name?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesBarcode = !barcodeSearch || item.barcode?.toLowerCase().includes(barcodeSearch.toLowerCase());
       const matchesBill = !billSearch || String(item.boughtBillNumber).toLowerCase().includes(billSearch.toLowerCase());
@@ -594,10 +778,7 @@ export default function StorePage() {
 
       if (!(matchesName && matchesBarcode && matchesBill && matchesDateRange && matchesExpireBefore)) return false;
 
-      // 2. Column Header Filters
       for (const [columnKey, filterData] of Object.entries(columnFilters)) {
-        // Safety net: never evaluate a base-price filter for non-superAdmin,
-        // even if one somehow ended up in state.
         if (!canSeeBasePrice && (columnKey === 'basePriceUSD' || columnKey === 'basePriceIQD')) continue;
 
         let itemValue = "";
@@ -625,157 +806,6 @@ export default function StorePage() {
     });
   }, [storeItems, searchQuery, barcodeSearch, billSearch, fromDate, toDate, expireBefore, sortItems, columnFilters, canSeeBasePrice]);
 
-  // Header Dropdown Component
-  const ExcelFilterDropdown = ({ columnKey, type = "string" }) => {
-    const [search, setSearch] = useState("");
-    const isOpen = activeFilterDropdown === columnKey;
-    const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
-
-    const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
-    const { operator, textValue, selectedValues } = filterState;
-
-    const uniqueValues = useMemo(() => {
-      const vals = new Set();
-      storeItems.forEach(item => {
-        let val = "";
-        if (columnKey === 'barcode') val = item.barcode;
-        if (columnKey === 'name') val = item.name;
-        if (columnKey === 'branch') val = item.branch;
-        if (columnKey === 'boughtBill') val = item.boughtBillNumber || 'N/A';
-        if (columnKey === 'createdAt') val = formatDateTime(item.createdAt);
-        if (columnKey === 'priceType') val = item.priceType;
-        if (columnKey === 'basePriceUSD') val = item.basePriceUSD;
-        if (columnKey === 'netPriceUSD') val = item.netPriceUSD;
-        if (columnKey === 'outPriceUSD') val = item.outPriceUSD;
-        if (columnKey === 'basePriceIQD') val = item.basePriceIQD;
-        if (columnKey === 'netPriceIQD') val = item.netPriceIQD;
-        if (columnKey === 'outPriceIQD') val = item.outPriceIQD;
-        if (columnKey === 'quantity') val = item.totalQuantity;
-        if (columnKey === 'expireDate') val = formatDate(item.expireDate);
-
-        vals.add(String(val || ""));
-      });
-      return Array.from(vals).sort();
-    }, [storeItems, columnKey]);
-
-    const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
-    const isActive = !!(textValue || (selectedValues && selectedValues.length > 0) || ['isEmpty', 'isNotEmpty'].includes(operator));
-
-    const handleCheckbox = (val, checked) => {
-      const current = selectedValues || [];
-      const updated = checked ? [...current, val] : current.filter(v => v !== val);
-      handleUpdateColumnFilter(columnKey, { selectedValues: updated });
-    };
-
-    const handleSelectAll = (checked) => {
-      handleUpdateColumnFilter(columnKey, { selectedValues: checked ? [...uniqueValues] : [] });
-    };
-
-    return (
-      <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
-        <div
-          onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
-          style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: "0.25rem", borderRadius: "0.375rem", background: isActive ? "#dbeafe" : "transparent", color: isActive ? "#2563eb" : "#bdc3c7" }}
-        >
-          <Filter size={14} />
-        </div>
-
-        {isOpen && (
-          <div style={{ position: "absolute", top: "100%", right: 0, marginTop: "0.5rem", background: "white", border: "1px solid #cbd5e1", borderRadius: "0.5rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)", zIndex: 9999, width: "260px", maxWidth: "85vw", display: "flex", flexDirection: "column", cursor: "default", overflow: "hidden", color: "#2c3e50" }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
-              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <select
-                  value={operator || operators[0].value}
-                  onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
-                  style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
-                >
-                  {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
-                </select>
-                {!['isEmpty', 'isNotEmpty'].includes(operator) && (
-                  <input
-                    type={type === "number" ? "number" : "text"}
-                    placeholder="Value..."
-                    value={textValue || ""}
-                    onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
-                    style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none" }}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", flex: 1, boxSizing: "border-box" }}>
-              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
-              <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem", boxSizing: "border-box" }}>
-                <Search size={14} color="#94a3b8" />
-                <input
-                  type="text"
-                  placeholder="Search values..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  style={{ border: "none", outline: "none", width: "100%", boxSizing: "border-box", fontSize: "0.875rem", marginLeft: "0.5rem" }}
-                />
-              </div>
-
-              <div style={{ maxHeight: "180px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
-                  />
-                  <span>(Select All)</span>
-                </label>
-                {displayValues.map(val => (
-                  <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedValues.includes(val)}
-                      onChange={(e) => handleCheckbox(val, e.target.checked)}
-                      style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
-                    />
-                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "" ? "(Blank)" : val}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
-              <button onClick={() => {
-                const updated = {...columnFilters};
-                delete updated[columnKey];
-                setColumnFilters(updated);
-              }} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
-              <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const TableHeader = ({ title, columnKey, type = "string", colWidth }) => (
-    <th style={{
-      backgroundColor: "#34495e", color: "white", padding: "12px 10px",
-      textAlign: "left", fontSize: "14px", fontFamily: "'NRT-Bd', sans-serif",
-      whiteSpace: "nowrap", borderRight: "1px solid #576574",
-      width: colWidth || "auto",
-      minWidth: colWidth || "auto"
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
-        <div onClick={() => handleSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
-          {title}
-          <span style={{ fontSize: "11px", color: "#bdc3c7" }}>
-            {getSortIcon(columnKey)}
-          </span>
-        </div>
-        <ExcelFilterDropdown columnKey={columnKey} type={type} />
-      </div>
-    </th>
-  );
-
-  // Calculate totals
   const totalQuantity = useMemo(() => {
     return filteredItems.reduce((sum, item) => sum + item.totalQuantity, 0);
   }, [filteredItems]);
@@ -796,8 +826,6 @@ export default function StorePage() {
     return filteredItems.reduce((sum, item) => sum + (item.netPriceIQD * item.totalQuantity), 0);
   }, [filteredItems]);
 
-  // Export to Excel — base price columns are stripped out for non-superAdmin
-  // so exported files can't leak cost data either.
   const exportToExcel = () => {
     try {
       const exportData = filteredItems.map(item => {
@@ -873,6 +901,8 @@ export default function StorePage() {
     );
   }
 
+  const columnsCount = (canSeeBasePrice ? 14 : 12) + 1; // Total columns for colSpan
+
   return (
     <div style={{ width: '100%', margin: 0, padding: 0, boxSizing: 'border-box', backgroundColor: 'white', ...nrtFontStyle, minHeight: '100vh' }}>
 
@@ -941,8 +971,6 @@ export default function StorePage() {
             </div>
           )}
 
-          {/* Branch filter — superAdmin only. Admin/user never see this and are
-              always locked to their own branch via the query itself. */}
           {user?.role === "superAdmin" && (
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Branch:</label>
@@ -1034,62 +1062,58 @@ export default function StorePage() {
           </div>
         </div>
 
-        {filteredItems.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem', margin: '0 15px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb', ...nrtFontStyle }}>
-            <div style={{ margin: '0 auto 16px', height: '48px', width: '48px', borderRadius: '9999px', backgroundColor: '#e5e7eb' }}>
-              <svg style={{ height: '24px', width: '24px', color: '#9ca3af', transform: 'translate(12px, 12px)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
-            </div>
-            <h3 style={{ marginBottom: '8px', fontSize: '18px', fontWeight: '600', ...nrtFontBoldStyle }}>
-              {fromDate || toDate || expireBefore || Object.keys(columnFilters).length > 0 ? "No items found" : "No items in inventory"}
-            </h3>
-            <p style={{ color: '#6b7280', ...nrtFontStyle }}>
-              {fromDate || toDate || expireBefore || Object.keys(columnFilters).length > 0
-                ? "Try adjusting your search filters"
-                : "Items will appear here once added to the store"}
-            </p>
-          </div>
-        ) : (
-          <div style={{
-            width: '100%',
-            overflowX: 'auto',
-            overflowY: 'auto',
-            minHeight: '65vh',
-            maxHeight: '85vh',
-            borderTop: '1px solid #e5e7eb',
-            borderBottom: '1px solid #e5e7eb'
-          }}>
-            <table style={{ width: '100%', margin: 0, borderCollapse: 'collapse', minWidth: '1000px' }}>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                <tr style={{ backgroundColor: '#f9fafb' }}>
-                  <TableHeader title="Barcode" columnKey="barcode" colWidth="100px" />
-                  <TableHeader title="Item Name" columnKey="name" colWidth="auto" />
-                  {/* Branch column: visible to everyone now. Admin/user simply
-                      always see their own single branch here, which matches
-                      what the Firestore query already scopes them to. */}
-                  <TableHeader title="Branch" columnKey="branch" colWidth="90px" />
-                  <TableHeader title="Bought Bill #" columnKey="boughtBill" colWidth="120px" />
-                  <TableHeader title="Added Date" columnKey="createdAt" colWidth="140px" />
-                  <TableHeader title="Currency" columnKey="priceType" colWidth="90px" />
-                  {/* Base Price columns: superAdmin only — admin/user must never see cost/purchase price. */}
-                  {canSeeBasePrice && (
-                    <TableHeader title="Base Price (USD)" columnKey="basePriceUSD" type="number" colWidth="110px" />
-                  )}
-                  <TableHeader title="Net Price (USD)" columnKey="netPriceUSD" type="number" colWidth="110px" />
-                  <TableHeader title="Out Price (USD)" columnKey="outPriceUSD" type="number" colWidth="110px" />
-                  {canSeeBasePrice && (
-                    <TableHeader title="Base Price (IQD)" columnKey="basePriceIQD" type="number" colWidth="110px" />
-                  )}
-                  <TableHeader title="Net Price (IQD)" columnKey="netPriceIQD" type="number" colWidth="110px" />
-                  <TableHeader title="Out Price (IQD)" columnKey="outPriceIQD" type="number" colWidth="110px" />
-                  <TableHeader title="Quantity" columnKey="quantity" type="number" colWidth="90px" />
-                  <TableHeader title="Expiry Date" columnKey="expireDate" colWidth="120px" />
-                  <th style={{ padding: '12px', textAlign: 'left', backgroundColor: "#34495e", color: "white", width: "80px", borderRight: 'none', ...nrtFontBoldStyle }}>Actions</th>
+        {/* The Table Always Renders So Header and Structure Never Disappear */}
+        <div style={{
+          width: '100%',
+          overflowX: 'auto',
+          overflowY: 'auto',
+          minHeight: '65vh',
+          maxHeight: '85vh',
+          borderTop: '1px solid #e5e7eb',
+          borderBottom: '1px solid #e5e7eb'
+        }}>
+          <table style={{ width: '100%', margin: 0, borderCollapse: 'collapse', minWidth: '1000px' }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+              <tr style={{ backgroundColor: '#f9fafb' }}>
+                {/* ⬅️ First Column Anchors Left so dropdown expands inward */}
+                <TableHeader title="Barcode" columnKey="barcode" colWidth="110px" alignLeft={true} sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Item Name" columnKey="name" colWidth="auto" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Branch" columnKey="branch" colWidth="90px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Bought Bill #" columnKey="boughtBill" colWidth="120px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Added Date" columnKey="createdAt" colWidth="140px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Currency" columnKey="priceType" colWidth="90px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                {canSeeBasePrice && (
+                  <TableHeader title="Base Price (USD)" columnKey="basePriceUSD" type="number" colWidth="110px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                )}
+                <TableHeader title="Net Price (USD)" columnKey="netPriceUSD" type="number" colWidth="110px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Out Price (USD)" columnKey="outPriceUSD" type="number" colWidth="110px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                {canSeeBasePrice && (
+                  <TableHeader title="Base Price (IQD)" columnKey="basePriceIQD" type="number" colWidth="110px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                )}
+                <TableHeader title="Net Price (IQD)" columnKey="netPriceIQD" type="number" colWidth="110px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Out Price (IQD)" columnKey="outPriceIQD" type="number" colWidth="110px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Quantity" columnKey="quantity" type="number" colWidth="90px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <TableHeader title="Expiry Date" columnKey="expireDate" colWidth="120px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
+                <th style={{ padding: '12px', textAlign: 'left', backgroundColor: "#34495e", color: "white", width: "80px", borderRight: 'none', ...nrtFontBoldStyle }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredItems.length === 0 ? (
+                <tr>
+                  <td colSpan={columnsCount} style={{ textAlign: 'center', padding: '3.5rem', backgroundColor: '#f9fafb', color: '#6b7280', ...nrtFontStyle }}>
+                    <div style={{ margin: '0 auto 12px', height: '44px', width: '44px', borderRadius: '9999px', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Search size={20} color="#9ca3af" />
+                    </div>
+                    <div style={{ fontWeight: '600', fontSize: '16px', color: '#1f2937', marginBottom: '4px' }}>
+                      {fromDate || toDate || expireBefore || Object.keys(columnFilters).length > 0 ? "No matching records found" : "No items in store"}
+                    </div>
+                    <p style={{ margin: 0, fontSize: '14px' }}>
+                      {fromDate || toDate || expireBefore || Object.keys(columnFilters).length > 0 ? "Try adjusting or clearing your active filters" : "Items will appear here once added to stock"}
+                    </p>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((item, index) => {
+              ) : (
+                filteredItems.map((item, index) => {
                   const expiryStyle = getExpiryStyle(item.expireDate);
                   const isUSD = item.priceType === 'USD';
                   const isZeroQuantity = item.totalQuantity === 0;
@@ -1269,34 +1293,31 @@ export default function StorePage() {
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-              <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 1 }}>
-                <tr style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb', boxShadow: '0 -2px 4px rgba(0,0,0,0.05)' }}>
-                  {/* Barcode, Item Name, Branch, Bought Bill #, Added Date, Currency = 6 columns */}
-                  <td colSpan={6} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
-                    Totals:
-                  </td>
-                  {/* USD group: Base(if superAdmin)+Net+Out */}
-                  <td colSpan={canSeeBasePrice ? 3 : 2} style={{ padding: '12px', fontWeight: '600', color: '#065f46', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
-                    {canSeeBasePrice && <>USD Base: {formatUSD(totalBaseValueUSD)}<br/></>}
-                    USD Net: {formatUSD(totalNetValueUSD)}
-                  </td>
-                  {/* IQD group: Base(if superAdmin)+Net+Out */}
-                  <td colSpan={canSeeBasePrice ? 3 : 2} style={{ padding: '12px', fontWeight: '600', color: '#92400e', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
-                    {canSeeBasePrice && <>IQD Base: {formatIQD(totalBaseValueIQD)}<br/></>}
-                    IQD Net: {formatIQD(totalNetValueIQD)}
-                  </td>
-                  <td style={{ padding: '12px', fontWeight: '600', color: '#1f2937', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
-                    {totalQuantity}
-                  </td>
-                  <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}></td>
-                  <td style={{ padding: '12px', borderRight: 'none' }}></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+            <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 1 }}>
+              <tr style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb', boxShadow: '0 -2px 4px rgba(0,0,0,0.05)' }}>
+                <td colSpan={6} style={{ padding: '12px', textAlign: 'right', fontWeight: '600', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
+                  Totals:
+                </td>
+                <td colSpan={canSeeBasePrice ? 3 : 2} style={{ padding: '12px', fontWeight: '600', color: '#065f46', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
+                  {canSeeBasePrice && <>USD Base: {formatUSD(totalBaseValueUSD)}<br/></>}
+                  USD Net: {formatUSD(totalNetValueUSD)}
+                </td>
+                <td colSpan={canSeeBasePrice ? 3 : 2} style={{ padding: '12px', fontWeight: '600', color: '#92400e', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
+                  {canSeeBasePrice && <>IQD Base: {formatIQD(totalBaseValueIQD)}<br/></>}
+                  IQD Net: {formatIQD(totalNetValueIQD)}
+                </td>
+                <td style={{ padding: '12px', fontWeight: '600', color: '#1f2937', borderRight: '1px solid #e5e7eb', ...nrtFontBoldStyle }}>
+                  {totalQuantity}
+                </td>
+                <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}></td>
+                <td style={{ padding: '12px', borderRight: 'none' }}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       {editingItem && (
@@ -1344,9 +1365,6 @@ export default function StorePage() {
                 };
 
                 if (editForm.priceType === 'USD') {
-                  // Non-superAdmin never sees/edits base price — preserve
-                  // whatever base price already existed on the document
-                  // instead of trusting client input for it.
                   const basePriceUSD = canSeeBasePrice
                     ? parseFloat(editForm.basePriceUSD)
                     : (editingItem.basePriceUSD || 0);

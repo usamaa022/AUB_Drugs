@@ -179,7 +179,7 @@ const formatFinancialLine = (usd, iqd, hasUSD, hasIQD) => {
   return parts[0];
 };
 
-// Calculate Financial Summary
+// Calculate Financial Summary (Only counting Unpaid sales and Unpaid returns)
 const calculatePharmacyFinancialSummary = (
   pharmacyId,
   allBills = [],
@@ -193,9 +193,13 @@ const calculatePharmacyFinancialSummary = (
   let pharmacyHasUSD = false;
   let pharmacyHasIQD = false;
 
+  // 1. Calculate Unpaid Sales Bills
   allBills.forEach((bill) => {
     if (bill.pharmacyId !== pharmacyId) return;
-    if (bill.paymentStatus !== "Unpaid") return;
+    
+    const billStatus = String(bill.paymentStatus || bill.status || "").toLowerCase();
+    const isPaid = bill.isPaid === true || billStatus === "paid" || billStatus === "completed" || billStatus === "processed";
+    if (isPaid) return; // Skip paid sales bills
 
     const billCurrency = bill.currency || "USD";
 
@@ -212,6 +216,7 @@ const calculatePharmacyFinancialSummary = (
     });
   });
 
+  // Include current bill items if previewing
   if (isPreview && currentBillItems.length > 0) {
     currentBillItems.forEach((item) => {
       const price = item.price || 0;
@@ -233,11 +238,17 @@ const calculatePharmacyFinancialSummary = (
     });
   }
 
+  // 2. Calculate Unpaid Return Bills Only
   let totalReturnBillsUSD = 0;
   let totalReturnBillsIQD = 0;
 
   allReturnBills.forEach((ret) => {
     if (ret.pharmacyId !== pharmacyId) return;
+
+    // 🔥 FIX: Ignore return bills that have already been Paid or Processed!
+    const returnStatus = String(ret.paymentStatus || ret.status || "").toLowerCase();
+    const isPaidOrProcessed = ret.isPaid === true || returnStatus === "paid" || returnStatus === "processed" || returnStatus === "completed";
+    if (isPaidOrProcessed) return;
 
     if (ret.totalReturnAmountUSD !== undefined && ret.totalReturnAmountIQD !== undefined) {
       totalReturnBillsUSD += ret.totalReturnAmountUSD || 0;
@@ -270,6 +281,7 @@ const calculatePharmacyFinancialSummary = (
     });
   });
 
+  // Calculate Net Remaining Balance
   const remainingUnpaidUSD = totalUnpaidBillsUSD - totalReturnBillsUSD;
   const remainingUnpaidIQD = totalUnpaidBillsIQD - totalReturnBillsIQD;
 
@@ -300,16 +312,6 @@ const styles = {
     fontSize: "16px",
     boxSizing: "border-box",
   },
-  header: {
-    fontSize: "24px",
-    fontWeight: "700",
-    marginBottom: "20px",
-    color: "#2c3e50",
-    textAlign: "center",
-    textTransform: "uppercase",
-    letterSpacing: "1px",
-    fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-  },
   formContainer: {
     backgroundColor: "white",
     padding: "16px",
@@ -318,12 +320,6 @@ const styles = {
     border: "1px solid #e1e8ed",
     marginBottom: "20px",
     overflow: "hidden",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: "15px",
-    marginBottom: "15px",
   },
   inputGroup: {
     marginBottom: "15px",
@@ -350,53 +346,6 @@ const styles = {
     outline: "none",
     WebkitAppearance: "none",
   },
-  textarea: {
-    width: "100%",
-    padding: "12px 14px",
-    border: "2px solid #e1e8ed",
-    borderRadius: "8px",
-    fontSize: "16px",
-    boxSizing: "border-box",
-    backgroundColor: "white",
-    fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    transition: "all 0.3s ease",
-    outline: "none",
-    resize: "vertical",
-    minHeight: "80px",
-  },
-  select: {
-    width: "100%",
-    padding: "12px 14px",
-    border: "2px solid #e1e8ed",
-    borderRadius: "8px",
-    fontSize: "16px",
-    boxSizing: "border-box",
-    backgroundColor: "white",
-    fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    outline: "none",
-    WebkitAppearance: "none",
-  },
-  checkboxContainer: {
-    display: "flex",
-    alignItems: "center",
-    marginBottom: "15px",
-    padding: "12px",
-    backgroundColor: "#f8f9fa",
-    borderRadius: "8px",
-    border: "1px solid #e1e8ed",
-  },
-  checkbox: {
-    marginRight: "10px",
-    width: "18px",
-    height: "18px",
-    accentColor: "#3498db",
-  },
-  checkboxLabel: {
-    fontSize: "15px",
-    fontWeight: "600",
-    color: "#2c3e50",
-    fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-  },
   searchSection: {
     marginBottom: "15px",
   },
@@ -411,14 +360,6 @@ const styles = {
     overflowY: "auto",
     zIndex: "1000",
     boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
-    fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-  },
-  suggestionItem: {
-    padding: "12px 14px",
-    cursor: "pointer",
-    borderBottom: "1px solid #e1e8ed",
-    fontSize: "15px",
-    transition: "background-color 0.2s ease",
     fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
   },
   searchResults: {
@@ -586,12 +527,6 @@ const styles = {
     gap: "10px",
     marginTop: "15px",
   },
-  editModeButtons: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    marginTop: "15px",
-  },
   button: {
     backgroundColor: "#3498db",
     color: "white",
@@ -655,9 +590,6 @@ const styles = {
     textTransform: "uppercase",
     letterSpacing: "0.5px",
     touchAction: "manipulation",
-  },
-  cancelButtonHover: {
-    backgroundColor: "#c82333",
   },
   buttonDisabled: {
     backgroundColor: "#bdc3c7",
@@ -979,9 +911,6 @@ const styles = {
     gap: "5px",
     transition: "all 0.3s ease",
     width: "100%",
-  },
-  whatsappButtonHover: {
-    backgroundColor: "#128C7E",
   },
   whatsappButtonDisabled: {
     backgroundColor: "#a8e6c1",
@@ -1547,7 +1476,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       if (!pid) return {};
 
       const returns = await getPharmacyReturns(pid);
-      const billReturns = returns.filter(ret => ret.billNumber === billNumber);
+      const billReturns = returns.filter(ret => String(ret.billNumber) === String(billNumber));
 
       const returnedMap = {};
       billReturns.forEach(ret => {
@@ -1721,7 +1650,39 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     setSelectedItems(updatedItems);
   }, [selectedItems]);
 
+  // ─── LOAD BILL FOR EDITING (LOCKED FOR PAID BILLS & BILLS WITH RETURNS) ──────
   const loadBillForEditing = useCallback(async (bill) => {
+    // 1. Check if the bill is Paid
+    const status = String(bill.paymentStatus || "").toLowerCase();
+    const isPaid = bill.isPaid === true || status === "paid" || status === "completed" || status === "processed";
+
+    if (isPaid) {
+      alert(
+        `❌ Cannot edit Bill #${formatBillNumber(bill.billNumber)}!\n\n` +
+        `This bill has already been marked as PAID.\n` +
+        `Paid bills are locked to prevent ledger and payment mismatches.`
+      );
+      return;
+    }
+
+    // 2. Check if the bill has any return invoice attached
+    const returnedMap = await loadReturnedItemsForBill(bill.billNumber, bill.pharmacyId);
+    const hasAnyReturns = Object.values(returnedMap).some(item => item.hasReturn);
+
+    if (hasAnyReturns) {
+      const returnInvoices = Array.from(
+        new Set(Object.values(returnedMap).map(i => i.returnBillNumber).filter(Boolean))
+      ).join(", ");
+
+      alert(
+        `❌ Cannot edit Bill #${formatBillNumber(bill.billNumber)}!\n\n` +
+        `This bill has return invoices associated with it: ${returnInvoices || "Return Invoices"}.\n\n` +
+        `Editing a bill with active returns will cause inventory and accounting discrepancies.\n` +
+        `Please manage or reverse the return invoice first if you need to make changes.`
+      );
+      return;
+    }
+
     setIsEditMode(true);
     setEditingBillNumber(bill.billNumber);
     setEditingBillDisplay(`Bill #${formatBillNumber(bill.billNumber)} - ${bill.pharmacyName || "N/A"} - ${formatDate(bill.date)}`);
@@ -1761,19 +1722,11 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       }
     }
     setBillCurrency(inferredCurrency);
-
-    const returnedMap = await loadReturnedItemsForBill(bill.billNumber, bill.pharmacyId);
     setReturnedItemsMap(returnedMap);
 
     const allBills = await searchSoldBills("");
 
     const processedItems = bill.items.map((item) => {
-      const key = `${item.barcode}`;
-      const returnData = returnedMap[key] || {};
-      const hasReturn = returnData.hasReturn || false;
-      const returnQty = returnData.returnQuantity || 0;
-      const returnBillNum = returnData.returnBillNumber || "";
-
       const originalCurrency = item.originalCurrency || "USD";
       const branch = item.branch || "Slemany";
 
@@ -1807,7 +1760,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       let bestBatchId = item.batchId;
       if (matchingStoreItems.length > 0) {
         const originalBatch = matchingStoreItems.find(si => si.id === item.batchId);
-        
         if (originalBatch) {
           bestBatchId = originalBatch.id;
         } else {
@@ -1842,10 +1794,10 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         defaultOutPriceIQD: defIQD,
         outPriceUSD: item.outPriceUSD || (inferredCurrency === "USD" ? displayPrice : 0),
         outPriceIQD: item.outPriceIQD || (inferredCurrency === "IQD" ? displayPrice : 0),
-        hasReturn: hasReturn,
-        isLocked: hasReturn,
-        returnQuantity: returnQty,
-        returnBillNumber: returnBillNum,
+        hasReturn: false,
+        isLocked: false,
+        returnQuantity: 0,
+        returnBillNumber: "",
         currentStock: currentStock,
         totalSoldOtherBills: totalSoldQuantity,
         originalStock: originalStock,
@@ -2457,7 +2409,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     if (currentBill && currentBill.billNumber !== "TEMP0000") resetForm();
   }, [currentBill, resetForm]);
 
-  // Builds the printable bill HTML markup shared by printBill()
   const buildBillHTML = useCallback((bill) => {
     const billPaymentMethod = bill.paymentStatus || paymentMethod;
 
@@ -2560,8 +2511,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
                   `;
                 }).join("")}
                 <tr class="total-row">
-                  <td colspan="5" style="background-color: #34495e !important; color: white; text-align: right; padding: 8px; font-weight: 700; font-size: 15px;">CURRENT TOTAL:</td>
-                  <td style="background-color: #34495e !important; color: white; text-align: right; padding: 8px; font-size: 15px; font-weight: 700;">${formatTotalLine(currentBillTotalUSD, currentBillTotalIQD)}</td>
+                  <td colspan="5" style="background-color: #3498db !important; color: white; text-align: right; padding: 8px; font-weight: 700; font-size: 15px;">CURRENT TOTAL:</td>
+                  <td style="background-color: #3498db !important; color: white; text-align: right; padding: 8px; font-size: 15px; font-weight: 700;">${formatTotalLine(currentBillTotalUSD, currentBillTotalIQD)}</td>
                 </tr>
               </tbody>
             </table>
@@ -2599,301 +2550,268 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     return { singleBillHTML, displayBillNumber };
   }, [paymentMethod, recentBills, returnBills]);
 
-  const loadHtml2Pdf = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (window.html2pdf) { resolve(); return; }
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Failed to load PDF library"));
-      document.head.appendChild(script);
-    });
-  }, []);
-const shareViaWhatsApp = useCallback(async (bill) => {
-  if (!bill) {
-    alert("No bill selected");
-    return;
-  }
-
-  const billKey = bill.billNumber;
-  setSharingWhatsApp((prev) => ({ ...prev, [billKey]: true }));
-
-  try {
-    const displayBillNumber = formatBillNumber(bill.billNumber);
-    const shareText = `Invoice #${displayBillNumber}`;
-
-    // Create a container for A4 size
-    const container = document.createElement("div");
-    container.style.position = "absolute";
-    container.style.top = "0";
-    container.style.left = "0";
-    container.style.width = "794px"; // A4 width in px
-    container.style.height = "1123px"; // A4 height in px
-    container.style.zIndex = "99999";
-    container.style.background = "white";
-    container.style.display = "flex";
-    container.style.justifyContent = "center";
-    container.style.alignItems = "center";
-    container.style.overflow = "visible"; // Avoid clipping
-    container.style.opacity = "1";
-    container.style.visibility = "visible";
-    container.style.pointerEvents = "none";
-
-    // Build the bill HTML using the existing `buildBillHTML` function
-    const { singleBillHTML } = buildBillHTML(bill);
-
-    // Insert HTML content into the container
-    container.innerHTML = `
-      <div id="bill-image-wrap" style="
-        width: 794px;
-        height: 1123px;
-        background: white;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        padding: 50px 60px;
-        margin: 0;
-        overflow: visible;
-      ">
-        ${singleBillHTML}
-      </div>
-    `;
-
-    // Append to body
-    document.body.appendChild(container);
-
-    // Force layout update
-    container.offsetHeight;
-
-    // Wait for DOM to fully render (longer delay for mobile)
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const delay = isMobile ? 1500 : 500; // Longer delay for mobile
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        setTimeout(resolve, delay);
-      });
-    });
-
-    // Load html2canvas if needed
-    if (typeof window.html2canvas !== 'function') {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-        script.onload = () => {
-          setTimeout(resolve, 300);
-        };
-        script.onerror = () => reject(new Error('Failed to load html2canvas'));
-        document.head.appendChild(script);
-      });
+  const shareViaWhatsApp = useCallback(async (bill) => {
+    if (!bill) {
+      alert("No bill selected");
+      return;
     }
 
-    // Get the element
-    const element = document.getElementById('bill-image-wrap');
-    if (!element) {
-      throw new Error('Bill element not found');
-    }
+    const billKey = bill.billNumber;
+    setSharingWhatsApp((prev) => ({ ...prev, [billKey]: true }));
 
-    // Debug: Log the element's dimensions
-    console.log("Element dimensions:", element.offsetWidth, element.offsetHeight);
+    try {
+      const displayBillNumber = formatBillNumber(bill.billNumber);
+      const shareText = `Invoice #${displayBillNumber}`;
 
-    // Capture the element with mobile-optimized options
-    const canvas = await window.html2canvas(element, {
-      scale: isMobile ? 3 : 2.5, // Higher scale for mobile
-      useCORS: true, // Enable CORS for images
-      backgroundColor: '#ffffff',
-      logging: true,
-      width: 794,
-      height: 1123,
-      x: 0,
-      y: 0,
-      scrollX: 0,
-      scrollY: 0,
-      allowTaint: true, // Allow tainted canvas (if CORS fails)
-      windowWidth: 794, // Explicitly set window width
-      windowHeight: 1123, // Explicitly set window height
-      onclone: (clonedDoc) => {
-        const clonedEl = clonedDoc.getElementById('bill-image-wrap');
-        if (clonedEl) {
-          clonedEl.style.width = '794px';
-          clonedEl.style.height = '1123px';
-          clonedEl.style.margin = '0';
-          clonedEl.style.opacity = '1';
-          clonedEl.style.visibility = 'visible';
-          clonedEl.style.overflow = 'visible';
-        }
+      const container = document.createElement("div");
+      container.style.position = "absolute";
+      container.style.top = "0";
+      container.style.left = "0";
+      container.style.width = "794px";
+      container.style.height = "1123px";
+      container.style.zIndex = "99999";
+      container.style.background = "white";
+      container.style.display = "flex";
+      container.style.justifyContent = "center";
+      container.style.alignItems = "center";
+      container.style.overflow = "visible";
+      container.style.opacity = "1";
+      container.style.visibility = "visible";
+      container.style.pointerEvents = "none";
+
+      const { singleBillHTML } = buildBillHTML(bill);
+
+      container.innerHTML = `
+        <div id="bill-image-wrap" style="
+          width: 794px;
+          height: 1123px;
+          background: white;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+          padding: 50px 60px;
+          margin: 0;
+          overflow: visible;
+        ">
+          ${singleBillHTML}
+        </div>
+      `;
+
+      document.body.appendChild(container);
+      container.offsetHeight;
+
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const delay = isMobile ? 1500 : 500;
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, delay);
+        });
+      });
+
+      if (typeof window.html2canvas !== 'function') {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+          script.onload = () => {
+            setTimeout(resolve, 300);
+          };
+          script.onerror = () => reject(new Error('Failed to load html2canvas'));
+          document.head.appendChild(script);
+        });
       }
-    });
 
-    // Debug: Log the canvas dimensions
-    console.log("Canvas dimensions:", canvas.width, canvas.height);
-
-    // Check if canvas is blank
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const isBlank = !imageData.data.some(channel => channel !== 0);
-    console.log("Is canvas blank?", isBlank);
-
-    if (isBlank) {
-      throw new Error('Captured canvas is blank');
-    }
-
-    // Remove container after capture
-    document.body.removeChild(container);
-
-    // Download the image
-    const fileName = `Bill_${displayBillNumber}.jpg`;
-    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-
-    const link = document.createElement('a');
-    link.download = fileName;
-    link.href = imageDataUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Open WhatsApp
-    setTimeout(() => {
-      const encodedText = encodeURIComponent(shareText);
-      window.open(`https://wa.me/?text=${encodedText}`, '_blank');
-    }, 500);
-
-  } catch (err) {
-    console.error('Error sharing bill:', err);
-    alert('⚠️ Failed to share the bill. Please try again.');
-  } finally {
-    setSharingWhatsApp((prev) => ({ ...prev, [billKey]: false }));
-  }
-}, [buildBillHTML, recentBills, returnBills]);
-const printBill = useCallback((bill) => {
-  if (!bill) { alert("No bill selected for printing"); return; }
-
-  const { singleBillHTML, displayBillNumber } = buildBillHTML(bill);
-
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const numCopies = isMobile ? 1 : 2;
-
-  if (isMobile) {
-    // 🔥 FIX: Load html2pdf if not available
-    const loadHtml2Pdf = () => {
-      return new Promise((resolve, reject) => {
-        if (window.html2pdf) { resolve(); return; }
-        const script = document.createElement("script");
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-        script.onload = () => {
-          // Wait a bit for initialization
-          setTimeout(resolve, 200);
-        };
-        script.onerror = () => reject(new Error("Failed to load PDF library"));
-        document.head.appendChild(script);
-      });
-    };
-
-    const generatePDF = async () => {
-      try {
-        await loadHtml2Pdf();
-        
-        // 🔥 FIX: Centered container
-        const container = document.createElement("div");
-        container.style.position = "fixed";
-        container.style.top = "50%";
-        container.style.left = "50%";
-        container.style.transform = "translate(-50%, -50%)";
-        container.style.zIndex = "-9999";
-        container.style.visibility = "hidden";
-        container.style.width = "800px";
-        container.style.background = "white";
-        container.style.padding = "20px";
-        container.style.boxSizing = "border-box";
-        
-        container.innerHTML = `
-          <div id="pdf-wrap" style="width: 100%; max-width: 800px; margin: 0 auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: white; color: #2c3e50; box-sizing: border-box;">
-            <style>
-              #pdf-wrap * { overflow: visible !important; overflow-x: visible !important; box-sizing: border-box; }
-              #pdf-wrap .bill-template { max-width: 100%; margin: 0 auto; }
-            </style>
-            ${singleBillHTML}
-          </div>
-        `;
-        document.body.appendChild(container);
-
-        const opt = {
-          margin: [5, 5, 5, 5],
-          filename: `Bill_${displayBillNumber}.pdf`,
-          image: { type: 'jpeg', quality: 1 },
-          html2canvas: { 
-            scale: 2, 
-            useCORS: true, 
-            windowWidth: 800,
-            width: 800,
-            x: 0,
-            y: 0,
-            scrollX: 0,
-            scrollY: 0
-          },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        await window.html2pdf().set(opt).from(container.querySelector('#pdf-wrap')).save();
-        document.body.removeChild(container);
-      } catch (error) {
-        console.error('PDF generation error:', error);
-        alert('Failed to generate PDF. Please try again.');
+      const element = document.getElementById('bill-image-wrap');
+      if (!element) {
+        throw new Error('Bill element not found');
       }
-    };
 
-    generatePDF();
-    return;
-  }
-
-  // Desktop: Print normally
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) { alert("Please allow popups for printing"); return; }
-  const fullHTML = Array(numCopies).fill(singleBillHTML).join('<div style="page-break-after: always;"></div>');
-
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Bill #${displayBillNumber}</title>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        @font-face { font-family: 'NRT-Reg'; src: url('/fonts/NRT-Reg.ttf') format('truetype'); }
-        @font-face { font-family: 'NRT-Bd';  src: url('/fonts/NRT-Bd.ttf')  format('truetype'); }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: 'NRT-Reg', 'Segoe UI', sans-serif;
-          padding: 15px; color: #2c3e50; background: white;
-          line-height: 1.4; font-size: 14px;
-        }
-        .bill-template { max-width: 800px; margin: 0 auto; page-break-inside: avoid; }
-        @media print {
-          body { padding: 10px; }
-          .bill-template { max-width: 100%; }
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+      const canvas = await window.html2canvas(element, {
+        scale: isMobile ? 3 : 2.5,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: true,
+        width: 794,
+        height: 1123,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
+        allowTaint: true,
+        windowWidth: 794,
+        windowHeight: 1123,
+        onclone: (clonedDoc) => {
+          const clonedEl = clonedDoc.getElementById('bill-image-wrap');
+          if (clonedEl) {
+            clonedEl.style.width = '794px';
+            clonedEl.style.height = '1123px';
+            clonedEl.style.margin = '0';
+            clonedEl.style.opacity = '1';
+            clonedEl.style.visibility = 'visible';
+            clonedEl.style.overflow = 'visible';
           }
         }
-        @media (max-width: 600px) {
-          body { padding: 10px; font-size: 12px; }
-          .bill-template { max-width: 100%; }
+      });
+
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const isBlank = !imageData.data.some(channel => channel !== 0);
+
+      if (isBlank) {
+        throw new Error('Captured canvas is blank');
+      }
+
+      document.body.removeChild(container);
+
+      const fileName = `Bill_${displayBillNumber}.jpg`;
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = imageDataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setTimeout(() => {
+        const encodedText = encodeURIComponent(shareText);
+        window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+      }, 500);
+
+    } catch (err) {
+      console.error('Error sharing bill:', err);
+      alert('⚠️ Failed to share the bill. Please try again.');
+    } finally {
+      setSharingWhatsApp((prev) => ({ ...prev, [billKey]: false }));
+    }
+  }, [buildBillHTML]);
+
+  const printBill = useCallback((bill) => {
+    if (!bill) { alert("No bill selected for printing"); return; }
+
+    const { singleBillHTML, displayBillNumber } = buildBillHTML(bill);
+
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const numCopies = isMobile ? 1 : 2;
+
+    if (isMobile) {
+      const loadHtml2Pdf = () => {
+        return new Promise((resolve, reject) => {
+          if (window.html2pdf) { resolve(); return; }
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+          script.onload = () => {
+            setTimeout(resolve, 200);
+          };
+          script.onerror = () => reject(new Error("Failed to load PDF library"));
+          document.head.appendChild(script);
+        });
+      };
+
+      const generatePDF = async () => {
+        try {
+          await loadHtml2Pdf();
+          
+          const container = document.createElement("div");
+          container.style.position = "fixed";
+          container.style.top = "50%";
+          container.style.left = "50%";
+          container.style.transform = "translate(-50%, -50%)";
+          container.style.zIndex = "-9999";
+          container.style.visibility = "hidden";
+          container.style.width = "800px";
+          container.style.background = "white";
+          container.style.padding = "20px";
+          container.style.boxSizing = "border-box";
+          
+          container.innerHTML = `
+            <div id="pdf-wrap" style="width: 100%; max-width: 800px; margin: 0 auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: white; color: #2c3e50; box-sizing: border-box;">
+              <style>
+                #pdf-wrap * { overflow: visible !important; overflow-x: visible !important; box-sizing: border-box; }
+                #pdf-wrap .bill-template { max-width: 100%; margin: 0 auto; }
+              </style>
+              ${singleBillHTML}
+            </div>
+          `;
+          document.body.appendChild(container);
+
+          const opt = {
+            margin: [5, 5, 5, 5],
+            filename: `Bill_${displayBillNumber}.pdf`,
+            image: { type: 'jpeg', quality: 1 },
+            html2canvas: { 
+              scale: 2, 
+              useCORS: true, 
+              windowWidth: 800,
+              width: 800,
+              x: 0,
+              y: 0,
+              scrollX: 0,
+              scrollY: 0
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+
+          await window.html2pdf().set(opt).from(container.querySelector('#pdf-wrap')).save();
+          document.body.removeChild(container);
+        } catch (error) {
+          console.error('PDF generation error:', error);
+          alert('Failed to generate PDF. Please try again.');
         }
-      </style>
-    </head>
-    <body>
-       ${fullHTML}
-    </body>
-    </html>
-  `);
-  printWindow.document.close();
-  setTimeout(() => {
-    printWindow.focus();
-    printWindow.print();
-    setTimeout(() => printWindow.close(), 1000);
-  }, 500);
-}, [buildBillHTML]);
+      };
+
+      generatePDF();
+      return;
+    }
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) { alert("Please allow popups for printing"); return; }
+    const fullHTML = Array(numCopies).fill(singleBillHTML).join('<div style="page-break-after: always;"></div>');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Bill #${displayBillNumber}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          @font-face { font-family: 'NRT-Reg'; src: url('/fonts/NRT-Reg.ttf') format('truetype'); }
+          @font-face { font-family: 'NRT-Bd';  src: url('/fonts/NRT-Bd.ttf')  format('truetype'); }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'NRT-Reg', 'Segoe UI', sans-serif;
+            padding: 15px; color: #2c3e50; background: white;
+            line-height: 1.4; font-size: 14px;
+          }
+          .bill-template { max-width: 800px; margin: 0 auto; page-break-inside: avoid; }
+          @media print {
+            body { padding: 10px; }
+            .bill-template { max-width: 100%; }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+          @media (max-width: 600px) {
+            body { padding: 10px; font-size: 12px; }
+            .bill-template { max-width: 100%; }
+          }
+        </style>
+      </head>
+      <body>
+         ${fullHTML}
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      setTimeout(() => printWindow.close(), 1000);
+    }, 500);
+  }, [buildBillHTML]);
+
   const fetchItemSalesHistory = useCallback(async (barcode, pharId) => {
     if (!pharId) { alert("Please select a pharmacy first to view sales history."); return; }
     try {
@@ -2918,14 +2836,6 @@ const printBill = useCallback((bill) => {
   }, []);
 
   const paginate = useCallback((pageNumber) => setCurrentPage(pageNumber), []);
-
-  const handlePharmacySelect = useCallback((pharmacy) => {
-    setPharmacyId(pharmacy.id);
-    setPharmacyName(pharmacy.name);
-    setPharmacySearch(`${pharmacy.name} (${pharmacy.code})`);
-    setShowPharmacySuggestions(false);
-    setTimeout(() => searchQueryRef.current?.focus(), 100);
-  }, []);
 
   const onFocusBorder = useCallback((e) => {
     e.target.style.borderColor = '#3b82f6';
@@ -3787,6 +3697,12 @@ const printBill = useCallback((bill) => {
                       const totalAmountIQD = billCurr === "IQD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceIQD || item.price || 0) * item.quantity), 0) || 0) : 0;
                       const branchStr = getBillBranchDisplay(bill);
 
+                      // Determine if bill is locked
+                      const isPaid = (bill.paymentStatus || "").toLowerCase() === "paid" || (bill.paymentStatus || "").toLowerCase() === "completed";
+                      const hasReturn = returnBills.some(r => String(r.billNumber) === String(bill.billNumber));
+                      const isLocked = isPaid || hasReturn;
+                      const lockReason = isPaid ? "Paid bill cannot be edited" : (hasReturn ? "Bill has return invoices attached" : "Edit Bill");
+
                       return (
                         <React.Fragment key={bill.id || `${bill.billNumber}-${index}`}>
                           <tr
@@ -3892,11 +3808,17 @@ const printBill = useCallback((bill) => {
                             <td style={styles.tableCellCenter}>
                               <div style={styles.actionButtons}>
                                 <button
-                                  style={styles.editButton}
-                                  onClick={(e) => { e.stopPropagation(); loadBillForEditing(bill); }}
-                                  title="Edit Bill"
+                                  style={{
+                                    ...styles.editButton,
+                                    ...(isLocked ? { backgroundColor: "#95a5a6", opacity: 0.6, cursor: "not-allowed" } : {})
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    loadBillForEditing(bill);
+                                  }}
+                                  title={lockReason}
                                 >
-                                  Edit
+                                  {isLocked ? "🔒 Locked" : "Edit"}
                                 </button>
                                 <button
                                   style={styles.printSmallButton}

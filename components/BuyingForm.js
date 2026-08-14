@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getCompanies, searchInitializedItems, createBoughtBill, updateBoughtBill } from "@/lib/data";
+import { getCompanies, searchInitializedItems, createBoughtBill, updateBoughtBill, getBoughtBills } from "@/lib/data";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   FiPlus, FiTrash2, FiSearch, FiPercent, FiDollarSign, FiFileText,
   FiPackage, FiUser, FiCalendar, FiCreditCard, FiTruck,
   FiAlertTriangle, FiX, FiRefreshCw, FiShoppingCart, FiCheckCircle,
-  FiArrowRight, FiInfo, FiTag, FiCornerDownLeft
+  FiArrowRight, FiInfo, FiTag, FiCornerDownLeft, FiClock, FiEye
 } from "react-icons/fi";
 
 // ============================================================
@@ -37,15 +37,6 @@ const formatForInput = (val) => {
 const parseFormattedNumber = (formattedValue) => {
   if (!formattedValue) return '';
   return formattedValue.toString().replace(/,/g, '');
-};
-
-const handleNumberInput = (value, setter) => {
-  const raw = value.replace(/,/g, '');
-  const clean = raw.replace(/[^0-9.]/g, '');
-  // Prevent typing multiple decimal points
-  const dotCount = (clean.match(/\./g) || []).length;
-  if (dotCount > 1) return;
-  setter(clean);
 };
 
 // Formats ANY date representation to dd/mm/yyyy
@@ -93,7 +84,7 @@ const parseDateString = (dateStr) => {
       const day = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1;
       const year = parseInt(parts[2], 10);
-      
+
       const parsed = new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds());
       if (!isNaN(parsed.getTime())) return parsed;
     }
@@ -103,12 +94,12 @@ const parseDateString = (dateStr) => {
       const year = parseInt(parts[0], 10);
       const month = parseInt(parts[1], 10) - 1;
       const day = parseInt(parts[2], 10);
-      
+
       const parsed = new Date(year, month, day, now.getHours(), now.getMinutes(), now.getSeconds());
       if (!isNaN(parsed.getTime())) return parsed;
     }
   }
-  
+
   const fallback = new Date(str);
   return isNaN(fallback.getTime()) ? null : fallback;
 };
@@ -134,7 +125,7 @@ export default function BuyingForm({ onBillCreated }) {
   const [billItems, setBillItems] = useState([]);
   const [transportFee, setTransportFee] = useState("0");
   const [externalExpense, setExternalExpense] = useState("0");
-  const [currency, setCurrency] = useState(""); // Starts empty, forces selection
+  const [currency, setCurrency] = useState(""); 
   const [suggestions, setSuggestions] = useState([]);
   const [companySuggestions, setCompanySuggestions] = useState([]);
   const [allCompanies, setAllCompanies] = useState([]);
@@ -147,6 +138,12 @@ export default function BuyingForm({ onBillCreated }) {
   const [editingBill, setEditingBill] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [currencyError, setCurrencyError] = useState(false);
+
+  // Item Purchase History State
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyItem, setHistoryItem] = useState(null);
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   const searchInputRef = useRef(null);
   const companySearchRef = useRef(null);
@@ -286,18 +283,33 @@ export default function BuyingForm({ onBillCreated }) {
     }
   }, [searchParams]);
 
+  // Deduplicated Item Suggestions
   useEffect(() => {
     const fetchItems = async () => {
       if (searchQuery.length > 0) {
         try {
           const results = await searchInitializedItems(searchQuery, "both");
           const searchLower = searchQuery.toLowerCase().trim();
+
           const filteredResults = results.filter(item => 
             item.name?.toLowerCase().includes(searchLower) || 
             item.barcode?.toLowerCase().includes(searchLower)
           );
-          setSuggestions(filteredResults);
-          setShowSuggestions(filteredResults.length > 0);
+
+          // Deduplicate by normalized barcode and name
+          const seen = new Set();
+          const uniqueResults = [];
+
+          for (const item of filteredResults) {
+            const uniqueKey = `${(item.barcode || '').trim().toLowerCase()}_${(item.name || '').trim().toLowerCase()}`;
+            if (!seen.has(uniqueKey)) {
+              seen.add(uniqueKey);
+              uniqueResults.push(item);
+            }
+          }
+
+          setSuggestions(uniqueResults);
+          setShowSuggestions(uniqueResults.length > 0);
         } catch (error) {
           console.error("Error fetching items:", error);
         }
@@ -310,14 +322,62 @@ export default function BuyingForm({ onBillCreated }) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Fetch previous purchase history for a specific product
+  const handleViewHistory = async (e, item) => {
+    e.stopPropagation();
+    setHistoryItem(item);
+    setHistoryModalOpen(true);
+    setIsHistoryLoading(true);
+    setHistoryRecords([]);
+
+    try {
+      const boughtBills = await getBoughtBills();
+      const records = [];
+
+      boughtBills.forEach((bill) => {
+        if (bill.items && Array.isArray(bill.items)) {
+          bill.items.forEach((bi) => {
+            if (
+              (bi.barcode && item.barcode && String(bi.barcode) === String(item.barcode)) ||
+              (bi.name && item.name && bi.name.toLowerCase() === item.name.toLowerCase())
+            ) {
+              const billCurr = bi.originalCurrency || bill.currency || "USD";
+              const buyPrice = billCurr === "USD" ? (bi.basePriceUSD || bi.price || 0) : (bi.basePriceIQD || bi.price || 0);
+              const outPrice = billCurr === "USD" ? (bi.outPriceUSD || 0) : (bi.outPriceIQD || 0);
+
+              records.push({
+                billNumber: bill.billNumber,
+                companyBillNumber: bill.companyBillNumber || "-",
+                companyName: bill.companyName || "Unknown Company",
+                date: bill.date,
+                quantity: bi.quantity || 0,
+                buyPrice: buyPrice,
+                outPrice: outPrice,
+                currency: billCurr,
+                branch: bi.branch || bill.branch || "—",
+                expireDate: bi.expireDate || "—"
+              });
+            }
+          });
+        }
+      });
+
+      records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setHistoryRecords(records);
+    } catch (err) {
+      console.error("Failed to load item purchase history:", err);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
   const handleCompanySelect = useCallback((company) => {
     setCompanyId(company.id);
     setCompanySearch(company.name);
     setCompanyCode(company.code);
     setShowCompanySuggestions(false);
     setError(null);
-    
-    // Auto-select currency if company has a default, else force them to pick
+
     if (company.currency) {
       setCurrency(company.currency);
       setCurrencyError(false);
@@ -342,7 +402,7 @@ export default function BuyingForm({ onBillCreated }) {
       }
       return;
     }
-    
+
     const newItem = {
       ...createEmptyItem(),
       barcode: item.barcode,
@@ -470,7 +530,7 @@ export default function BuyingForm({ onBillCreated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!currency) {
       setCurrencyError(true);
       setError("Please select a currency before submitting.");
@@ -480,7 +540,7 @@ export default function BuyingForm({ onBillCreated }) {
       }
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
@@ -599,17 +659,6 @@ export default function BuyingForm({ onBillCreated }) {
       setIsLoading(false);
     }
   };
-
-  const addItem = useCallback(() => {
-    setBillItems(prev => [...prev.filter(item => item.barcode || item.name), createEmptyItem()]);
-    setTimeout(() => {
-      const newIndex = billItems.filter(item => item.barcode || item.name).length;
-      const barcodeInput = itemInputRefs.current[`${newIndex}-barcode`];
-      if (barcodeInput) {
-        barcodeInput.focus();
-      }
-    }, 100);
-  }, [billItems]);
 
   const removeItem = useCallback((index) => {
     setBillItems(prev => {
@@ -768,7 +817,7 @@ export default function BuyingForm({ onBillCreated }) {
           background: #ffffff;
           border: 1px solid #cbd5e1;
           border-radius: 10px;
-          max-height: 240px;
+          max-height: 260px;
           overflow-y: auto;
           z-index: 1000;
           box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
@@ -780,10 +829,36 @@ export default function BuyingForm({ onBillCreated }) {
           border-bottom: 1px solid #f1f5f9;
           font-size: 0.8125rem;
           transition: background 0.15s ease;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 0.5rem;
         }
 
         .bf-dropdown-item:hover {
           background: #eff6ff;
+        }
+
+        .bf-history-pill-btn {
+          background: #e0f2fe;
+          color: #0369a1;
+          border: 1px solid #bae6fd;
+          border-radius: 6px;
+          padding: 0.25rem 0.6rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
+        }
+
+        .bf-history-pill-btn:hover {
+          background: #0284c7;
+          color: #ffffff;
+          border-color: #0284c7;
         }
 
         .bf-currency-toggle {
@@ -978,6 +1053,47 @@ export default function BuyingForm({ onBillCreated }) {
           cursor: not-allowed;
           transform: none !important;
         }
+
+        /* History Modal Overlay */
+        .bf-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.65);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 99999;
+          padding: 1rem;
+        }
+
+        .bf-modal-content {
+          background: #ffffff;
+          border-radius: 12px;
+          width: 100%;
+          max-width: 860px;
+          max-height: 85vh;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+        }
+
+        .bf-modal-header {
+          background: #1e293b;
+          color: #ffffff;
+          padding: 1rem 1.5rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .bf-modal-body {
+          padding: 1.25rem;
+          overflow-y: auto;
+          flex: 1;
+        }
       `}</style>
 
       <div className="bf-card">
@@ -1084,9 +1200,11 @@ export default function BuyingForm({ onBillCreated }) {
                             onClick={() => handleCompanySelect(company)}
                             onMouseDown={(e) => e.preventDefault()}
                           >
-                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{company.name}</div>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                              Code: {company.code} {company.currency && `• Default Currency: ${company.currency}`}
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{company.name}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                Code: {company.code} {company.currency && `• Default Currency: ${company.currency}`}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1166,7 +1284,7 @@ export default function BuyingForm({ onBillCreated }) {
                 <span>2. Line Items ({validItemsCount})</span>
               </div>
 
-              {/* Master Search Input */}
+              {/* Master Search Input with Suggestion Item History Buttons */}
               <div className="bf-form-group" style={{ marginBottom: "1rem" }}>
                 <label className="bf-label">Quick Search Catalog & Add Item</label>
                 <div style={{ position: "relative" }}>
@@ -1178,7 +1296,7 @@ export default function BuyingForm({ onBillCreated }) {
                     style={{ paddingLeft: "2.25rem", background: "#fffbeb", borderColor: currencyError ? "#ef4444" : "#fde68a" }}
                     value={searchQuery}
                     onChange={(e) => {
-                      if (!currency) return; // Prevent typing if currency not set
+                      if (!currency) return;
                       setSearchQuery(e.target.value);
                     }}
                     onFocus={(e) => {
@@ -1215,10 +1333,23 @@ export default function BuyingForm({ onBillCreated }) {
                           onClick={() => handleItemSelect(item)}
                           onMouseDown={(e) => e.preventDefault()}
                         >
-                          <div style={{ fontWeight: 600, color: "#0f172a" }}>{item.name}</div>
-                          <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                            Barcode: {item.barcode} {item.expireDate && item.expireDate !== 'N/A' && `| Expires: ${formatDateToDDMMYYYY(item.expireDate)}`}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, color: "#0f172a" }}>{item.name}</div>
+                            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                              Barcode: {item.barcode} {item.expireDate && item.expireDate !== 'N/A' && `| Expires: ${formatDateToDDMMYYYY(item.expireDate)}`}
+                            </div>
                           </div>
+
+                          {/* View Purchase History Button in Suggestions */}
+                          <button
+                            type="button"
+                            className="bf-history-pill-btn"
+                            onClick={(e) => handleViewHistory(e, item)}
+                            title="View past purchase history for this item"
+                          >
+                            <FiClock size={12} />
+                            <span>History</span>
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1304,9 +1435,9 @@ export default function BuyingForm({ onBillCreated }) {
                                 const clean = raw.replace(/[^0-9.]/g, '');
                                 const dotCount = (clean.match(/\./g) || []).length;
                                 if (dotCount > 1) return;
-                                
+
                                 handleItemChange(index, "price", clean);
-                                
+
                                 const rawPrice = parseFloat(clean);
                                 if (!isNaN(rawPrice) && rawPrice > 0 && (!item.outPrice || item.outPrice === '')) {
                                   const autoOutPrice = rawPrice * 1.5;
@@ -1331,7 +1462,7 @@ export default function BuyingForm({ onBillCreated }) {
                                 const clean = raw.replace(/[^0-9.]/g, '');
                                 const dotCount = (clean.match(/\./g) || []).length;
                                 if (dotCount > 1) return;
-                                
+
                                 handleItemChange(index, "outPrice", clean);
                               }}
                               onKeyDown={(e) => handleKeyDown(e, index, 'outPrice')}
@@ -1500,6 +1631,105 @@ export default function BuyingForm({ onBillCreated }) {
           </form>
         </div>
       </div>
+
+      {/* ============================================================ */}
+      {/* Product Purchase History Modal                               */}
+      {/* ============================================================ */}
+      {historyModalOpen && (
+        <div className="bf-modal-overlay" onClick={() => setHistoryModalOpen(false)}>
+          <div className="bf-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="bf-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <FiClock size={18} color="#38bdf8" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>
+                    Purchase History: {historyItem?.name}
+                  </h3>
+                  <span style={{ fontSize: "0.75rem", opacity: 0.75 }}>
+                    Barcode: {historyItem?.barcode}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryModalOpen(false)}
+                style={{ background: "transparent", border: "none", color: "#ffffff", cursor: "pointer", display: "flex" }}
+              >
+                <FiX size={20} />
+              </button>
+            </div>
+
+            <div className="bf-modal-body">
+              {isHistoryLoading ? (
+                <div style={{ padding: "2.5rem", textAlign: "center", color: "#64748b" }}>
+                  <FiRefreshCw className="animate-spin" size={24} style={{ margin: "0 auto 0.5rem" }} />
+                  <p style={{ margin: 0, fontSize: "0.875rem" }}>Loading purchase records...</p>
+                </div>
+              ) : historyRecords.length === 0 ? (
+                <div style={{ padding: "2.5rem", textAlign: "center", color: "#94a3b8" }}>
+                  <FiPackage size={36} style={{ margin: "0 auto 0.5rem", opacity: 0.5 }} />
+                  <p style={{ margin: 0, fontSize: "0.9375rem", fontWeight: 600, color: "#64748b" }}>
+                    No Previous Purchase History Found
+                  </p>
+                  <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem" }}>
+                    This item has not been recorded in any previous bought bills yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="bf-table-container">
+                  <table className="bf-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Supplier / Company</th>
+                        <th>Bill #</th>
+                        <th style={{ textAlign: "center" }}>Qty</th>
+                        <th style={{ textAlign: "right" }}>Buy Price</th>
+                        <th style={{ textAlign: "right" }}>Selling Price</th>
+                        <th>Branch</th>
+                        <th>Expiry</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyRecords.map((rec, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600, color: "#0f172a", whiteSpace: "nowrap" }}>
+                            {formatDateToDDMMYYYY(rec.date)}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: "#1e293b" }}>{rec.companyName}</div>
+                            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Company Bill #: {rec.companyBillNumber}</div>
+                          </td>
+                          <td style={{ fontWeight: 600, color: "#2563eb" }}>
+                            #{rec.billNumber}
+                          </td>
+                          <td style={{ textAlign: "center", fontWeight: 700 }}>
+                            {rec.quantity}
+                          </td>
+                          <td style={{ textAlign: "right", fontWeight: 700, color: "#059669" }}>
+                            {rec.currency === "USD" ? `$${formatNumber(rec.buyPrice)}` : `${formatNumber(rec.buyPrice)} IQD`}
+                          </td>
+                          <td style={{ textAlign: "right", fontWeight: 600, color: "#2563eb" }}>
+                            {rec.currency === "USD" ? `$${formatNumber(rec.outPrice)}` : `${formatNumber(rec.outPrice)} IQD`}
+                          </td>
+                          <td>
+                            <span style={{ background: "#f1f5f9", padding: "0.2rem 0.5rem", borderRadius: "4px", fontSize: "0.75rem", fontWeight: 600, color: "#475569" }}>
+                              {rec.branch}
+                            </span>
+                          </td>
+                          <td style={{ color: "#64748b", fontSize: "0.75rem" }}>
+                            {formatDateToDDMMYYYY(rec.expireDate) || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

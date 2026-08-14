@@ -198,6 +198,200 @@ const getExternalExpense = (bill, currency) => {
   }
 };
 
+// =========================================================================
+// DEFINED OUTSIDE TO PREVENT RE-RENDERS & FIX TEXT BOX FOCUS BUGS
+// =========================================================================
+const ExcelFilterDropdown = ({ 
+  columnKey, 
+  type = "string",
+  processedBills,
+  columnFilters,
+  activeFilterDropdown,
+  setActiveFilterDropdown,
+  handleUpdateColumnFilter,
+  clearColumnFilter
+}) => {
+  const [search, setSearch] = useState("");
+  const isOpen = activeFilterDropdown === columnKey;
+  const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
+
+  const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
+  const { operator, textValue, selectedValues } = filterState;
+
+  const uniqueValues = useMemo(() => {
+    const vals = new Set();
+    processedBills.forEach(item => {
+      let val = item[columnKey];
+      if (columnKey === 'company') val = item.companyName;
+      if (columnKey === 'date') val = item.formattedDate;
+      if (columnKey === 'consignment') val = item.consignmentText;
+      if (columnKey === 'hasAttachment') val = item.hasAttachment;
+      vals.add(String(val ?? ""));
+    });
+    return Array.from(vals).sort();
+  }, [processedBills, columnKey]);
+
+  const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+  const isActive = !!(textValue || (selectedValues && selectedValues.length > 0) || ['isEmpty', 'isNotEmpty'].includes(operator));
+
+  const handleCheckbox = (val, checked) => {
+    const current = selectedValues || [];
+    const updated = checked ? [...current, val] : current.filter(v => v !== val);
+    handleUpdateColumnFilter(columnKey, { selectedValues: updated });
+  };
+
+  const handleSelectAll = (checked) => {
+    handleUpdateColumnFilter(columnKey, { selectedValues: checked ? [...uniqueValues] : [] });
+  };
+
+  return (
+    <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
+      <div
+        onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
+        style={{
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "0.25rem",
+          borderRadius: "0.375rem",
+          background: isActive ? "#dbeafe" : "transparent",
+          color: isActive ? "#2563eb" : "#94a3b8",
+          transition: "all 0.2s"
+        }}
+      >
+        <FiFilter size={14} />
+      </div>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            marginTop: "0.5rem",
+            background: "white",
+            border: "1px solid #cbd5e1",
+            borderRadius: "0.5rem",
+            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.1)",
+            zIndex: 9999,
+            width: "260px",
+            display: "flex",
+            flexDirection: "column",
+            cursor: "default",
+            overflow: "hidden",
+            color: "#2c3e50"
+          }}
+          onClick={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <p style={{ margin: "0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
+            <select
+              value={operator || operators[0].value}
+              onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
+              style={{ width: "100%", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white", boxSizing: "border-box" }}
+            >
+              {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+            </select>
+            {!['isEmpty', 'isNotEmpty'].includes(operator) && (
+              <input
+                type={type === "number" ? "number" : "text"}
+                placeholder="Value..."
+                value={textValue || ""}
+                onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
+                onKeyDown={(e) => e.stopPropagation()}
+                style={{ width: "100%", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", boxSizing: "border-box" }}
+              />
+            )}
+          </div>
+
+          <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", flex: 1, boxSizing: "border-box" }}>
+            <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
+            <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem", boxSizing: "border-box" }}>
+              <FiSearch size={14} color="#94a3b8" />
+              <input
+                type="text"
+                placeholder="Search values..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem", marginLeft: "0.5rem", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div style={{ maxHeight: "180px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9", paddingBottom: "0.5rem", marginBottom: "0.25rem" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                  style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                />
+                <span>(Select All)</span>
+              </label>
+              {displayValues.map(val => (
+                <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedValues.includes(val)}
+                    onChange={(e) => handleCheckbox(val, e.target.checked)}
+                    style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
+                  />
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "undefined" || val === "null" || val === "" ? "(Blank)" : val}</span>
+                </label>
+              ))}
+              {displayValues.length === 0 && <div style={{ fontSize: "0.875rem", color: "#94a3b8", textAlign: "center", padding: "1rem 0" }}>No matches found</div>}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc" }}>
+            <button onClick={() => clearColumnFilter(columnKey)} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
+            <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TableHeader = ({ 
+  title, 
+  columnKey, 
+  type = "string",
+  sortConfig,
+  requestSort,
+  processedBills,
+  columnFilters,
+  activeFilterDropdown,
+  setActiveFilterDropdown,
+  handleUpdateColumnFilter,
+  clearColumnFilter
+}) => (
+  <th className="sortable">
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontWeight: "600", color: "#4b5563", fontSize: "0.875rem" }}>
+      <div onClick={() => requestSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.375rem", flex: 1, userSelect: "none" }}>
+        {title}
+        <span style={{ color: "#94a3b8", fontSize: "0.75rem", width: "12px" }}>
+          {sortConfig.key === columnKey ? (sortConfig.direction === "asc" ? "↑" : "↓") : "↕"}
+        </span>
+      </div>
+      <div style={{ paddingLeft: "0.5rem", borderLeft: "1px solid #e2e8f0", marginLeft: "0.5rem" }}>
+        <ExcelFilterDropdown 
+          columnKey={columnKey} 
+          type={type}
+          processedBills={processedBills}
+          columnFilters={columnFilters}
+          activeFilterDropdown={activeFilterDropdown}
+          setActiveFilterDropdown={setActiveFilterDropdown}
+          handleUpdateColumnFilter={handleUpdateColumnFilter}
+          clearColumnFilter={clearColumnFilter}
+        />
+      </div>
+    </div>
+  </th>
+);
+
 export default function BuyingList({ refreshTrigger }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBill, setSelectedBill] = useState(null);
@@ -331,7 +525,7 @@ export default function BuyingList({ refreshTrigger }) {
     return true;
   };
 
-  const handleUpdateColumnFilter = (columnKey, updates) => {
+  const handleUpdateColumnFilter = useCallback((columnKey, updates) => {
     setColumnFilters(prev => {
       const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
       const next = { ...current, ...updates };
@@ -343,15 +537,15 @@ export default function BuyingList({ refreshTrigger }) {
       }
       return { ...prev, [columnKey]: next };
     });
-  };
+  }, []);
 
-  const clearColumnFilter = (columnKey) => {
+  const clearColumnFilter = useCallback((columnKey) => {
     setColumnFilters(prev => {
       const next = { ...prev };
       delete next[columnKey];
       return next;
     });
-  };
+  }, []);
 
   const handleFilterChange = (field, value) => {
     setFilters({ ...filters, [field]: value });
@@ -651,176 +845,15 @@ export default function BuyingList({ refreshTrigger }) {
     );
   };
 
-  const ExcelFilterDropdown = ({ columnKey, title, type = "string" }) => {
-    const [search, setSearch] = useState("");
-    const isOpen = activeFilterDropdown === columnKey;
-    const operators = type === "number" ? NUMBER_OPERATORS : STRING_OPERATORS;
-
-    const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
-    const { operator, textValue, selectedValues } = filterState;
-
-    const uniqueValues = useMemo(() => {
-      const vals = new Set();
-      processedBills.forEach(item => {
-        let val = item[columnKey];
-        if (columnKey === 'company') val = item.companyName;
-        if (columnKey === 'date') val = item.formattedDate;
-        if (columnKey === 'consignment') val = item.consignmentText;
-        if (columnKey === 'hasAttachment') val = item.hasAttachment;
-        vals.add(String(val));
-      });
-      return Array.from(vals).sort();
-    }, [columnKey]);
-
-    const displayValues = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
-    const isActive = !!(textValue || (selectedValues && selectedValues.length > 0) || ['isEmpty', 'isNotEmpty'].includes(operator));
-
-    const handleCheckbox = (val, checked) => {
-      const current = selectedValues || [];
-      const updated = checked ? [...current, val] : current.filter(v => v !== val);
-      handleUpdateColumnFilter(columnKey, { selectedValues: updated });
-    };
-
-    const handleSelectAll = (checked) => {
-      handleUpdateColumnFilter(columnKey, { selectedValues: checked ? [...uniqueValues] : [] });
-    };
-
-    return (
-      <div className="filter-dropdown-container" style={{ position: "relative", display: "inline-block" }}>
-        <div
-          onClick={(e) => { e.stopPropagation(); setActiveFilterDropdown(isOpen ? null : columnKey); }}
-          style={{
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "0.25rem",
-            borderRadius: "0.375rem",
-            background: isActive ? "#dbeafe" : "transparent",
-            color: isActive ? "#2563eb" : "#94a3b8",
-            transition: "all 0.2s"
-          }}
-        >
-          <FiFilter size={14} />
-        </div>
-
-        {isOpen && (
-          <div
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: 0,
-              marginTop: "0.5rem",
-              background: "white",
-              border: "1px solid #cbd5e1",
-              borderRadius: "0.5rem",
-              boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2), 0 8px 10px -6px rgba(0,0,0,0.1)",
-              zIndex: 9999,
-              width: "260px",
-              display: "flex",
-              flexDirection: "column",
-              cursor: "default",
-              overflow: "hidden"
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ padding: "0.75rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc" }}>
-              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Condition</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <select
-                  value={operator || operators[0].value}
-                  onChange={(e) => handleUpdateColumnFilter(columnKey, { operator: e.target.value })}
-                  style={{ padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none", background: "white" }}
-                >
-                  {operators.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
-                </select>
-                {!['isEmpty', 'isNotEmpty'].includes(operator) && (
-                  <input
-                    type={type === "number" ? "number" : "text"}
-                    placeholder="Value..."
-                    value={textValue || ""}
-                    onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
-                    style={{ padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none" }}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", flex: 1 }}>
-              <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600", color: "#475569" }}>Values</p>
-              <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem" }}>
-                <FiSearch size={14} color="#94a3b8" />
-                <input
-                  type="text"
-                  placeholder="Search values..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem", marginLeft: "0.5rem" }}
-                />
-              </div>
-
-              <div style={{ maxHeight: "180px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9", paddingBottom: "0.5rem", marginBottom: "0.25rem" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
-                  />
-                  <span>(Select All)</span>
-                </label>
-                {displayValues.map(val => (
-                  <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedValues.includes(val)}
-                      onChange={(e) => handleCheckbox(val, e.target.checked)}
-                      style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
-                    />
-                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "undefined" || val === "null" || val === "" ? "(Blank)" : val}</span>
-                  </label>
-                ))}
-                {displayValues.length === 0 && <div style={{ fontSize: "0.875rem", color: "#94a3b8", textAlign: "center", padding: "1rem 0" }}>No matches found</div>}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc" }}>
-              <button onClick={() => clearColumnFilter(columnKey)} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
-              <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const TableHeader = ({ title, columnKey, type = "string", isLast = false }) => (
-    <th className="sortable">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontWeight: "600", color: "#4b5563", fontSize: "0.875rem" }}>
-        <div onClick={() => requestSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "0.375rem", flex: 1, userSelect: "none" }}>
-          {title}
-          <span style={{ color: "#94a3b8", fontSize: "0.75rem", width: "12px" }}>
-            {sortConfig.key === columnKey ? (sortConfig.direction === "asc" ? "↑" : "↓") : "↕"}
-          </span>
-        </div>
-        <div style={{ paddingLeft: "0.5rem", borderLeft: "1px solid #e2e8f0", marginLeft: "0.5rem" }}>
-          <ExcelFilterDropdown columnKey={columnKey} title={title} type={type} />
-        </div>
-      </div>
-    </th>
-  );
-
   return (
     <>
       <style jsx global>{`
-        /* CSS RESET FOR NEXTJS CONTAINERS */
         body {
           margin: 0;
           padding: 0;
           overflow-x: hidden;
         }
 
-        /* 100% WIDTH BREAKOUT TRICK */
         .buying-list-wrapper {
           width: 100vw;
           position: relative;
@@ -831,15 +864,15 @@ export default function BuyingList({ refreshTrigger }) {
           background: #f1f5f9;
           min-height: 100vh;
           box-sizing: border-box;
-          padding: 0; /* Remove parent padding to stretch completely */
+          padding: 0;
         }
 
         .main-card-container {
           width: 100%;
           background-color: white;
-          border-radius: 0; /* Flush against the edges */
+          border-radius: 0;
           border: none;
-          box-shadow: none; /* No shadow needed if edge-to-edge */
+          box-shadow: none;
           overflow: hidden;
         }
 
@@ -848,13 +881,11 @@ export default function BuyingList({ refreshTrigger }) {
           padding: 1.25rem 2rem;
         }
 
-        /* Padding specifically for filters so they don't touch the edge */
         .filter-section-wrapper {
           padding: 1.5rem 2rem;
           background-color: white;
         }
 
-        /* Table container needs to stretch full width with 0 side margins */
         .table-container {
           background: white;
           border-radius: 0;
@@ -881,7 +912,7 @@ export default function BuyingList({ refreshTrigger }) {
           border-collapse: separate;
           border-spacing: 0;
           font-size: 14px;
-          min-width: 100%; /* Stretch fully */
+          min-width: 100%;
         }
 
         .purchase-table th {
@@ -898,7 +929,6 @@ export default function BuyingList({ refreshTrigger }) {
           white-space: nowrap;
         }
 
-        /* Add extra padding to first and last columns so text isn't glued to monitor edges */
         .purchase-table th:first-child, .purchase-table td:first-child {
           padding-left: 2rem;
         }
@@ -1234,7 +1264,6 @@ export default function BuyingList({ refreshTrigger }) {
 
       <div className="buying-list-wrapper">
         <div className="main-card-container">
-          {/* Header section matching Option A style */}
           <div className="main-card-header">
             <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", color: "white", margin: 0 }}>
               📋 Purchase History
@@ -1242,7 +1271,6 @@ export default function BuyingList({ refreshTrigger }) {
           </div>
           
           <div className="filter-section-wrapper">
-            {/* Top Filters Section */}
             <div className="filter-section">
               <div className="filter-header">
                 <h3>Search Filters</h3>
@@ -1394,18 +1422,89 @@ export default function BuyingList({ refreshTrigger }) {
             </div>
           </div>
 
-          {/* Table Container - OUTSIDE of the padded wrapper so it hits the edges */}
           <div className="table-container">
             <div className="table-scroll-wrapper">
               <table className="purchase-table">
                 <thead>
                   <tr>
-                    <TableHeader title="BILL #" columnKey="billNumber" type="number" />
-                    <TableHeader title="COMPANY" columnKey="company" type="string" />
-                    <TableHeader title="DATE & TIME" columnKey="date" type="string" />
-                    <TableHeader title="STATUS" columnKey="paymentStatus" type="string" />
-                    <TableHeader title="CONSIGNMENT" columnKey="consignment" type="string" />
-                    <TableHeader title="ATTACHMENT" columnKey="hasAttachment" type="string" />
+                    <TableHeader 
+                      title="BILL #" 
+                      columnKey="billNumber" 
+                      type="number" 
+                      sortConfig={sortConfig}
+                      requestSort={requestSort}
+                      processedBills={processedBills}
+                      columnFilters={columnFilters}
+                      activeFilterDropdown={activeFilterDropdown}
+                      setActiveFilterDropdown={setActiveFilterDropdown}
+                      handleUpdateColumnFilter={handleUpdateColumnFilter}
+                      clearColumnFilter={clearColumnFilter}
+                    />
+                    <TableHeader 
+                      title="COMPANY" 
+                      columnKey="company" 
+                      type="string" 
+                      sortConfig={sortConfig}
+                      requestSort={requestSort}
+                      processedBills={processedBills}
+                      columnFilters={columnFilters}
+                      activeFilterDropdown={activeFilterDropdown}
+                      setActiveFilterDropdown={setActiveFilterDropdown}
+                      handleUpdateColumnFilter={handleUpdateColumnFilter}
+                      clearColumnFilter={clearColumnFilter}
+                    />
+                    <TableHeader 
+                      title="DATE & TIME" 
+                      columnKey="date" 
+                      type="string" 
+                      sortConfig={sortConfig}
+                      requestSort={requestSort}
+                      processedBills={processedBills}
+                      columnFilters={columnFilters}
+                      activeFilterDropdown={activeFilterDropdown}
+                      setActiveFilterDropdown={setActiveFilterDropdown}
+                      handleUpdateColumnFilter={handleUpdateColumnFilter}
+                      clearColumnFilter={clearColumnFilter}
+                    />
+                    <TableHeader 
+                      title="STATUS" 
+                      columnKey="paymentStatus" 
+                      type="string" 
+                      sortConfig={sortConfig}
+                      requestSort={requestSort}
+                      processedBills={processedBills}
+                      columnFilters={columnFilters}
+                      activeFilterDropdown={activeFilterDropdown}
+                      setActiveFilterDropdown={setActiveFilterDropdown}
+                      handleUpdateColumnFilter={handleUpdateColumnFilter}
+                      clearColumnFilter={clearColumnFilter}
+                    />
+                    <TableHeader 
+                      title="CONSIGNMENT" 
+                      columnKey="consignment" 
+                      type="string" 
+                      sortConfig={sortConfig}
+                      requestSort={requestSort}
+                      processedBills={processedBills}
+                      columnFilters={columnFilters}
+                      activeFilterDropdown={activeFilterDropdown}
+                      setActiveFilterDropdown={setActiveFilterDropdown}
+                      handleUpdateColumnFilter={handleUpdateColumnFilter}
+                      clearColumnFilter={clearColumnFilter}
+                    />
+                    <TableHeader 
+                      title="ATTACHMENT" 
+                      columnKey="hasAttachment" 
+                      type="string" 
+                      sortConfig={sortConfig}
+                      requestSort={requestSort}
+                      processedBills={processedBills}
+                      columnFilters={columnFilters}
+                      activeFilterDropdown={activeFilterDropdown}
+                      setActiveFilterDropdown={setActiveFilterDropdown}
+                      handleUpdateColumnFilter={handleUpdateColumnFilter}
+                      clearColumnFilter={clearColumnFilter}
+                    />
                     <th style={{ padding: "0.75rem 2rem", borderBottom: "2px solid #cbd5e1", backgroundColor: "#f8fafc", fontWeight: "600" }}>ACTIONS</th>
                   </tr>
                 </thead>

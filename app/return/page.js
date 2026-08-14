@@ -94,7 +94,6 @@ export default function ReturnHistory() {
 
   const editSectionRef = useRef(null);
 
-  // Handle outside click for dropdowns safely with touch support
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!e.target.closest('.filter-dropdown-container')) {
@@ -109,7 +108,6 @@ export default function ReturnHistory() {
     };
   }, []);
 
-  // Helper functions
   const escapeHtml = (text) => {
     if (!text) return "";
     const div = document.createElement("div");
@@ -214,8 +212,10 @@ export default function ReturnHistory() {
     return { backgroundColor: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
   };
 
+  // 🔥 Lock check: Returns that are Paid or Processed cannot be edited
   const isEditable = (returnItem) => {
-    return returnItem.paymentStatus !== "Processed";
+    const status = String(returnItem?.paymentStatus || "").toLowerCase();
+    return status !== "processed" && status !== "paid" && returnItem?.isPaid !== true;
   };
 
   const SortIcon = ({ col, sortState }) => {
@@ -305,7 +305,6 @@ export default function ReturnHistory() {
     }
   };
 
-  // 1. Flatten the returns array so each item becomes its own row
   const flattenedReturns = (returns || []).flatMap(returnBill => {
     const items = getDisplayItems(returnBill);
     if (!items || items.length === 0) {
@@ -334,10 +333,8 @@ export default function ReturnHistory() {
     }));
   });
 
-  // 2. Filter and sort the flattened array
   const displayFilteredAndSorted = useMemo(() => {
     let result = flattenedReturns.filter(row => {
-      // Apply Global Search Filters
       const displayNote = extractNote(row.parentBill);
       if (filters.billNumber && !row.billNumber?.toString().includes(filters.billNumber)) return false;
       if (filters.itemName && !row.itemName?.toLowerCase().includes(filters.itemName.toLowerCase())) return false;
@@ -349,7 +346,6 @@ export default function ReturnHistory() {
       return true;
     });
 
-    // Apply Column Header Filters
     for (const [columnKey, filterData] of Object.entries(columnFilters)) {
       result = result.filter(row => {
         const itemValue = getCellDisplayValue(row, columnKey);
@@ -358,7 +354,6 @@ export default function ReturnHistory() {
       });
     }
 
-    // Apply Sorting
     return result.sort((a, b) => {
       const { col, dir } = returnSort;
       let aVal, bVal;
@@ -379,7 +374,6 @@ export default function ReturnHistory() {
     });
   }, [flattenedReturns, filters, columnFilters, returnSort]);
 
-  // Table Header Dropdown Component (Matches StorePage)
   const ExcelFilterDropdown = ({ columnKey, type = "string" }) => {
     const [search, setSearch] = useState("");
     const isOpen = activeFilterDropdown === columnKey;
@@ -460,8 +454,8 @@ export default function ReturnHistory() {
                 <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", fontWeight: "500", borderBottom: "1px solid #f1f5f9" }}>
                   <input 
                     type="checkbox" 
-                    checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    checked={selectedValues.length === uniqueValues.length && uniqueValues.length > 0} 
+                    onChange={(e) => handleSelectAll(e.target.checked)} 
                     style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
                   />
                   <span>(Select All)</span>
@@ -470,8 +464,8 @@ export default function ReturnHistory() {
                   <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", padding: "0.25rem", cursor: "pointer", color: "#1e293b" }}>
                     <input 
                       type="checkbox" 
-                      checked={selectedValues.includes(val)}
-                      onChange={(e) => handleCheckbox(val, e.target.checked)}
+                      checked={selectedValues.includes(val)} 
+                      onChange={(e) => handleCheckbox(val, e.target.checked)} 
                       style={{ cursor: "pointer", width: "1rem", height: "1rem", accentColor: "#2563eb" }}
                     />
                     <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val === "" ? "(Blank)" : val}</span>
@@ -603,7 +597,7 @@ export default function ReturnHistory() {
     }
   }, [displayFilteredAndSorted]);
 
-const handlePrint = useCallback((returnItem) => {
+  const handlePrint = useCallback((returnItem) => {
     if (!returnItem) return;
     const currency = returnItem.currency || "IQD";
     const items = getDisplayItems(returnItem);
@@ -611,7 +605,6 @@ const handlePrint = useCallback((returnItem) => {
     const pharmacyReturnNumberDisplay = returnItem.pharmacyReturnBillNumber || "N/A";
     const displayNote = extractNote(returnItem);
 
-    // FIX: Calculate the grand total explicitly for the print view
     let printGrandTotal = 0;
 
     const itemRows = items.map((item, idx) => {
@@ -620,7 +613,7 @@ const handlePrint = useCallback((returnItem) => {
       const price = item.returnPrice || 0;
       const total = price * qty;
       
-      printGrandTotal += total; // Add to explicitly tracked total
+      printGrandTotal += total;
 
       return `
         <tr>
@@ -649,7 +642,6 @@ const handlePrint = useCallback((returnItem) => {
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-
   <style>
     :root {
       --primary: #4b5563; 
@@ -660,13 +652,11 @@ const handlePrint = useCallback((returnItem) => {
       --gray-700: #374151;
       --gray-900: #111827;
     }
-    
     * { 
       box-sizing: border-box; 
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
-    
     body { 
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
       background: #f0f2f5; 
@@ -674,18 +664,15 @@ const handlePrint = useCallback((returnItem) => {
       padding: 20px; 
       color: var(--gray-900);
     }
-
     @page { 
       size: A4 portrait; 
       margin: 10mm 15mm; 
     }
-
     @media print {
       body { background: white; padding: 0; }
       .print-container { box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; padding: 0 !important; }
       .no-print { display: none; }
     }
-
     .print-container { 
       width: 100%; 
       max-width: 210mm; 
@@ -695,7 +682,6 @@ const handlePrint = useCallback((returnItem) => {
       box-shadow: 0 10px 25px rgba(0,0,0,0.05); 
       padding: 40px; 
     }
-
     .invoice-header {
       display: flex;
       justify-content: space-between;
@@ -708,8 +694,6 @@ const handlePrint = useCallback((returnItem) => {
     .company-details { text-align: right; }
     .company-name { font-size: 26px; font-weight: 800; color: var(--gray-900); margin: 0 0 8px 0; letter-spacing: 0.5px; }
     .company-contact { margin: 2px 0; color: var(--gray-500); font-size: 13px; }
-    .invoice-title { font-size: 24px; font-weight: 700; color: var(--gray-700); margin: 0; text-transform: uppercase; letter-spacing: 1px; }
-
     .info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -733,7 +717,6 @@ const handlePrint = useCallback((returnItem) => {
     .info-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
     .info-label { color: var(--gray-500); font-weight: 500; }
     .info-value { font-weight: 600; color: var(--gray-900); text-align: right; }
-    
     .status-badge { 
       background: ${statusBg}; 
       color: ${statusColor}; 
@@ -745,12 +728,11 @@ const handlePrint = useCallback((returnItem) => {
       display: inline-block;
       text-transform: uppercase;
     }
-
     .items-table { 
       width: 100%; 
       border-collapse: collapse; 
       margin-bottom: 25px; 
-      border-radius: 8px;
+      border-radius: 8px; 
       overflow: hidden;
       border: 1px solid var(--gray-200);
     }
@@ -760,19 +742,17 @@ const handlePrint = useCallback((returnItem) => {
       padding: 12px 15px; 
       font-weight: 600; 
       font-size: 13px; 
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      text-transform: uppercase; 
+      letter-spacing: 0.5px; 
       border-bottom: 2px solid var(--gray-200);
     }
-    
     .items-table td { 
       padding: 12px 15px; 
       border-bottom: 1px solid var(--gray-200); 
-      font-size: 14px;
-      vertical-align: middle;
+      font-size: 14px; 
+      vertical-align: middle; 
     }
     .items-table tr:last-child td { border-bottom: none; }
-    
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .font-medium { font-weight: 500; }
@@ -787,18 +767,10 @@ const handlePrint = useCallback((returnItem) => {
       font-weight: 600;
       display: inline-block;
     }
-
     .totals-container {
       display: flex;
       justify-content: flex-end;
       margin-bottom: 30px;
-    }
-    .totals-box {
-      width: 350px;
-      background: var(--gray-50);
-      border: 1px solid var(--gray-200);
-      border-radius: 8px;
-      padding: 15px 20px;
     }
     .total-row {
       display: flex;
@@ -808,7 +780,6 @@ const handlePrint = useCallback((returnItem) => {
     }
     .total-label { font-weight: 700; color: var(--gray-700); }
     .total-amount { font-weight: 800; color: #059669; font-size: 22px; }
-
     .note-section {
       background: #f9fafb;
       border-left: 4px solid var(--gray-500);
@@ -818,38 +789,16 @@ const handlePrint = useCallback((returnItem) => {
       font-size: 14px;
       color: var(--gray-700);
     }
-
     .signatures { 
       display: flex; 
       justify-content: space-between; 
       gap: 40px; 
-      margin-top: 50px;
-      padding-top: 40px;
+      margin-top: 50px; 
+      padding-top: 40px; 
     }
-    .signature-line { 
-      flex: 1; 
-      text-align: center; 
-    }
-    .signature-dash { 
-      border-top: 1px solid var(--gray-400); 
-      width: 80%; 
-      margin: 0 auto 10px; 
-    }
-    .signature-text {
-      font-size: 13px;
-      color: var(--gray-500);
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .footer { 
-      text-align: center; 
-      margin-top: 40px; 
-      padding-top: 15px;
-      border-top: 1px solid var(--gray-200);
-    }
-    .print-date { font-size: 11px; color: var(--gray-500); }
+    .signature-line { flex: 1; text-align: center; }
+    .signature-dash { border-top: 1px solid var(--gray-400); width: 80%; margin: 0 auto 10px; }
+    .signature-text { font-size: 13px; color: var(--gray-500); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
   </style>
 </head>
 <body>
@@ -915,10 +864,9 @@ const handlePrint = useCallback((returnItem) => {
     </table>
 
     <div class="totals-container">
-      <div class="" style="border: 1px solid var(--gray-200); border-radius: 8px; padding: 15px 20px; background: var(--gray-50);">
+      <div style="border: 1px solid var(--gray-200); border-radius: 8px; padding: 15px 20px; background: var(--gray-50);">
         <div class="total-row">
-          <span class="total-label" style="font-size: 15px;text-align: left;">TOTAL RETURN:    </span>
-          <!-- FIX: explicitly render the recalculated printGrandTotal -->
+          <span class="total-label" style="font-size: 15px; text-align: left;">TOTAL RETURN:    </span>
           <span class="total-amount" style="font-size: 15px; text-align: right;">${formatCurrency(printGrandTotal, currency)}</span>
         </div>
       </div>
@@ -936,7 +884,6 @@ const handlePrint = useCallback((returnItem) => {
         <div class="signature-text">Aran Med Store Representative<br>Signature &amp; Stamp</div>
       </div>
     </div>
-    
   </div>
 </body>
 </html>`;
@@ -1178,12 +1125,24 @@ const handlePrint = useCallback((returnItem) => {
     }
   };
 
+  // 🔥 Strict lock on deleting paid returns
   const handleDeleteReturn = async (returnItem) => {
     if (!returnItem) { alert("Invalid return item"); return; }
-    const msg = returnItem.paymentStatus === "Paid"
-      ? "⚠️ This return has been PAID. Delete anyway?"
-      : "Delete this entire return bill?";
-    if (confirm(msg)) {
+    
+    const status = String(returnItem.paymentStatus || "").toLowerCase();
+    const isPaid = returnItem.isPaid === true || status === "paid" || status === "completed";
+
+    if (isPaid) {
+      alert("❌ This return bill has already been PAID and cannot be deleted.");
+      return;
+    }
+
+    if (status === "processed") {
+      alert("❌ This return bill is Processed and cannot be deleted directly. Change status to Unpaid first.");
+      return;
+    }
+
+    if (confirm("Delete this entire return bill? Inventory will be adjusted automatically.")) {
       try {
         const deleteId = returnItem.documentId || returnItem.id;
         await deleteReturnBillAndRestoreToSale(deleteId);
@@ -1201,13 +1160,20 @@ const handlePrint = useCallback((returnItem) => {
     }
   };
 
+  // 🔥 Strict lock on editing paid returns
   const handleEditReturn = async (returnItem) => {
     if (!returnItem?.documentId && !returnItem?.id) { alert("Invalid return item"); return; }
-    if (returnItem.paymentStatus === "Processed") {
-      alert("⚠️ This return is Processed and cannot be edited. Change it to Unpaid first.");
+
+    const status = String(returnItem.paymentStatus || "").toLowerCase();
+    const isPaid = returnItem.isPaid === true || status === "paid" || status === "completed";
+
+    if (isPaid) {
+      alert("❌ This return bill is marked as PAID and cannot be edited.");
       return;
     }
-    if (returnItem.paymentStatus === "Paid" && !confirm("⚠️ This return is PAID. Continue editing?")) {
+
+    if (status === "processed") {
+      alert("⚠️ This return is Processed and cannot be edited. Change it to Unpaid first.");
       return;
     }
 
@@ -1498,25 +1464,25 @@ const handlePrint = useCallback((returnItem) => {
             <div style={styles.filterGrid}>
               <div style={styles.filterGroup}>
                 <label style={styles.filterLabel}><FaStore size={14} /> Pharmacy</label>
-             <Select
-  options={[{ value: null, label: "All Pharmacies" }, ...pharmacies.map(p => ({ value: p, label: p.name }))]}
-  onChange={handlePharmacySelect}
-  placeholder="Select pharmacy..."
-  isClearable
-  maxMenuHeight={320}
-  styles={{ 
-    control: (base) => ({ 
-      ...base, 
-      fontFamily: nrtFontStyle.fontFamily, 
-      fontSize: '14px', 
-      boxSizing: "border-box" 
-    }),
-    menu: (base) => ({
-      ...base,
-      zIndex: 9999 // This forces the dropdown to float over the table
-    })
-  }}
-/>
+                <Select
+                  options={[{ value: null, label: "All Pharmacies" }, ...pharmacies.map(p => ({ value: p, label: p.name }))]}
+                  onChange={handlePharmacySelect}
+                  placeholder="Select pharmacy..."
+                  isClearable
+                  maxMenuHeight={320}
+                  styles={{ 
+                    control: (base) => ({ 
+                      ...base, 
+                      fontFamily: nrtFontStyle.fontFamily, 
+                      fontSize: '14px', 
+                      boxSizing: "border-box" 
+                    }),
+                    menu: (base) => ({
+                      ...base,
+                      zIndex: 9999
+                    })
+                  }}
+                />
               </div>
               <div style={styles.filterGroup}>
                 <label style={styles.filterLabel}><FaBox size={14} /> Item Name</label>
@@ -1563,7 +1529,7 @@ const handlePrint = useCallback((returnItem) => {
             </div>
           </div>
 
-          {/* Returns History Table (Flattened items) */}
+          {/* Returns History Table */}
           <div className="table-responsive">
             <table>
               <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
@@ -1585,6 +1551,8 @@ const handlePrint = useCallback((returnItem) => {
                 {displayFilteredAndSorted.map(row => {
                   const statusStyle = getStatusBadge(row.paymentStatus);
                   const canEdit = isEditable(row.parentBill);
+                  const statusLower = String(row.paymentStatus || "").toLowerCase();
+                  const isPaid = row.isPaid === true || statusLower === "paid" || statusLower === "completed";
 
                   return (
                     <tr
@@ -1635,6 +1603,7 @@ const handlePrint = useCallback((returnItem) => {
                           >
                             <FaPrint size={11} /> Print
                           </button>
+                          
                           {canEdit ? (
                             <button
                               style={{ ...styles.btn, ...styles.btnSecondary, ...styles.btnSmall, fontSize: "12px", padding: "4px 8px" }}
@@ -1646,19 +1615,36 @@ const handlePrint = useCallback((returnItem) => {
                           ) : (
                             <button
                               style={{ ...styles.btn, ...styles.btnSmall, backgroundColor: "#e5e7eb", color: "#9ca3af", cursor: "not-allowed", fontSize: "12px", padding: "4px 8px" }}
-                              title="Change to Unpaid to edit"
-                              onClick={e => { e.stopPropagation(); alert("This return is Processed. Change it to Unpaid first to edit."); }}
+                              title={isPaid ? "Paid returns cannot be edited" : "Change to Unpaid to edit"}
+                              onClick={e => { 
+                                e.stopPropagation(); 
+                                alert(isPaid ? "❌ This return bill is PAID and cannot be edited." : "This return is Processed. Change it to Unpaid first to edit."); 
+                              }}
+                            >
+                              <FaLock size={11} /> Edit
+                            </button>
+                          )}
+
+                          {!isPaid ? (
+                            <button
+                              style={{ ...styles.btn, ...styles.btnDanger, ...styles.btnSmall, fontSize: "12px", padding: "4px 8px" }}
+                              onClick={e => { e.stopPropagation(); handleDeleteReturn(row.parentBill); }}
+                              title="Delete entire bill"
+                            >
+                              <FaTrash size={11} />
+                            </button>
+                          ) : (
+                            <button
+                              style={{ ...styles.btn, ...styles.btnSmall, backgroundColor: "#e5e7eb", color: "#9ca3af", cursor: "not-allowed", fontSize: "12px", padding: "4px 8px" }}
+                              title="Paid returns cannot be deleted"
+                              onClick={e => { 
+                                e.stopPropagation(); 
+                                alert("❌ This return bill has already been PAID and cannot be deleted."); 
+                              }}
                             >
                               <FaLock size={11} />
                             </button>
                           )}
-                          <button
-                            style={{ ...styles.btn, ...styles.btnDanger, ...styles.btnSmall, fontSize: "12px", padding: "4px 8px" }}
-                            onClick={e => { e.stopPropagation(); handleDeleteReturn(row.parentBill); }}
-                            title="Delete entire bill"
-                          >
-                            <FaTrash size={11} />
-                          </button>
                         </div>
                       </td>
                     </tr>
