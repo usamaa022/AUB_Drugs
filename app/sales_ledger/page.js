@@ -1,7 +1,12 @@
 "use client";
-
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { getSoldBills, getAllReturns, getSoldPayments } from "../../lib/data";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import {
+  getSoldBills,
+  getAllReturns,
+  getSoldPayments
+} from "../../lib/data";
 import { Filter, Search } from "lucide-react";
 
 // --- Advanced Filter Operators ---
@@ -343,8 +348,8 @@ const TableHeader = ({
   
   return (
     <th style={{ 
-      backgroundColor: "#34495e", color: "white", padding: "12px 10px", 
-      textAlign: "left", fontSize: "14px", fontFamily: "'NRT-Bd', sans-serif", 
+      backgroundColor: "#34495e", color: "white", padding: "10px 8px", 
+      textAlign: "left", fontSize: "13px", fontFamily: "'NRT-Bd', sans-serif", 
       whiteSpace: "nowrap", borderRight: "1px solid #576574", 
       width: colWidth || "auto", 
       position: "relative",
@@ -352,7 +357,7 @@ const TableHeader = ({
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
         <div onClick={() => handleSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
-          {title} <span className="no-print" style={{ fontSize: "11px", color: "#bdc3c7" }}>{getSortIcon(columnKey)}</span>
+          {title} <span className="no-print" style={{ fontSize: "10px", color: "#bdc3c7" }}>{getSortIcon(columnKey)}</span>
         </div>
         <ExcelFilterDropdown 
           columnKey={columnKey} type={type} 
@@ -412,7 +417,6 @@ export default function SalesLedgerPage() {
       const normalizedData = [];
       const pharmacySet = new Set();
 
-      // 1. BUILD BI-DIRECTIONAL PAYMENT MAP
       const paymentMap = new Map();
       
       payments.forEach(pay => {
@@ -474,7 +478,6 @@ export default function SalesLedgerPage() {
         deepScan(pay);
       });
 
-      // 2. Process Sold Bills (Dynamically computing accurate prices)
       bills.forEach(bill => {
         const pName = bill.pharmacyName || "Unknown";
         pharmacySet.add(pName);
@@ -518,7 +521,6 @@ export default function SalesLedgerPage() {
         });
       });
 
-      // 3. Process Returns (Dynamically computing accurate prices)
       returns.forEach(ret => {
         const pName = ret.pharmacyName || "Unknown";
         pharmacySet.add(pName);
@@ -591,7 +593,6 @@ export default function SalesLedgerPage() {
         });
       });
 
-      // 4. Process Payments
       payments.forEach(pay => {
         const pName = pay.pharmacyName || "Unknown";
         pharmacySet.add(pName);
@@ -755,7 +756,7 @@ export default function SalesLedgerPage() {
         <head>
           <title>Sales Ledger - ${selectedPharmacy}</title>
           <style>
-            body { font-family: Tahoma, sans-serif; padding: 20px; color: #111; }
+            body { font-family: Tahoma, sans-serif; padding: 0; margin: 0; color: #111; width: 100%; }
             h2 { text-align: center; margin-bottom: 20px; font-size: 24px; color: #1f2937; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
             th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
@@ -809,7 +810,7 @@ export default function SalesLedgerPage() {
 
   if (loading) {
     return (
-      <div style={{ width: '100%', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', ...nrtFontStyle }}>
+      <div style={{ width: '100vw', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb', ...nrtFontStyle }}>
         <div style={{ animation: 'spin 1s linear infinite', borderRadius: '9999px', height: '40px', width: '40px', borderTop: '2px solid #3b82f6', borderBottom: '2px solid #3b82f6' }}></div>
       </div>
     );
@@ -817,9 +818,9 @@ export default function SalesLedgerPage() {
 
   if (!selectedPharmacy) {
     return (
-      <div style={{ width: '100%', minHeight: '100vh', display: 'flex', justifyContent: 'center', backgroundColor: '#f9fafb', paddingTop: '5rem', ...nrtFontStyle }}>
-        <div style={{ width: '100%', maxWidth: '450px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', border: '1px solid #e5e7eb', height: 'fit-content' }}>
-          <div style={{ backgroundColor: '#2563eb', padding: '1.5rem', textAlign: 'center', color: 'white', borderTopLeftRadius: '12px', borderTopRightRadius: '12px' }}>
+      <div style={{ width: '100vw', minHeight: '100vh', display: 'flex', justifyContent: 'center', backgroundColor: '#f9fafb', paddingTop: '5rem', boxSizing: 'border-box', ...nrtFontStyle }}>
+        <div style={{ width: '100%', maxWidth: '450px', backgroundColor: 'white', borderRadius: 0, border: '1px solid #e5e7eb', height: 'fit-content' }}>
+          <div style={{ backgroundColor: '#2563eb', padding: '1.5rem', textAlign: 'center', color: 'white' }}>
             <h1 style={{ margin: 0, fontSize: '24px', ...nrtFontBoldStyle }}>Sales Ledger</h1>
             <p style={{ margin: '0.5rem 0 0 0', color: '#bfdbfe', fontSize: '14px' }}>Select a pharmacy to view history</p>
           </div>
@@ -855,24 +856,24 @@ export default function SalesLedgerPage() {
   }
 
   return (
-    <div style={{ width: '100%', margin: 0, padding: 0, boxSizing: 'border-box', backgroundColor: 'white', minHeight: '100vh', ...nrtFontStyle }}>
-      <div style={{ padding: '15px', width: '100%', boxSizing: 'border-box' }}>
+    <div style={{ width: '100vw', margin: 0, padding: 0, boxSizing: 'border-box', backgroundColor: 'white', minHeight: '100vh', overflowX: 'hidden', ...nrtFontStyle }}>
+      <div style={{ width: '100%', margin: 0, padding: 0, boxSizing: 'border-box' }}>
         
         {/* Top Header */}
-        <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button onClick={() => setSelectedPharmacy(null)} style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>←</button>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#1f2937', margin: 0, ...nrtFontBoldStyle }}>{selectedPharmacy} - Ledger</h2>
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 15px', backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button onClick={() => setSelectedPharmacy(null)} style={{ padding: '4px 10px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>←</button>
+            <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', margin: 0, ...nrtFontBoldStyle }}>{selectedPharmacy} - Ledger</h2>
           </div>
           
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button onClick={handlePrint} style={{ padding: '8px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', ...nrtFontStyle }}>
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-              Print List
+            <button onClick={handlePrint} style={{ padding: '6px 12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', ...nrtFontStyle }}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              Print
             </button>
             
             {Object.keys(columnFilters).length > 0 && (
-              <button onClick={() => setColumnFilters({})} style={{ padding: '8px 16px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', ...nrtFontStyle }}>
+              <button onClick={() => setColumnFilters({})} style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', ...nrtFontStyle }}>
                 Clear Filters
               </button>
             )}
@@ -880,7 +881,7 @@ export default function SalesLedgerPage() {
             <select 
               value={typeFilter} 
               onChange={(e) => setTypeFilter(e.target.value)}
-              style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', outline: 'none', ...nrtFontStyle }}
+              style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', outline: 'none', fontSize: '13px', ...nrtFontStyle }}
             >
               <option value="All">All Transactions</option>
               <option value="Sold Bill">Bills Only</option>
@@ -891,23 +892,23 @@ export default function SalesLedgerPage() {
         </div>
 
         {error && (
-          <div className="no-print" style={{ padding: '1rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', marginBottom: '1rem', ...nrtFontStyle }}>
+          <div className="no-print" style={{ padding: '0.75rem 15px', backgroundColor: '#fef2f2', borderBottom: '1px solid #fecaca', color: '#991b1b', width: '100%', boxSizing: 'border-box', fontSize: '13px', ...nrtFontStyle }}>
             {error}
           </div>
         )}
 
-        {/* Table container */}
-        <div id="printable-table-area" style={{ width: '100%', overflowX: 'auto', borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', maxHeight: '80vh' }}>
-          <table style={{ width: '100%', margin: 0, borderCollapse: 'collapse', minWidth: '1000px' }}>
+        {/* Table container with full scrollable height */}
+        <div id="printable-table-area" style={{ width: '100vw', overflowX: 'auto', borderBottom: '1px solid #e5e7eb', maxHeight: 'calc(100vh - 75px)', margin: 0, padding: 0 }}>
+          <table style={{ width: '100vw', margin: 0, borderCollapse: 'collapse', minWidth: '950px' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 50 }}>
               <tr style={{ backgroundColor: '#f9fafb' }}>
-                <TableHeader title="Date" columnKey="date" colWidth="130px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
-                <TableHeader title="Type" columnKey="type" colWidth="100px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
-                <TableHeader title="Doc Number" columnKey="documentNumber" colWidth="140px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
-                <TableHeader title="Amount (USD)" columnKey="amountUSD" type="number" colWidth="130px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
-                <TableHeader title="Amount (IQD)" columnKey="amountIQD" type="number" colWidth="130px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
-                <TableHeader title="Status" columnKey="status" colWidth="100px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
-                <TableHeader title="Payment ID" columnKey="paymentNumber" colWidth="180px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
+                <TableHeader title="Date" columnKey="date" colWidth="120px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
+                <TableHeader title="Type" columnKey="type" colWidth="90px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
+                <TableHeader title="Doc Number" columnKey="documentNumber" colWidth="120px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
+                <TableHeader title="Amount (USD)" columnKey="amountUSD" type="number" colWidth="110px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
+                <TableHeader title="Amount (IQD)" columnKey="amountIQD" type="number" colWidth="120px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
+                <TableHeader title="Status" columnKey="status" colWidth="90px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
+                <TableHeader title="Payment ID" columnKey="paymentNumber" colWidth="150px" handleSort={handleSort} getSortIcon={getSortIcon} allData={allData} selectedPharmacy={selectedPharmacy} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} />
               </tr>
             </thead>
             <tbody>
@@ -924,7 +925,7 @@ export default function SalesLedgerPage() {
                   
                   const pColor = getPaymentColorHex(row.paymentNumber);
                   const rowBg = pColor ? `${pColor}10` : 'white'; 
-                  const rowBorderLeft = pColor ? `5px solid ${pColor}` : '5px solid transparent';
+                  const rowBorderLeft = pColor ? `4px solid ${pColor}` : '4px solid transparent';
 
                   let typeBg = '#dcfce7'; let typeColor = '#166534';
                   if (isPayment) { typeBg = '#f3e8ff'; typeColor = '#6b21a8'; }
@@ -942,49 +943,49 @@ export default function SalesLedgerPage() {
                       transition: 'background 0.2s', 
                       ...nrtFontStyle 
                     }}>
-                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb', color: '#475569', fontWeight: '500' }}>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #e5e7eb', color: '#475569', fontWeight: '500', fontSize: '12px' }}>
                         {formatDateTime(row.date)}
                       </td>
-                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
-                        <span style={{ backgroundColor: typeBg, color: typeColor, padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', display: 'inline-block', ...nrtFontStyle }}>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #e5e7eb' }}>
+                        <span style={{ backgroundColor: typeBg, color: typeColor, padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: '600', display: 'inline-block', ...nrtFontStyle }}>
                           {row.type}
                         </span>
                       </td>
-                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb', fontWeight: '600', color: '#1f2937' }}>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #e5e7eb', fontWeight: '600', color: '#1f2937', fontSize: '12px' }}>
                         {row.documentNumber}
                       </td>
-                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '700', color: amountColor }}>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '700', color: amountColor, fontSize: '12px' }}>
                         {Math.abs(row.amountUSD) > 0 ? `${amountSign}${formatUSD(Math.abs(row.amountUSD))}` : "-"}
                       </td>
-                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '700', color: amountColor }}>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '700', color: amountColor, fontSize: '12px' }}>
                         {Math.abs(row.amountIQD) > 0 ? `${amountSign}${formatIQD(Math.abs(row.amountIQD))}` : "-"}
                       </td>
-                      <td style={{ padding: '12px', borderRight: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '8px 10px', borderRight: '1px solid #e5e7eb' }}>
                          <span style={{ 
-                           backgroundColor: isPaid ? '#dcfce7' : '#f1f5f9', 
-                           color: isPaid ? '#166534' : '#64748b', 
-                           padding: '4px 8px', 
-                           borderRadius: '6px', 
-                           fontSize: '12px', 
-                           fontWeight: '600', 
-                           display: 'inline-block', 
-                           ...nrtFontStyle 
+                          backgroundColor: isPaid ? '#dcfce7' : '#f1f5f9', 
+                          color: isPaid ? '#166534' : '#64748b', 
+                          padding: '2px 6px', 
+                          borderRadius: '4px', 
+                          fontSize: '11px', 
+                          fontWeight: '600', 
+                          display: 'inline-block', 
+                          ...nrtFontStyle 
                          }}>
                             {isPaid ? "Paid" : "Unpaid"}
                          </span>
                       </td>
-                      <td style={{ padding: '12px', borderRight: 'none' }}>
+                      <td style={{ padding: '8px 10px', borderRight: 'none', fontSize: '12px' }}>
                         {row.paymentNumber ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span className="no-print" style={{ 
-                              display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: pColor 
+                              display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: pColor 
                             }}></span>
-                            <span style={{ fontWeight: '700', color: '#374151', fontSize: '13px', letterSpacing: '0.05em' }}>
+                            <span style={{ fontWeight: '700', color: '#374151', fontSize: '12px', letterSpacing: '0.03em' }}>
                               {row.paymentNumber}
                             </span>
                           </div>
                         ) : (
-                          <span style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '13px' }}>
+                          <span style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '12px' }}>
                             {isPaid ? "Paid (No ID)" : "-"}
                           </span>
                         )}
@@ -995,7 +996,8 @@ export default function SalesLedgerPage() {
               )}
             </tbody>
             
-            <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10 }}>
+            {/* Standard Footer (Scrolls normally at the bottom of the table) */}
+            <tbody>
               <tr style={{ backgroundColor: '#f0fdf4', borderTop: '2px solid #cbd5e1' }}>
                 <td colSpan="3" style={{ padding: '10px 12px', textAlign: 'right', borderRight: '1px solid #cbd5e1', color: '#1e293b', fontSize: '13px', ...nrtFontBoldStyle }}>
                   Sales Totals:
@@ -1044,18 +1046,18 @@ export default function SalesLedgerPage() {
               </tr>
 
               <tr style={{ backgroundColor: '#fef3c7', borderTop: '2px solid #cbd5e1' }}>
-                <td colSpan="3" style={{ padding: '14px 12px', textAlign: 'right', borderRight: '1px solid #cbd5e1', color: '#92400e', fontSize: '15px', ...nrtFontBoldStyle }}>
-                  Remained Amount <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#78350f' }}>(Unpaid Balance)</span>:
+                <td colSpan="3" style={{ padding: '12px 12px', textAlign: 'right', borderRight: '1px solid #cbd5e1', color: '#92400e', fontSize: '14px', ...nrtFontBoldStyle }}>
+                  Remained Amount <span style={{ fontSize: '11px', fontWeight: 'normal', color: '#78350f' }}>(Unpaid Balance)</span>:
                 </td>
-                <td style={{ padding: '14px 12px', borderRight: '1px solid #cbd5e1', textAlign: 'right', fontSize: '16px', color: remainedUSD < 0 ? '#ef4444' : '#d97706', ...nrtFontBoldStyle }}>
+                <td style={{ padding: '12px 12px', borderRight: '1px solid #cbd5e1', textAlign: 'right', fontSize: '15px', color: remainedUSD < 0 ? '#ef4444' : '#d97706', ...nrtFontBoldStyle }}>
                   {remainedUSD === 0 ? "-" : `${remainedUSD < 0 ? "-" : ""}${formatUSD(Math.abs(remainedUSD))}`}
                 </td>
-                <td style={{ padding: '14px 12px', borderRight: '1px solid #cbd5e1', textAlign: 'right', fontSize: '16px', color: remainedIQD < 0 ? '#ef4444' : '#d97706', ...nrtFontBoldStyle }}>
+                <td style={{ padding: '12px 12px', borderRight: '1px solid #cbd5e1', textAlign: 'right', fontSize: '15px', color: remainedIQD < 0 ? '#ef4444' : '#d97706', ...nrtFontBoldStyle }}>
                    {remainedIQD === 0 ? "-" : `${remainedIQD < 0 ? "-" : ""}${formatIQD(Math.abs(remainedIQD))}`}
                 </td>
-                <td colSpan="2" style={{ padding: '12px', borderRight: 'none' }}></td>
+                <td colSpan="2" style={{ padding: '12px 12px', borderRight: 'none' }}></td>
               </tr>
-            </tfoot>
+            </tbody>
           </table>
         </div>
       </div>

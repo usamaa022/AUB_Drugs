@@ -1,3 +1,4 @@
+// transport/transportHistory/page.js
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -182,8 +183,8 @@ export default function TransportHistoryPage() {
 
   if (loading) {
     return (
-      <div style={{ width: '100%', minHeight: '100vh', padding: '1rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '256px' }}>
+      <div style={{ width: '100vw', minHeight: '100vh', padding: 0, margin: 0, boxSizing: 'border-box', backgroundColor: "#f8fafc" }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '256px', width: '100%' }}>
           <div style={{
             animation: 'spin 1s linear infinite',
             borderRadius: '9999px',
@@ -199,193 +200,209 @@ export default function TransportHistoryPage() {
   }
 
   return (
-    <div style={{ width: '100%', minHeight: '100vh', padding: '1rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--dark)', marginBottom: '4px' }}>Transport History</h1>
-          <p style={{ color: 'var(--gray)' }}>View all sent and received transports with quantity adjustments</p>
-        </div>
-        
-        {/* Missing Items Button */}
-        <button
-          onClick={() => router.push("/transport/missing")}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 18px',
-            backgroundColor: '#f59e0b',
-            color: 'white',
-            fontWeight: '600',
-            fontSize: '14px',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 4px rgba(245, 158, 11, 0.2)',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d97706'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f59e0b'}
-        >
-          ⚠️ Missing Items
-        </button>
-      </div>
+    <div style={{ width: "100vw", minHeight: "100vh", backgroundColor: "#f8fafc", padding: 0, margin: 0, boxSizing: "border-box", overflowX: "hidden" }}>
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; padding: 0; }
+      `}</style>
       
-      {/* Search and Filters */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '8px', 
-        padding: '1.5rem',
-        marginBottom: '1.5rem',
-        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
-      }}>
-        <h2 style={{ fontSize: '18px', fontWeight: '600', color: 'var(--dark)', marginBottom: '1rem' }}>Search & Filters</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+      <div style={{ width: "100%", margin: 0, padding: 0, boxSizing: "border-box" }}>
+        
+        {/* Page Header */}
+        <div style={{ backgroundColor: "white", padding: "20px 24px", borderRadius: 0, borderBottom: "1px solid #e2e8f0", marginBottom: "20px", width: "100%", boxSizing: "border-box", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>Item Name</label>
-            <input
-              type="text"
-              placeholder="Search by item name..."
-              value={searchFilters.itemName}
-              onChange={(e) => handleFilterChange('itemName', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: 'var(--dark)',
-                backgroundColor: 'white'
-              }}
-            />
+            <h1 className="text-3xl font-bold text-gray-800" style={{ margin: 0 }}>Transport History</h1>
+            <p className="text-gray-600" style={{ margin: "4px 0 0 0" }}>View all sent and received transports</p>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>Status</label>
-            <select
-              value={searchFilters.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: 'var(--dark)',
-                backgroundColor: 'white'
-              }}
-            >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="received">Received</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>From Date</label>
-            <input
-              type="date"
-              value={searchFilters.startDate}
-              onChange={(e) => handleFilterChange('startDate', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: 'var(--dark)',
-                backgroundColor: 'white'
-              }}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>To Date</label>
-            <input
-              type="date"
-              value={searchFilters.endDate}
-              onChange={(e) => handleFilterChange('endDate', e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: 'var(--dark)',
-                backgroundColor: 'white'
-              }}
-            />
-          </div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
-          <div style={{ fontSize: '14px', color: 'var(--gray)' }}>
-            Showing {filteredTransports.length} of {transports.length} transports
-          </div>
+          
+          {/* Missing Items Button */}
           <button
-            onClick={clearFilters}
-            style={{ 
-              backgroundColor: 'var(--gray)', 
-              color: 'white', 
-              padding: '8px 16px', 
+            onClick={() => router.push("/transport/missing")}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              backgroundColor: '#f59e0b',
+              color: 'white',
+              fontWeight: '600',
               fontSize: '14px',
               border: 'none',
-              borderRadius: '6px',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontWeight: '500'
+              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.2)',
+              transition: 'all 0.2s ease'
             }}
           >
-            Clear Filters
+            ⚠️ Missing Items
           </button>
         </div>
-      </div>
-      
-      {user.role === "superAdmin" && (
+
+        {/* Search and Filters */}
         <div style={{ 
           backgroundColor: 'white', 
-          borderRadius: '8px', 
-          padding: '1.5rem',
+          borderRadius: 0, 
+          borderTop: '1px solid #e2e8f0',
+          borderBottom: '1px solid #e2e8f0',
+          padding: '1.5rem 24px',
           marginBottom: '1.5rem',
-          boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
+          width: '100%',
+          boxSizing: 'border-box'
         }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '8px' }}>Branch Filter</label>
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            style={{
-              width: '100%',
-              maxWidth: '200px',
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              fontSize: '14px',
-              color: 'var(--dark)',
-              backgroundColor: 'white'
-            }}
-          >
-            <option value="all">All Branches</option>
-            <option value="Slemany">Slemany</option>
-            <option value="Erbil">Erbil</option>
-          </select>
-        </div>
-      )}
-      
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div style={{ 
-          backgroundColor: 'white', 
-          borderRadius: '8px', 
-          padding: '1.5rem',
-          boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
-        }}>
-          <h2 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--dark)' }}>
-            {filteredTransports.length} Transport{filteredTransports.length !== 1 ? "s" : ""}
-          </h2>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', color: 'var(--dark)', marginBottom: '1rem', marginTop: 0 }}>Search & Filters</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>Item Name</label>
+              <input
+                type="text"
+                placeholder="Search by item name..."
+                value={searchFilters.itemName}
+                onChange={(e) => handleFilterChange('itemName', e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  color: 'var(--dark)',
+                  backgroundColor: 'white',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>Status</label>
+              <select
+                value={searchFilters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  color: 'var(--dark)',
+                  backgroundColor: 'white',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="received">Received</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>From Date</label>
+              <input
+                type="date"
+                value={searchFilters.startDate}
+                onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  color: 'var(--dark)',
+                  backgroundColor: 'white',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>To Date</label>
+              <input
+                type="date"
+                value={searchFilters.endDate}
+                onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  color: 'var(--dark)',
+                  backgroundColor: 'white',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ fontSize: '14px', color: 'var(--gray)' }}>
+              Showing {filteredTransports.length} of {transports.length} transports
+            </div>
+            <button
+              onClick={clearFilters}
+              style={{ 
+                backgroundColor: 'var(--gray)', 
+                color: 'white', 
+                padding: '8px 16px', 
+                fontSize: '14px',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
         
+        {user.role === "superAdmin" && (
+          <div style={{ 
+            backgroundColor: 'white', 
+            borderRadius: 0, 
+            borderTop: '1px solid #e2e8f0',
+            borderBottom: '1px solid #e2e8f0',
+            padding: '1.5rem 24px',
+            marginBottom: '1.5rem',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '8px' }}>Branch Filter</label>
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              style={{
+                width: '100%',
+                maxWidth: '200px',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                color: 'var(--dark)',
+                backgroundColor: 'white',
+                boxSizing: 'border-box'
+              }}
+            >
+              <option value="all">All Branches</option>
+              <option value="Slemany">Slemany</option>
+              <option value="Erbil">Erbil</option>
+            </select>
+          </div>
+        )}
+        
+        <div style={{ width: "100%", padding: "0 24px", boxSizing: "border-box" }}>
+          <div className="card" style={{ width: "100%", boxSizing: "border-box", backgroundColor: 'white', borderRadius: '8px', padding: '1rem 1.5rem', marginBottom: '1rem', border: '1px solid #e2e8f0' }}>
+            <h2 className="text-xl font-semibold text-gray-800" style={{ margin: 0 }}>
+              {filteredTransports.length} Transport{filteredTransports.length !== 1 ? "s" : ""}
+            </h2>
+          </div>
+        </div>
+
         {filteredTransports.length === 0 ? (
           <div style={{ 
             backgroundColor: 'white', 
-            borderRadius: '8px', 
-            padding: '3rem 1.5rem',
+            borderRadius: 0, 
+            borderTop: '1px solid #e2e8f0',
+            borderBottom: '1px solid #e2e8f0',
+            padding: '3rem 24px',
             textAlign: 'center',
-            boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
+            width: '100%',
+            boxSizing: 'border-box'
           }}>
             <div style={{
               margin: '0 auto 16px',
@@ -402,12 +419,12 @@ export default function TransportHistoryPage() {
               </svg>
             </div>
             <h3 style={{ marginBottom: '8px', fontSize: '18px', fontWeight: '600', color: 'var(--dark)' }}>No transports found</h3>
-            <p style={{ color: 'var(--gray)' }}>
+            <p style={{ color: 'var(--gray)', margin: 0 }}>
               {transports.length === 0 ? "Your transports will appear here." : "No transports match your search criteria."}
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: "100%" }}>
             {filteredTransports.map((transport) => (
               <div 
                 key={transport.id} 
@@ -418,11 +435,14 @@ export default function TransportHistoryPage() {
                     transport.status === 'rejected' ? 'var(--danger)' : 'var(--purple)'
                   }`,
                   width: '100%',
-                  margin: '0 0 1rem 0',
-                  borderRadius: '8px',
-                  boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+                  margin: 0,
+                  borderRadius: 0,
+                  borderTop: '1px solid #e2e8f0',
+                  borderBottom: '1px solid #e2e8f0',
+                  borderRight: 'none',
                   backgroundColor: 'white',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  boxSizing: 'border-box'
                 }}
               >
                 <div style={{ 
@@ -430,14 +450,17 @@ export default function TransportHistoryPage() {
                   justifyContent: 'space-between', 
                   alignItems: 'flex-start', 
                   marginBottom: '1rem',
-                  padding: '1.5rem 1.5rem 0 1.5rem'
+                  padding: '1.5rem 24px 0 24px',
+                  width: '100%',
+                  boxSizing: 'border-box'
                 }}>
                   <div>
                     <h3 style={{ 
                       fontSize: '18px', 
                       fontWeight: '600', 
                       color: 'var(--dark)', 
-                      marginBottom: '8px'
+                      marginBottom: '8px',
+                      marginTop: 0
                     }}>
                       Transport #{transport.id.slice(-6)}
                     </h3>
@@ -453,11 +476,12 @@ export default function TransportHistoryPage() {
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: '1rem',
-                  padding: '1.5rem',
+                  padding: '1.5rem 24px',
                   backgroundColor: '#f8fafc',
-                  margin: '0 1.5rem 1.5rem 1.5rem',
+                  margin: '0 24px 1.5rem 24px',
                   borderRadius: '6px',
-                  border: '1px solid #e5e7eb'
+                  border: '1px solid #e5e7eb',
+                  boxSizing: 'border-box'
                 }}>
                   <div>
                     <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray)', marginBottom: '4px' }}>From Branch</div>
@@ -515,34 +539,39 @@ export default function TransportHistoryPage() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      style={{ overflow: 'hidden' }}
+                      style={{ overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}
                     >
                       <div style={{ 
-                        padding: '1.5rem', 
+                        padding: '1.5rem 24px', 
                         backgroundColor: '#f9fafb', 
-                        borderRadius: '8px', 
-                        margin: '0 1.5rem 1.5rem 1.5rem', 
-                        border: '1px solid #e5e7eb' 
+                        borderRadius: 0, 
+                        margin: '0 24px 1.5rem 24px', 
+                        border: '1px solid #e5e7eb',
+                        boxSizing: 'border-box'
                       }}>
                         {/* Sender and Receiver Info */}
                         <div style={{
                           display: 'grid',
                           gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
                           gap: '1rem',
-                          marginBottom: '1.5rem'
+                          marginBottom: '1.5rem',
+                          width: '100%',
+                          boxSizing: 'border-box'
                         }}>
                           <div style={{ 
                             padding: '1rem', 
                             backgroundColor: 'white', 
                             borderRadius: '6px', 
                             boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
-                            border: '1px solid #e5e7eb' 
+                            border: '1px solid #e5e7eb',
+                            boxSizing: 'border-box'
                           }}>
                             <h4 style={{ 
                               fontSize: '14px', 
                               fontWeight: '600', 
                               color: 'var(--dark)', 
-                              marginBottom: '8px' 
+                              marginBottom: '8px',
+                              marginTop: 0
                             }}>Sender Information</h4>
                             <div style={{ 
                               fontSize: '14px', 
@@ -559,13 +588,15 @@ export default function TransportHistoryPage() {
                               backgroundColor: 'white', 
                               borderRadius: '6px', 
                               boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
-                              border: '1px solid #e5e7eb' 
+                              border: '1px solid #e5e7eb',
+                              boxSizing: 'border-box'
                             }}>
                               <h4 style={{ 
                                 fontSize: '14px', 
                                 fontWeight: '600', 
                                 color: 'var(--dark)', 
-                                marginBottom: '8px' 
+                                marginBottom: '8px',
+                                marginTop: 0
                               }}>Receiver Information</h4>
                               <div style={{ 
                                 fontSize: '14px', 
@@ -587,16 +618,19 @@ export default function TransportHistoryPage() {
                           display: 'grid',
                           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
                           gap: '1rem',
-                          marginBottom: '1.5rem'
+                          marginBottom: '1.5rem',
+                          width: '100%',
+                          boxSizing: 'border-box'
                         }}>
                           {transport.notes && (
                             <div style={{
                               padding: '12px',
                               backgroundColor: 'rgba(245, 158, 11, 0.1)',
                               borderRadius: '8px',
-                              borderLeft: '4px solid var(--warning)'
+                              borderLeft: '4px solid var(--warning)',
+                              boxSizing: 'border-box'
                             }}>
-                              <h4 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>Sender Notes</h4>
+                              <h4 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px', marginTop: 0 }}>Sender Notes</h4>
                               <p style={{ fontSize: '14px', color: 'var(--dark)', margin: 0 }}>{transport.notes}</p>
                             </div>
                           )}
@@ -605,9 +639,10 @@ export default function TransportHistoryPage() {
                               padding: '12px',
                               backgroundColor: 'rgba(16, 185, 129, 0.1)',
                               borderRadius: '8px',
-                              borderLeft: '4px solid var(--secondary)'
+                              borderLeft: '4px solid var(--secondary)',
+                              boxSizing: 'border-box'
                             }}>
-                              <h4 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px' }}>Receiver Notes</h4>
+                              <h4 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--dark)', marginBottom: '4px', marginTop: 0 }}>Receiver Notes</h4>
                               <p style={{ fontSize: '14px', color: 'var(--dark)', margin: 0 }}>{transport.receiverNotes}</p>
                             </div>
                           )}
@@ -618,12 +653,15 @@ export default function TransportHistoryPage() {
                           overflowX: 'auto', 
                           borderRadius: '8px', 
                           border: '1px solid #e5e7eb', 
-                          backgroundColor: 'white' 
+                          backgroundColor: 'white',
+                          width: '100%',
+                          boxSizing: 'border-box'
                         }}>
                           <table style={{ 
                             width: '100%', 
                             borderCollapse: 'collapse', 
-                            minWidth: '1050px' 
+                            minWidth: '1050px',
+                            margin: 0
                           }}>
                             <thead>
                               <tr style={{ 
@@ -721,16 +759,16 @@ export default function TransportHistoryPage() {
                                       padding: '12px',
                                       fontSize: '14px',
                                       color: difference < 0 ? 'var(--danger)' :
-                                             difference > 0 ? 'var(--warning)' :
-                                             transport.status === "pending" ? 'var(--gray-light)' : 'var(--secondary)',
+                                              difference > 0 ? 'var(--warning)' :
+                                              transport.status === "pending" ? 'var(--gray-light)' : 'var(--secondary)',
                                       fontWeight: difference !== 0 ? '600' : 'normal',
                                       minWidth: '70px',
                                       textAlign: 'center',
                                       whiteSpace: 'nowrap'
                                     }}>
                                       {transport.status === "pending" ? "—" :
-                                       difference === 0 ? "✓" :
-                                       difference > 0 ? `+${difference}` : difference}
+                                        difference === 0 ? "✓" :
+                                        difference > 0 ? `+${difference}` : difference}
                                     </td>
                                     
                                     <td style={{ 
@@ -787,7 +825,9 @@ export default function TransportHistoryPage() {
                             border: '1px solid rgba(16, 185, 129, 0.2)',
                             display: 'grid',
                             gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                            gap: '1rem'
+                            gap: '1rem',
+                            width: '100%',
+                            boxSizing: 'border-box'
                           }}>
                             <div>
                               <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray)' }}>Total Items</div>
@@ -836,7 +876,8 @@ export default function TransportHistoryPage() {
                     cursor: 'pointer',
                     padding: '12px 1.5rem',
                     borderTop: '1px solid #e5e7eb',
-                    transition: 'background-color 0.2s'
+                    transition: 'background-color 0.2s',
+                    boxSizing: 'border-box'
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}

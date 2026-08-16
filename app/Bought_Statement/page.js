@@ -50,7 +50,7 @@ const BoughtStatementPage = () => {
           <meta charset="utf-8" />
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1f2937; background: white; padding: 20px; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1f2937; background: white; padding: 0; }
             .header-container { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #e5e7eb; padding-bottom: 16px; }
             h1 { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 4px; }
             p.subtitle { color: #6b7280; font-size: 11px; }
@@ -72,7 +72,7 @@ const BoughtStatementPage = () => {
             .ret-usd { color: #dc2626; font-weight: 600; }
             .ret-iqd { color: #b91c1c; font-weight: 600; }
             
-            .summary-container { margin-top: 24px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+            .summary-container { margin-top: 24px; border: 1px solid #e2e8f0; border-radius: 0; overflow: hidden; width: 100%; }
             .summary-header { display: grid; grid-template-columns: 2fr 1fr 1fr; background: #f8fafc; padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; font-size: 10px; color: #6b7280; text-transform: uppercase; }
             .summary-header div:nth-child(2), .summary-header div:nth-child(3) { text-align: right; }
             .summary-row { display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 11px; align-items: center; }
@@ -81,7 +81,7 @@ const BoughtStatementPage = () => {
             .summary-label { font-weight: 500; color: #374151; }
             .summary-val { text-align: right; font-weight: 700; }
             
-            .notes-box { margin-top: 20px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 10px; line-height: 1.5; color: #4b5563; }
+            .notes-box { margin-top: 20px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0; font-size: 10px; line-height: 1.5; color: #4b5563; width: 100%; }
             .notes-box strong { color: #1f2937; display: block; margin-bottom: 4px; }
             
             @media print { 
@@ -103,7 +103,7 @@ const BoughtStatementPage = () => {
     }, 500);
   };
 
-const handleCompanySelect = async (company) => {
+  const handleCompanySelect = async (company) => {
     setSelectedCompany(company);
     setShowModal(false);
     setIsLoading(true);
@@ -114,7 +114,6 @@ const handleCompanySelect = async (company) => {
         getReturnsForCompany(company.id),
       ]);
 
-      // Group returns by returnBillNumber
       const returnsMap = new Map();
 
       returnsData.forEach((ret) => {
@@ -138,7 +137,6 @@ const handleCompanySelect = async (company) => {
         const qty = Number(ret.returnQuantity) || 0;
         const itemCurrency = String(ret.currency || "USD").toUpperCase();
 
-        // Extract price accurately with multiple fallbacks
         const priceUSD = Number(ret.returnPriceUSD || (itemCurrency === "USD" ? (ret.returnPrice || ret.netPrice || 0) : 0)) || 0;
         const priceIQD = Number(ret.returnPriceIQD || (itemCurrency === "IQD" ? (ret.returnPrice || ret.netPrice || 0) : 0)) || 0;
 
@@ -242,11 +240,15 @@ const handleCompanySelect = async (company) => {
   if (!selectedCompany) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", padding: "1rem", fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ width: '100%', maxWidth: '1000px', margin: "0 auto" }}>
+    <div style={{ width: "100%", minHeight: "100vh", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", padding: 0, margin: 0, fontFamily: "system-ui, sans-serif", boxSizing: "border-box", overflowX: "hidden" }}>
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box; }
+      `}</style>
+      
+      <div style={{ width: '100%', margin: 0, padding: 0 }}>
         
         {/* Top Control Header */}
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", backgroundColor: "white", padding: "1.25rem 1.5rem", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", backgroundColor: "white", padding: "1.25rem 1.5rem", borderRadius: 0, borderBottom: "1px solid #E5E7EB", width: "100%" }}>
           <div>
             <h1 style={{ fontSize: "1.25rem", fontWeight: "700", color: "#111827", margin: 0 }}>
               Statement Overview (All Branches)
@@ -271,11 +273,11 @@ const handleCompanySelect = async (company) => {
         </div>
 
         {/* Printable Area Wrapper */}
-        <div style={{ backgroundColor: "white", padding: "1.5rem 1rem", borderRadius: "1rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
-          <div ref={printRef}>
+        <div style={{ backgroundColor: "white", padding: "1.5rem 0", borderRadius: 0, borderBottom: "1px solid #E5E7EB", width: "100%" }}>
+          <div ref={printRef} style={{ width: "100%" }}>
             
             {/* Print Header */}
-            <div className="header-container" style={{ textAlign: "center", marginBottom: "2rem", borderBottom: "2px solid #f1f5f9", paddingBottom: "1.5rem" }}>
+            <div className="header-container" style={{ textAlign: "center", marginBottom: "2rem", borderBottom: "2px solid #f1f5f9", paddingBottom: "1.5rem", paddingLeft: "1.5rem", paddingRight: "1.5rem", width: "100%" }}>
               <h1 style={{ fontSize: "1.4rem", fontWeight: "800", color: "#111827", margin: "0 0 4px 0" }}>
                 {selectedCompany.name} - کشف حساب کڕین (سەرجەم لقییەکان)
               </h1>
@@ -285,21 +287,21 @@ const handleCompanySelect = async (company) => {
             </div>
 
             {/* Unpaid Bills */}
-            <div style={{ marginBottom: "2rem" }}>
-              <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#374151", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div style={{ marginBottom: "2rem", width: "100%" }}>
+              <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#374151", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
                 Unpaid Purchase Bills
               </h2>
-              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", minWidth: "600px" }}>
+              <div style={{ width: "100%", paddingLeft: 0, paddingRight: 0, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", margin: 0 }}>
                   <thead>
                     <tr>
-                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Bill #</th>
-                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Company Bill #</th>
-                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Branch</th>
-                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Date</th>
-                      <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount ($)</th>
-                      <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount (IQD)</th>
-                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600", width: "20%" }}>Note</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 12px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Bill #</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 12px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Company Bill #</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 12px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Branch</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 12px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Date</th>
+                      <th className="right" style={{ background: "#f8fafc", padding: "8px 12px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount ($)</th>
+                      <th className="right" style={{ background: "#f8fafc", padding: "8px 12px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount (IQD)</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 12px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600", width: "20%" }}>Note</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -307,25 +309,25 @@ const handleCompanySelect = async (company) => {
                       const { usd, iqd } = billTotals[idx];
                       return (
                         <tr key={bill.id || idx} className={idx % 2 === 0 ? "" : "alt"} style={{ background: idx % 2 === 0 ? "white" : "#f8fafc" }}>
-                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: "600", color: "#1f2937" }}>#{bill.billNumber}</td>
-                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{bill.companyBillNumber || "N/A"}</td>
-                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>
+                          <td style={{ padding: "8px 12px", border: "1px solid #e2e8f0", fontWeight: "600", color: "#1f2937" }}>#{bill.billNumber}</td>
+                          <td style={{ padding: "8px 12px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{bill.companyBillNumber || "N/A"}</td>
+                          <td style={{ padding: "8px 12px", border: "1px solid #e2e8f0", color: "#4b5563" }}>
                             <span style={{ backgroundColor: bill.branch === "Slemany" ? "#dcfce7" : "#fef3c7", color: bill.branch === "Slemany" ? "#166534" : "#92400e", padding: "2px 6px", borderRadius: "4px", fontWeight: "600" }}>
                               {bill.branch || "Slemany"}
                             </span>
                           </td>
-                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{formatDate(bill.date)}</td>
+                          <td style={{ padding: "8px 12px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{formatDate(bill.date)}</td>
                           {usd ? (
-                            <td className="right usd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "600" }}>${formatCurrency(usd)}</td>
+                            <td className="right usd" style={{ padding: "8px 12px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "600" }}>${formatCurrency(usd)}</td>
                           ) : (
-                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>
+                            <td className="center" style={{ padding: "8px 12px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>
                           )}
                           {iqd ? (
-                            <td className="right iqd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "600" }}>{formatIQD(iqd)} IQD</td>
+                            <td className="right iqd" style={{ padding: "8px 12px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "600" }}>{formatIQD(iqd)} IQD</td>
                           ) : (
-                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>
+                            <td className="center" style={{ padding: "8px 12px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>
                           )}
-                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bill.billNote || "—"}</td>
+                          <td style={{ padding: "8px 12px", border: "1px solid #e2e8f0", color: "#4b5563", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bill.billNote || "—"}</td>
                         </tr>
                       );
                     })}
@@ -339,14 +341,14 @@ const handleCompanySelect = async (company) => {
                   </tbody>
                   <tfoot>
                     <tr style={{ background: "#f1f5f9" }}>
-                      <td colSpan="4" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", fontWeight: "700", color: "#4b5563", fontSize: "0.8rem" }}>TOTAL BOUGHT:</td>
-                      <td className="right usd" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "700", fontSize: "0.9rem" }}>
+                      <td colSpan="4" style={{ padding: "10px 12px", border: "1px solid #e2e8f0", textAlign: "right", fontWeight: "700", color: "#4b5563", fontSize: "0.8rem" }}>TOTAL BOUGHT:</td>
+                      <td className="right usd" style={{ padding: "10px 12px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "700", fontSize: "0.9rem" }}>
                         {totalBeforeReturnUSD > 0 ? `$${formatCurrency(totalBeforeReturnUSD)}` : "—"}
                       </td>
-                      <td className="right iqd" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "700", fontSize: "0.9rem" }}>
+                      <td className="right iqd" style={{ padding: "10px 12px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "700", fontSize: "0.9rem" }}>
                         {totalBeforeReturnIQD > 0 ? `${formatIQD(totalBeforeReturnIQD)} IQD` : "—"}
                       </td>
-                      <td style={{ padding: "10px", border: "1px solid #e2e8f0" }} />
+                      <td style={{ padding: "10px 12px", border: "1px solid #e2e8f0" }} />
                     </tr>
                   </tfoot>
                 </table>
@@ -355,58 +357,58 @@ const handleCompanySelect = async (company) => {
 
             {/* Returns */}
             {returns.length > 0 && (
-              <div style={{ marginBottom: "2rem" }}>
-                <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#991b1b", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <div style={{ marginBottom: "2rem", width: "100%" }}>
+                <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#991b1b", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
                   Return Bills
                 </h2>
-                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", minWidth: "600px" }}>
+                <div style={{ width: "100%", paddingLeft: 0, paddingRight: 0, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", margin: 0 }}>
                     <thead>
                       <tr>
-                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Return Bill #</th>
-                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Original Bill</th>
-                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Date</th>
-                        <th className="right" style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount ($)</th>
-                        <th className="right" style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount (IQD)</th>
-                        <th style={{ background: "#fef2f2", padding: "8px 10px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600", width: "25%" }}>Note</th>
+                        <th style={{ background: "#fef2f2", padding: "8px 12px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Return Bill #</th>
+                        <th style={{ background: "#fef2f2", padding: "8px 12px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Original Bill</th>
+                        <th style={{ background: "#fef2f2", padding: "8px 12px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Date</th>
+                        <th className="right" style={{ background: "#fef2f2", padding: "8px 12px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount ($)</th>
+                        <th className="right" style={{ background: "#fef2f2", padding: "8px 12px", textAlign: "right", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600" }}>Amount (IQD)</th>
+                        <th style={{ background: "#fef2f2", padding: "8px 12px", textAlign: "left", border: "1px solid #fecaca", color: "#991b1b", fontWeight: "600", width: "25%" }}>Note</th>
                       </tr>
                     </thead>
                     <tbody>
                       {returns.map((ret, idx) => (
                         <tr key={ret.id || idx} style={{ background: idx % 2 === 0 ? "white" : "#fef2f2" }}>
-                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", fontWeight: "600", color: "#7f1d1d" }}>
+                          <td style={{ padding: "8px 12px", border: "1px solid #fecaca", fontWeight: "600", color: "#7f1d1d" }}>
                             {ret.returnBillNumber}
                           </td>
-                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{ret.billNumber || "N/A"}</td>
-                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{formatDate(ret.date)}</td>
+                          <td style={{ padding: "8px 12px", border: "1px solid #fecaca", color: "#991b1b" }}>{ret.billNumber || "N/A"}</td>
+                          <td style={{ padding: "8px 12px", border: "1px solid #fecaca", color: "#991b1b" }}>{formatDate(ret.date)}</td>
                           {ret.totalUSD > 0 ? (
-                            <td className="right ret-usd" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "600" }}>
+                            <td className="right ret-usd" style={{ padding: "8px 12px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "600" }}>
                               -${formatCurrency(ret.totalUSD)}
                             </td>
                           ) : (
-                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
+                            <td className="center" style={{ padding: "8px 12px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
                           )}
                           {ret.totalIQD > 0 ? (
-                            <td className="right ret-iqd" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "600" }}>
+                            <td className="right ret-iqd" style={{ padding: "8px 12px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "600" }}>
                               -{formatIQD(ret.totalIQD)} IQD
                             </td>
                           ) : (
-                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
+                            <td className="center" style={{ padding: "8px 12px", border: "1px solid #fecaca", textAlign: "center", color: "#fca5a5" }}>—</td>
                           )}
-                          <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ret.note || "—"}</td>
+                          <td style={{ padding: "8px 12px", border: "1px solid #fecaca", color: "#991b1b", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ret.note || "—"}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr style={{ background: "#fee2e2" }}>
-                        <td colSpan="3" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", fontWeight: "700", color: "#991b1b", fontSize: "0.8rem" }}>TOTAL RETURN:</td>
-                        <td className="right ret-usd" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "700", fontSize: "0.9rem" }}>
+                        <td colSpan="3" style={{ padding: "10px 12px", border: "1px solid #fecaca", textAlign: "right", fontWeight: "700", color: "#991b1b", fontSize: "0.8rem" }}>TOTAL RETURN:</td>
+                        <td className="right ret-usd" style={{ padding: "10px 12px", border: "1px solid #fecaca", textAlign: "right", color: "#dc2626", fontWeight: "700", fontSize: "0.9rem" }}>
                           {totalReturnUSD > 0 ? `-$${formatCurrency(totalReturnUSD)}` : "—"}
                         </td>
-                        <td className="right ret-iqd" style={{ padding: "10px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "700", fontSize: "0.9rem" }}>
+                        <td className="right ret-iqd" style={{ padding: "10px 12px", border: "1px solid #fecaca", textAlign: "right", color: "#b91c1c", fontWeight: "700", fontSize: "0.9rem" }}>
                           {totalReturnIQD > 0 ? `-${formatIQD(totalReturnIQD)} IQD` : "—"}
                         </td>
-                        <td style={{ padding: "10px", border: "1px solid #fecaca" }} />
+                        <td style={{ padding: "10px 12px", border: "1px solid #fecaca" }} />
                       </tr>
                     </tfoot>
                   </table>
@@ -415,15 +417,15 @@ const handleCompanySelect = async (company) => {
             )}
 
             {/* Summary Grid */}
-            <div className="summary-container" style={{ marginTop: "2rem", border: "1px solid #e2e8f0", borderRadius: "12px", overflowX: "auto", background: "white" }}>
-              <div style={{ minWidth: "400px" }}>
-                <div className="summary-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0", fontWeight: "600", fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            <div className="summary-container" style={{ marginTop: "2rem", border: "1px solid #e2e8f0", borderRadius: 0, overflowX: "auto", background: "white", width: "100%" }}>
+              <div style={{ width: "100%" }}>
+                <div className="summary-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0", fontWeight: "600", fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", width: "100%" }}>
                   <div>Description</div>
                   <div style={{ textAlign: "right", color: "#059669" }}>USD ($)</div>
                   <div style={{ textAlign: "right", color: "#2563eb" }}>IQD</div>
                 </div>
                 
-                <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center" }}>
+                <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center", width: "100%" }}>
                   <div className="summary-label" style={{ fontWeight: "500", color: "#4b5563", fontSize: "0.9rem" }}>Total Before Return</div>
                   <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#059669", fontSize: "1.05rem" }}>
                     {totalBeforeReturnUSD > 0 ? `$${formatCurrency(totalBeforeReturnUSD)}` : "—"}
@@ -433,7 +435,7 @@ const handleCompanySelect = async (company) => {
                   </div>
                 </div>
 
-                <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center" }}>
+                <div className="summary-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid #e2e8f0", alignItems: "center", width: "100%" }}>
                   <div className="summary-label" style={{ fontWeight: "500", color: "#4b5563", fontSize: "0.9rem" }}>Total Returns</div>
                   <div className="summary-val" style={{ textAlign: "right", fontWeight: "600", color: "#dc2626", fontSize: "1.05rem" }}>
                     {totalReturnUSD > 0 ? `-$${formatCurrency(totalReturnUSD)}` : "—"}
@@ -443,7 +445,7 @@ const handleCompanySelect = async (company) => {
                   </div>
                 </div>
 
-                <div className="summary-row balance" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "16px", background: "#f0fdf4", borderTop: "2px solid #bbf7d0", alignItems: "center" }}>
+                <div className="summary-row balance" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "16px", background: "#f0fdf4", borderTop: "2px solid #bbf7d0", alignItems: "center", width: "100%" }}>
                   <div className="summary-label" style={{ fontWeight: "700", color: "#166534", fontSize: "1rem" }}>BALANCE DUE</div>
                   <div className="summary-val" style={{ textAlign: "right", fontWeight: "800", color: totalAfterReturnUSD >= 0 ? "#059669" : "#dc2626", fontSize: "1.2rem" }}>
                     {totalBeforeReturnUSD > 0 || totalReturnUSD > 0 ? `$${formatCurrency(totalAfterReturnUSD)}` : "—"}
@@ -457,7 +459,7 @@ const handleCompanySelect = async (company) => {
 
             {/* Notes Section */}
             {notes && (
-              <div className="notes-box" style={{ marginTop: "24px", padding: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
+              <div className="notes-box" style={{ marginTop: "24px", padding: "16px 1.5rem", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 0, width: "100%" }}>
                 <strong style={{ display: "block", fontSize: "0.85rem", fontWeight: "700", color: "#1f2937", marginBottom: "4px" }}>Statement Notes:</strong>
                 <div style={{ fontSize: "0.85rem", color: "#4b5563", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{notes}</div>
               </div>
@@ -466,7 +468,7 @@ const handleCompanySelect = async (company) => {
         </div>
 
         {/* Note Input Area */}
-        <div style={{ marginTop: "1.5rem", backgroundColor: "white", borderRadius: "1rem", padding: "1.5rem 1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
+        <div style={{ marginTop: "1.5rem", backgroundColor: "white", borderRadius: 0, padding: "1.5rem 1.5rem", borderTop: "1px solid #E5E7EB", borderBottom: "1px solid #E5E7EB", width: "100%" }}>
           <h3 style={{ fontSize: "1rem", fontWeight: "600", color: "#374151", marginBottom: "0.75rem" }}>Add Notes to Statement</h3>
           <textarea
             style={{ width: "100%", padding: "12px 16px", border: "1px solid #d1d5db", borderRadius: "0.5rem", fontSize: "0.9rem", minHeight: "80px", resize: "vertical", fontFamily: "inherit", outline: "none", transition: "border 0.2s" }}

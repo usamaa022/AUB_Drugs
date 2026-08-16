@@ -291,10 +291,11 @@ export default function PharmaciesPage() {
   const activeForm = editingPharmacy || newPharmacy;
 
   return (
-    <div dir="rtl" style={{ fontFamily: "var(--font-nrt-reg)", maxWidth: "1500px", margin: "0 auto", padding: "24px" }}>
+    <div dir="rtl" style={{ fontFamily: "var(--font-nrt-reg)", width: "100%", minHeight: "100vh", padding: 0, margin: 0, boxSizing: "border-box", overflowX: "hidden" }}>
       
       {/* CSS For Enhanced Inputs & Transitions */}
       <style dangerouslySetInnerHTML={{__html: `
+        *, *::before, *::after { box-sizing: border-box; }
         .nice-input {
           width: 100%;
           padding: 0.75rem 1rem;
@@ -306,6 +307,7 @@ export default function PharmaciesPage() {
           background-color: #f8fafc;
           transition: all 0.2s ease-in-out;
           color: #0f172a;
+          box-sizing: border-box;
         }
         .nice-input:focus {
           border-color: #3b82f6;
@@ -325,7 +327,7 @@ export default function PharmaciesPage() {
       `}} />
 
       {/* HEADER */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem", padding: "1.5rem 1.5rem 0 1.5rem", width: "100%", boxSizing: "border-box" }}>
         <div>
           <h1 style={{ fontSize: "1.75rem", fontFamily: "var(--font-nrt-bd)", color: "#0f172a", margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <Building2 size={28} color="#2563eb" /> دەرمانخانەکان
@@ -343,28 +345,29 @@ export default function PharmaciesPage() {
       </div>
 
       {/* ERROR MESSAGE */}
-      {error && (
-        <div style={{ padding: "1rem", backgroundColor: "#fef2f2", color: "#b91c1c", borderRadius: "0.5rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid #fca5a5" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "var(--font-nrt-bd)" }}>
-            <AlertCircle size={20} /> {error}
+      <div style={{ padding: "0 1.5rem", width: "100%", boxSizing: "border-box" }}>
+        {error && (
+          <div style={{ padding: "1rem", backgroundColor: "#fef2f2", color: "#b91c1c", borderRadius: "0.5rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid #fca5a5", width: "100%", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontFamily: "var(--font-nrt-bd)" }}>
+              <AlertCircle size={20} /> {error}
+            </div>
+            <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "#b91c1c", cursor: "pointer" }}><X size={20} /></button>
           </div>
-          <button onClick={() => setError(null)} style={{ background: "none", border: "none", color: "#b91c1c", cursor: "pointer" }}><X size={20} /></button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* CREATE / EDIT FORM */}
-      <div style={{ backgroundColor: "white", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)", padding: "1.5rem", marginBottom: "2rem", border: "1px solid #e2e8f0" }}>
+      <div style={{ backgroundColor: "white", borderRadius: 0, borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", boxShadow: "none", padding: "1.5rem", marginBottom: "1.5rem", width: "100%", boxSizing: "border-box" }}>
         <h2 style={{ fontSize: "1.25rem", fontFamily: "var(--font-nrt-bd)", color: "#1e293b", marginBottom: "1.5rem", borderBottom: "2px solid #f1f5f9", paddingBottom: "0.75rem" }}>
           {editingPharmacy ? "گۆڕانکاری لە دەرمانخانە" : "تۆمارکردنی دەرمانخانەی نوێ"}
         </h2>
         
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.5rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.5rem", width: "100%", boxSizing: "border-box" }}>
           <InputWrapper label="ناوی دەرمانخانە" icon={Building2}>
             <input
               type="text"
               name="name"
               className="nice-input"
-              
               value={activeForm.name}
               onChange={(e) => handleFormChange(e, !!editingPharmacy)}
             />
@@ -417,7 +420,7 @@ export default function PharmaciesPage() {
           </InputWrapper>
         </div>
 
-        <div style={{ display: "flex", gap: "1rem", marginTop: "2rem" }}>
+        <div style={{ display: "flex", gap: "1rem", marginTop: "2rem", width: "100%", boxSizing: "border-box" }}>
           <button
             onClick={editingPharmacy ? handleUpdatePharmacy : handleAddPharmacy}
             disabled={!!codeError}
@@ -440,13 +443,13 @@ export default function PharmaciesPage() {
       </div>
 
       {/* SEARCH AND FILTER SECTION */}
-      <div style={{ backgroundColor: "white", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+      <div style={{ backgroundColor: "white", borderRadius: 0, borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", boxShadow: "none", overflow: "hidden", width: "100%", boxSizing: "border-box" }}>
         
-        <div style={{ backgroundColor: "#f8fafc", padding: "1.5rem", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ backgroundColor: "#f8fafc", padding: "1.5rem", borderBottom: "1px solid #e2e8f0", width: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", color: "#0f172a", fontFamily: "var(--font-nrt-bd)" }}>
             <Search size={20} color="#64748b" /> گەڕانی پێشکەوتوو
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", width: "100%", boxSizing: "border-box" }}>
             <input
               type="text"
               name="name"
@@ -474,15 +477,15 @@ export default function PharmaciesPage() {
           </div>
         </div>
 
-        <div style={{ padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "white", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ padding: "1rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "white", borderBottom: "1px solid #e2e8f0", width: "100%", boxSizing: "border-box" }}>
           <span style={{ color: "#475569", fontFamily: "var(--font-nrt-bd)" }}>
             کۆی گشتی دۆزراوەکان: <span style={{ color: "#2563eb", fontWeight: 800 }}>{filteredPharmacies.length}</span> دەرمانخانە
           </span>
         </div>
 
         {/* TABLE */}
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px", textAlign: "right" }}>
+        <div style={{ overflowX: "auto", width: "100%", boxSizing: "border-box" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px", textAlign: "right", margin: 0 }}>
             <thead style={{ backgroundColor: "#f8fafc", color: "#334155", fontFamily: "var(--font-nrt-bd)" }}>
               <tr>
                 <th onClick={() => handleSort("name")} style={{ padding: "1rem", cursor: "pointer", borderBottom: "2px solid #e2e8f0" }}>

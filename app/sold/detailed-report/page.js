@@ -37,7 +37,6 @@ const formatDateTime = (dateVal) => {
   });
 };
 
-// Safe price extraction for items
 const getItemUnitPrice = (item, isIqd) => {
   if (item.returnPrice !== undefined && item.returnPrice !== null) {
     return Number(item.returnPrice) || 0;
@@ -51,7 +50,6 @@ const getItemUnitPrice = (item, isIqd) => {
   }
 };
 
-// Calculate individual invoice balance
 const calculateDocComputedTotal = (docItem) => {
   const isIqd = docItem.currency === "IQD";
   
@@ -82,12 +80,10 @@ export default function DetailedSalesReport() {
   const [allRecords, setAllRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Filters
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [reportType, setReportType] = useState("all"); // 'all' | 'sales' | 'returns'
+  const [reportType, setReportType] = useState("all"); 
   
-  // Advanced Combo Box State
   const [selectedPharmacy, setSelectedPharmacy] = useState("");
   const [pharmacySearch, setPharmacySearch] = useState("");
   const [isComboOpen, setIsComboOpen] = useState(false);
@@ -103,7 +99,6 @@ export default function DetailedSalesReport() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch both sales and returns
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -142,7 +137,6 @@ export default function DetailedSalesReport() {
     fetchData();
   }, []);
 
-  // Extract unique pharmacies
   const uniquePharmacies = useMemo(() => {
     const names = allRecords.map(b => b.pharmacyName || b.name || "Walk-in").filter(Boolean);
     return [...new Set(names)].sort();
@@ -155,7 +149,6 @@ export default function DetailedSalesReport() {
     );
   }, [uniquePharmacies, pharmacySearch]);
 
-  // Master Filter Logic
   const filteredRecords = useMemo(() => {
     if (!selectedPharmacy) return [];
 
@@ -166,7 +159,6 @@ export default function DetailedSalesReport() {
         return false;
       }
 
-      // Filter by type: Sales vs Returns
       if (reportType === "sales" && item.docType !== "sale") return false;
       if (reportType === "returns" && item.docType !== "return") return false;
 
@@ -189,7 +181,6 @@ export default function DetailedSalesReport() {
     });
   }, [allRecords, selectedPharmacy, reportType, startDate, endDate]);
 
-  // Grand Totals Calculation
   const grandTotals = useMemo(() => {
     let salesUSD = 0;
     let salesIQD = 0;
@@ -223,7 +214,6 @@ export default function DetailedSalesReport() {
     window.print();
   };
 
-  // Header Title Helper
   const getHeaderTitle = () => {
     if (reportType === "sales") return "Sales Ledger";
     if (reportType === "returns") return "Returns Ledger";
@@ -239,7 +229,7 @@ export default function DetailedSalesReport() {
   }
 
   return (
-    <div className="app-container" style={{ minHeight: "100vh", backgroundColor: "#f1f5f9", fontFamily: "system-ui, sans-serif", paddingBottom: "3rem" }}>
+    <div className="app-container" style={{ width: "100%", minHeight: "100vh", backgroundColor: "#f1f5f9", fontFamily: "system-ui, sans-serif", paddingBottom: "3rem", margin: 0 }}>
       
       <style dangerouslySetInnerHTML={{__html: `
         .app-container, .app-container * {
@@ -266,7 +256,7 @@ export default function DetailedSalesReport() {
             justify-content: space-between;
           }
           .print-container {
-            padding: 1rem !important;
+            padding: 0 !important;
           }
           .combo-container {
             width: 100% !important;
@@ -285,28 +275,31 @@ export default function DetailedSalesReport() {
         }
 
         @media print {
-          @page { margin: 10mm; size: A4 portrait; }
-          body { background: white !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
+          @page { margin: 0; size: A4 portrait; }
+          body { background: white !important; -webkit-print-color-adjust: exact; color-adjust: exact; margin: 0 !important; }
           body * { visibility: hidden; }
           .print-container, .print-container * { visibility: visible; }
           .print-container {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 100% !important;
+            max-width: 100% !important;
             background: white !important;
             padding: 0 !important;
             margin: 0 !important;
             box-shadow: none !important;
+            border-radius: 0 !important;
+            border: none !important;
           }
           .no-print { display: none !important; }
           .bill-section {
             page-break-inside: avoid;
             border-bottom: 1px dashed #64748b !important;
-            margin-bottom: 8px !important;
-            padding-bottom: 8px !important;
+            margin-bottom: 6px !important;
+            padding-bottom: 6px !important;
           }
-          table th, table td { padding: 4px !important; font-size: 11px !important; }
+          table th, table td { padding: 4px 6px !important; font-size: 11px !important; }
           .compact-text { font-size: 11px !important; margin: 2px 0 !important; }
           
           .responsive-header { flex-direction: row !important; align-items: flex-end !important; }
@@ -314,16 +307,13 @@ export default function DetailedSalesReport() {
           .responsive-totals { flex-direction: row !important; align-items: center !important; }
         }
         
-        .paper-shadow {
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-        }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
       `}} />
 
       {/* TOP CONTROLS */}
-      <div className="no-print controls-container" style={{ backgroundColor: "white", padding: "1rem 2rem", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: "1100px", margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+      <div className="no-print controls-container" style={{ width: "100%", backgroundColor: "white", padding: "1rem 1.5rem", borderBottom: "1px solid #e2e8f0", position: "sticky", top: 0, zIndex: 50, margin: 0 }}>
+        <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
           
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <Link href="/sold" style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#64748b", textDecoration: "none", fontWeight: 600 }}>
@@ -334,7 +324,7 @@ export default function DetailedSalesReport() {
             </h1>
           </div>
 
-          <div className="filters-wrapper" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", width: "100%", maxWidth: "fit-content" }}>
+          <div className="filters-wrapper" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
             
             {/* TYPE SELECTOR COMBO */}
             <div style={{ display: "flex", alignItems: "center", backgroundColor: "#f8fafc", padding: "0.4rem 0.75rem", borderRadius: "0.5rem", border: "1px solid #cbd5e1" }}>
@@ -424,8 +414,8 @@ export default function DetailedSalesReport() {
         </div>
       </div>
 
-      {/* PAPER CONTAINER */}
-      <div style={{ padding: "2rem 1rem" }}>
+      {/* FULL WIDTH EDGE TO EDGE CONTAINER */}
+      <div style={{ width: "100%", padding: 0, margin: 0 }}>
         {!selectedPharmacy ? (
           <div style={{ maxWidth: "600px", margin: "4rem auto", textAlign: "center", backgroundColor: "white", padding: "3rem", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)", border: "1px solid #e2e8f0" }}>
             <Building2 size={48} color="#94a3b8" style={{ margin: "0 auto 1rem" }} />
@@ -434,11 +424,11 @@ export default function DetailedSalesReport() {
           </div>
         ) : (
           <div 
-            className="print-container paper-shadow" 
-            style={{ maxWidth: "900px", margin: "0 auto", backgroundColor: "white", padding: "2rem", borderRadius: "0.5rem", width: "100%" }}
+            className="print-container" 
+            style={{ width: "100%", margin: 0, backgroundColor: "white", padding: "1.5rem 0", borderRadius: 0, borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0" }}
           >
             {/* PRINT HEADER */}
-            <div className="responsive-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid #0f172a", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
+            <div className="responsive-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid #0f172a", paddingBottom: "1rem", marginBottom: "1.5rem", width: "100%", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
               
               <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
                 <img src="/Aranlogo.png" alt="Aran Med Store Logo" style={{ height: "60px", objectFit: "contain" }} />
@@ -497,11 +487,12 @@ export default function DetailedSalesReport() {
                       justifyContent: "space-between", 
                       gap: "0.5rem", 
                       backgroundColor: isReturn ? "#fff1f2" : "#f8fafc", 
-                      padding: "6px 8px", 
+                      padding: "6px 1.5rem", 
                       borderLeft: `4px solid ${isReturn ? "#e11d48" : "#2563eb"}`, 
                       marginBottom: "8px", 
                       fontSize: "0.875rem",
-                      borderRadius: "0 4px 4px 0"
+                      borderRadius: 0,
+                      width: "100%"
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                         <span style={{ 
@@ -535,15 +526,15 @@ export default function DetailedSalesReport() {
                     </div>
 
                     {/* ITEMS TABLE */}
-                    <div className="custom-scrollbar" style={{ width: "100%", overflowX: "auto", marginBottom: "8px" }}>
-                      <table style={{ width: "100%", minWidth: "500px", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
+                    <div className="custom-scrollbar" style={{ width: "100%", overflowX: "auto", marginBottom: "8px", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
                         <thead>
                           <tr style={{ backgroundColor: isReturn ? "#ffe4e6" : "#e2e8f0", color: "#0f172a" }}>
-                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "left", width: "5%" }}>#</th>
-                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "left" }}>Item Description</th>
-                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "center", width: "8%" }}>Qty</th>
-                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "right", width: "15%" }}>Price</th>
-                            <th style={{ padding: "6px", border: "1px solid #cbd5e1", textAlign: "right", width: "18%" }}>Total</th>
+                            <th style={{ padding: "6px 10px", border: "1px solid #cbd5e1", textAlign: "left", width: "5%" }}>#</th>
+                            <th style={{ padding: "6px 10px", border: "1px solid #cbd5e1", textAlign: "left" }}>Item Description</th>
+                            <th style={{ padding: "6px 10px", border: "1px solid #cbd5e1", textAlign: "center", width: "8%" }}>Qty</th>
+                            <th style={{ padding: "6px 10px", border: "1px solid #cbd5e1", textAlign: "right", width: "15%" }}>Price</th>
+                            <th style={{ padding: "6px 10px", border: "1px solid #cbd5e1", textAlign: "right", width: "18%" }}>Total</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -554,17 +545,17 @@ export default function DetailedSalesReport() {
                               
                               return (
                                 <tr key={idx}>
-                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "left", color: "#475569" }}>{idx + 1}</td>
-                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "left", fontWeight: 500, color: "#0f172a" }}>
+                                  <td style={{ padding: "4px 10px", border: "1px solid #cbd5e1", textAlign: "left", color: "#475569" }}>{idx + 1}</td>
+                                  <td style={{ padding: "4px 10px", border: "1px solid #cbd5e1", textAlign: "left", fontWeight: 500, color: "#0f172a" }}>
                                     {itm.name}
                                   </td>
-                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "center", fontWeight: "bold", color: isReturn ? "#e11d48" : "inherit" }}>
+                                  <td style={{ padding: "4px 10px", border: "1px solid #cbd5e1", textAlign: "center", fontWeight: "bold", color: isReturn ? "#e11d48" : "inherit" }}>
                                     {isReturn ? `-${qty}` : qty}
                                   </td>
-                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "right", color: "#475569" }}>
+                                  <td style={{ padding: "4px 10px", border: "1px solid #cbd5e1", textAlign: "right", color: "#475569" }}>
                                     {formatCurrency(price, currencySymbol)}
                                   </td>
-                                  <td style={{ padding: "4px 6px", border: "1px solid #cbd5e1", textAlign: "right", fontWeight: 600, color: isReturn ? "#e11d48" : "#0f172a" }}>
+                                  <td style={{ padding: "4px 10px", border: "1px solid #cbd5e1", textAlign: "right", fontWeight: 600, color: isReturn ? "#e11d48" : "#0f172a" }}>
                                     {isReturn ? `-${formatCurrency(price * qty, currencySymbol)}` : formatCurrency(price * qty, currencySymbol)}
                                   </td>
                                 </tr>
@@ -578,7 +569,7 @@ export default function DetailedSalesReport() {
                     </div>
 
                     {/* TOTAL FOOTER */}
-                    <div style={{ display: "flex", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", justifyContent: "flex-end", flexWrap: "wrap", width: "100%", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
                       <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.8125rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
                         {Number(discount) > 0 && (
                           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -611,7 +602,7 @@ export default function DetailedSalesReport() {
 
             {/* COMPREHENSIVE FINANCIAL SUMMARY */}
             {filteredRecords.length > 0 && (
-              <div className="responsive-totals" style={{ marginTop: "2rem", borderTop: "3px double #0f172a", paddingTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center", pageBreakInside: "avoid" }}>
+              <div className="responsive-totals" style={{ marginTop: "2rem", borderTop: "3px double #0f172a", paddingTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center", pageBreakInside: "avoid", width: "100%", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: "1rem", color: "#475569" }}>FINANCIAL SUMMARY</h3>
                   <p style={{ margin: "4px 0 0 0", fontSize: "0.875rem", color: "#64748b" }}>Transactions: {filteredRecords.length}</p>
@@ -660,7 +651,7 @@ export default function DetailedSalesReport() {
               </div>
             )}
 
-            <div style={{ textAlign: "center", color: "#cbd5e1", fontSize: "0.75rem", marginTop: "2rem" }}>
+            <div style={{ textAlign: "center", color: "#cbd5e1", fontSize: "0.75rem", marginTop: "2rem", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}>
               --- End of Generated Statement ---
             </div>
           </div>

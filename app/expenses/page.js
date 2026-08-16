@@ -715,11 +715,11 @@ export default function ExpensesPage() {
   const tableColSpan = isSuperAdmin ? 9 : 8;
 
   return (
-    <div style={{ width: "100%", minHeight: "100vh", backgroundColor: "#f8fafc", padding: "24px 16px", ...nrtFontStyle }}>
-      <div style={{ maxWidth: "80%", margin: "0 auto" }}>
+    <div style={{ width: "100%", minHeight: "100vh", backgroundColor: "#f8fafc", padding: 0, margin: 0, ...nrtFontStyle, boxSizing: "border-box", overflowX: "hidden" }}>
+      <div style={{ width: "100%", margin: 0, padding: 0, boxSizing: "border-box" }}>
         
         {/* Header Section */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "16px", padding: "20px 20px 0 20px", width: "100%", boxSizing: "border-box" }}>
           <div>
             <h1 style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: "10px", ...nrtFontBoldStyle }}>
               <TrendingDown color="#ef4444" size={30} /> Store Expenses
@@ -773,19 +773,21 @@ export default function ExpensesPage() {
         </div>
 
         {/* Success / Error Banners */}
-        {error && (
-          <div style={{ padding: "12px 16px", backgroundColor: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#991b1b", marginBottom: "16px", fontSize: "14px", fontWeight: "600" }}>
-            ❌ {error}
-          </div>
-        )}
-        {success && (
-          <div style={{ padding: "12px 16px", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", color: "#166534", marginBottom: "16px", fontSize: "14px", fontWeight: "600" }}>
-            ✅ {success}
-          </div>
-        )}
+        <div style={{ padding: "0 20px", width: "100%", boxSizing: "border-box" }}>
+          {error && (
+            <div style={{ padding: "12px 16px", backgroundColor: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#991b1b", marginBottom: "16px", fontSize: "14px", fontWeight: "600" }}>
+              ❌ {error}
+            </div>
+          )}
+          {success && (
+            <div style={{ padding: "12px 16px", backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", color: "#166534", marginBottom: "16px", fontSize: "14px", fontWeight: "600" }}>
+              ✅ {success}
+            </div>
+          )}
+        </div>
 
         {/* Totals Summary Cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px", marginBottom: "20px", padding: "0 20px", width: "100%", boxSizing: "border-box" }}>
           <div style={{ backgroundColor: "white", padding: "18px 20px", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
             <div style={{ fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", marginBottom: "6px" }}>Total Expenses (USD)</div>
             <div style={{ fontSize: "22px", fontWeight: "800", color: "#ef4444" }}>
@@ -807,8 +809,8 @@ export default function ExpensesPage() {
         </div>
 
         {/* Expenses Table with Excel Filters */}
-        <div style={{ backgroundColor: "white", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.03)", overflow: "hidden" }}>
-          <div style={{ overflowX: "auto", minHeight: "60vh", maxHeight: "80vh" }}>
+        <div style={{ backgroundColor: "white", borderRadius: 0, borderTop: "1px solid #e2e8f0", borderBottom: "1px solid #e2e8f0", boxShadow: "none", width: "100%", margin: 0 }}>
+          <div style={{ overflowX: "auto", minHeight: "60vh", maxHeight: "80vh", width: "100%" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "14px", minWidth: "1100px" }}>
               <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                 <tr style={{ backgroundColor: "#34495e", color: "white", borderBottom: "1px solid #475569" }}>
