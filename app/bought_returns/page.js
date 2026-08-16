@@ -550,7 +550,7 @@ table: {
     return sortConfig.direction === 'asc' ? '↑' : '↓';
   };
 
-  const fetchAllReturns = async () => {
+const fetchAllReturns = async () => {
     try {
       const allCompanies = await getCompanies();
       const allPayments = await getPayments();
@@ -576,6 +576,12 @@ table: {
             
             return {
               ...returnItem,
+              // getReturnsForCompany returns this field as `returnBillNumber`.
+              // Alias it to `returnNumber` here since every render/sort/filter/
+              // export spot in this component reads `.returnNumber` — without
+              // this the field was always undefined and fell back to showing
+              // the raw Firestore document id (e.g. "2V9Xgd").
+              returnNumber: returnItem.returnBillNumber || returnItem.returnNumber || null,
               companyName: company.name,
               companyCode: company.code,
               companyId: company.id,
@@ -643,7 +649,7 @@ table: {
     fetchData();
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     if (selectedCompany?.id) {
       const fetchReturns = async () => {
         try {
@@ -667,6 +673,7 @@ table: {
             
             return {
               ...returnItem,
+              returnNumber: returnItem.returnBillNumber || returnItem.returnNumber || null,
               companyName: selectedCompany.name,
               companyCode: selectedCompany.code,
               companyId: selectedCompany.id,
@@ -902,7 +909,7 @@ table: {
     setEditNote("");
   };
 
-  const handleSubmitEdit = async () => {
+const handleSubmitEdit = async () => {
     if (!editingReturn || !editingReturn.id) {
       alert("Invalid return item: missing ID");
       return;
@@ -915,7 +922,7 @@ table: {
     }
 
     if (editedItem.returnQuantity <= 0) {
-      alert("Return quantity must be greater than 0");
+      alert("Return quantity must be greater than 0, you can delete the return bill if you want 0 quantity.");
       return;
     }
 
@@ -939,8 +946,13 @@ table: {
         returnPriceUSD = priceValue / exchangeRate;
       }
 
+      // Scope to items belonging to the SAME Firestore return document only.
+      // Matching by `returnNumber` string was unsafe — two different return
+      // documents could end up with an identical generated label, which
+      // would have pulled unrelated items into this update and overwritten
+      // the wrong document's items array.
       const allItemsInReturn = allReturns.filter(r =>
-        r && String(r.returnNumber) === String(editingReturn.returnNumber)
+        r && String(r.id) === String(editingReturn.id)
       );
 
       const updatedItems = allItemsInReturn.map(item => {

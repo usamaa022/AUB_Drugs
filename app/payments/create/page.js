@@ -14,7 +14,7 @@ import {
   getSaleBillById,
   getReturnById,
 } from "@/lib/data";
-import { deleteDoc, doc,writeBatch } from "firebase/firestore";
+import { deleteDoc, doc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function SoldPaymentManagementPage() {
@@ -146,33 +146,86 @@ export default function SoldPaymentManagementPage() {
     return `SPAY-${currentYear}-${String(nextNum).padStart(3, '0')}`;
   };
 
-  const formatCurrency = (amount, currency = "IQD") => {
-    if (amount === undefined || amount === null || amount === 0) {
-      return currency === "USD" ? "$0.00" : "0 IQD";
-    }
-    if (currency === "USD") {
-      return "$" + new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
-    } else {
-      return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " IQD";
-    }
-  };
-
-  const getDisplayAmount = (amountUSD, amountIQD) => {
-    const parts = [];
-    if (amountUSD && amountUSD !== 0) parts.push(formatUSD(amountUSD));
-    if (amountIQD && amountIQD !== 0) parts.push(formatIQD(amountIQD));
-    if (parts.length === 0) return "0 IQD";
-    return parts.join(" + ");
-  };
-
   const formatUSD = (amount) => {
-    if (!amount || amount === 0) return "$0.00";
+    if (!amount || Math.abs(amount) < 0.0001) return "$0.00";
     return "$" + new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   };
 
   const formatIQD = (amount) => {
-    if (!amount || amount === 0) return "0 IQD";
+    if (!amount || Math.abs(amount) < 0.5) return "0 IQD";
     return new Intl.NumberFormat("en-US").format(Math.round(amount)) + " IQD";
+  };
+
+  const getDisplayAmount = (amountUSD, amountIQD) => {
+    const parts = [];
+    if (amountUSD && Math.abs(amountUSD) > 0.001) parts.push(formatUSD(amountUSD));
+    if (amountIQD && Math.abs(amountIQD) > 0.5) parts.push(formatIQD(amountIQD));
+    if (parts.length === 0) return "0 IQD";
+    return parts.join(" + ");
+  };
+
+  // Accurate currency detector for a bill
+  const detectBillCurrency = (bill) => {
+    if (bill?.currency) return bill.currency;
+    if (bill?.items && bill.items.length > 0) {
+      const firstItem = bill.items[0];
+      if ((firstItem.outPriceIQD || 0) > 0 && !(firstItem.outPriceUSD > 0)) return "IQD";
+      if ((firstItem.outPriceUSD || 0) > 0) return "USD";
+      if (firstItem.currency) return firstItem.currency;
+      if (firstItem.originalCurrency) return firstItem.originalCurrency;
+    }
+    if ((bill?.totalAmountIQD || 0) > 0 && !(bill?.totalAmountUSD > 0)) return "IQD";
+    return "USD";
+  };
+
+  // Calculates exact amounts (USD & IQD) for a bill
+  const computeBillTotals = (bill) => {
+    const currency = detectBillCurrency(bill);
+    let totalUSD = 0;
+    let totalIQD = 0;
+
+    if (bill.items && Array.isArray(bill.items) && bill.items.length > 0) {
+      bill.items.forEach((item) => {
+        const qty = Number(item.quantity) || 0;
+        if (currency === "IQD") {
+          const price = Number(item.outPriceIQD) || Number(item.price) || 0;
+          totalIQD += price * qty;
+        } else {
+          const price = Number(item.outPriceUSD) || Number(item.price) || 0;
+          totalUSD += price * qty;
+        }
+      });
+    } else {
+      if (currency === "IQD") {
+        totalIQD = Number(bill.totalAmountIQD) || Number(bill.totalAmount) || 0;
+      } else {
+        totalUSD = Number(bill.totalAmountUSD) || Number(bill.totalAmount) || 0;
+      }
+    }
+
+    return { totalUSD, totalIQD, currency };
+  };
+
+  // Calculates exact amounts for a return
+  const computeReturnTotals = (ret) => {
+    let returnUSD = Number(ret.totalReturnUSD || ret.totalReturnAmountUSD) || 0;
+    let returnIQD = Number(ret.totalReturnIQD || ret.totalReturnAmountIQD) || 0;
+
+    if (returnUSD === 0 && returnIQD === 0 && ret.items && Array.isArray(ret.items)) {
+      const retCurrency = ret.currency || (ret.items[0]?.currency) || "IQD";
+      ret.items.forEach((item) => {
+        const qty = Number(item.returnQuantity || item.quantity) || 0;
+        const price = Number(item.returnPrice || item.price) || 0;
+        if (retCurrency === "USD") returnUSD += price * qty;
+        else returnIQD += price * qty;
+      });
+    } else if (returnUSD === 0 && returnIQD === 0 && ret.totalReturnAmount) {
+      const retCurrency = ret.currency || "IQD";
+      if (retCurrency === "USD") returnUSD = Number(ret.totalReturnAmount);
+      else returnIQD = Number(ret.totalReturnAmount);
+    }
+
+    return { returnUSD, returnIQD };
   };
 
   const getFirstName = (fullName) => {
@@ -399,23 +452,36 @@ export default function SoldPaymentManagementPage() {
     loadPharmacyData();
   }, [selectedPharmacy, isEditMode, initialLoadComplete]);
 
+  // Recalculate summary totals accurately
   useEffect(() => {
     let soldUSD = 0, soldIQD = 0, returnUSD = 0, returnIQD = 0;
+
     selectedSoldBills.forEach((billId) => {
       const bill = soldBills.find((b) => b.id === billId);
       if (bill) {
-        soldUSD += bill.totalAmountUSD || 0;
-        soldIQD += bill.totalAmountIQD || 0;
+        const { totalUSD, totalIQD } = computeBillTotals(bill);
+        soldUSD += totalUSD;
+        soldIQD += totalIQD;
       }
     });
+
     selectedSoldReturns.forEach((returnId) => {
       const returnBill = returns.find((r) => r.id === returnId);
       if (returnBill) {
-        returnUSD += returnBill.totalReturnUSD || 0;
-        returnIQD += returnBill.totalReturnIQD || 0;
+        const { returnUSD: rUSD, returnIQD: rIQD } = computeReturnTotals(returnBill);
+        returnUSD += rUSD;
+        returnIQD += rIQD;
       }
     });
-    setCurrencyTotals({ soldUSD, soldIQD, returnUSD, returnIQD, netUSD: soldUSD - returnUSD, netIQD: soldIQD - returnIQD });
+
+    setCurrencyTotals({
+      soldUSD,
+      soldIQD,
+      returnUSD,
+      returnIQD,
+      netUSD: soldUSD - returnUSD,
+      netIQD: soldIQD - returnIQD,
+    });
   }, [selectedSoldBills, selectedSoldReturns, soldBills, returns]);
 
   const toggleSoldBill = (billId) =>
@@ -445,7 +511,7 @@ export default function SoldPaymentManagementPage() {
     setPaymentDate(new Date().toISOString().split("T")[0]);
   };
 
-const handleDeletePayment = async (paymentId) => {
+  const handleDeletePayment = async (paymentId) => {
     if (!window.confirm("Are you sure you want to delete this payment? Associated bills and returns will be marked as unpaid. This action cannot be undone.")) {
       return;
     }
@@ -460,7 +526,7 @@ const handleDeletePayment = async (paymentId) => {
 
       const batch = writeBatch(db);
 
-      // 1. Revert Sold Bills to unpaid (Now correctly pointing to "soldBills")
+      // 1. Revert Sold Bills to unpaid
       if (paymentToDelete.selectedSoldBills && paymentToDelete.selectedSoldBills.length > 0) {
         paymentToDelete.selectedSoldBills.forEach((billId) => {
           const billRef = doc(db, "soldBills", billId); 
@@ -498,7 +564,6 @@ const handleDeletePayment = async (paymentId) => {
       // 5. Refresh the UI data
       await refreshPayments();
       
-      // Force a re-fetch of the pharmacy bills if the user is currently looking at the affected pharmacy
       if (selectedPharmacy === paymentToDelete.pharmacyId) {
         setInitialLoadComplete((prev) => !prev); 
       }
@@ -665,16 +730,22 @@ const handleDeletePayment = async (paymentId) => {
       if (billData) {
         setDetailTitle(`Bill #${billData.billNumber || billId}`);
         setDetailType("bill");
-        const items = (billData.items || []).map(item => ({
-          ...item,
-          displayPrice: getDisplayAmount(item.outPriceUSD || 0, item.outPriceIQD || 0),
-          displayTotal: getDisplayAmount(
-            (item.outPriceUSD || 0) * (item.quantity || 0),
-            (item.outPriceIQD || 0) * (item.quantity || 0)
-          ),
-          quantity: item.quantity || 0,
-          currency: item.originalCurrency || "USD",
-        }));
+        const bCurr = detectBillCurrency(billData);
+        
+        const items = (billData.items || []).map(item => {
+          const qty = Number(item.quantity) || 0;
+          const price = bCurr === "IQD" 
+            ? (Number(item.outPriceIQD) || Number(item.price) || 0)
+            : (Number(item.outPriceUSD) || Number(item.price) || 0);
+
+          return {
+            ...item,
+            displayPrice: bCurr === "IQD" ? formatIQD(price) : formatUSD(price),
+            displayTotal: bCurr === "IQD" ? formatIQD(price * qty) : formatUSD(price * qty),
+            quantity: qty,
+            currency: bCurr,
+          };
+        });
         setDetailItems(items);
       } else {
         setError("Bill not found");
@@ -697,19 +768,19 @@ const handleDeletePayment = async (paymentId) => {
       if (returnData) {
         setDetailTitle(`Return #${returnData.returnBillNumber || returnId}`);
         setDetailType("return");
-        const items = (returnData.items || []).map(item => ({
-          ...item,
-          displayPrice: getDisplayAmount(
-            item.returnPrice && item.currency === "USD" ? item.returnPrice : 0,
-            item.returnPrice && item.currency === "IQD" ? item.returnPrice : 0
-          ),
-          displayTotal: getDisplayAmount(
-            (item.returnPrice || 0) * (item.returnQuantity || 0),
-            0
-          ),
-          quantity: item.returnQuantity || 0,
-          currency: item.currency || "USD",
-        }));
+        const retCurr = returnData.currency || "IQD";
+
+        const items = (returnData.items || []).map(item => {
+          const qty = Number(item.returnQuantity || item.quantity) || 0;
+          const price = Number(item.returnPrice || item.price) || 0;
+          return {
+            ...item,
+            displayPrice: retCurr === "USD" ? formatUSD(price) : formatIQD(price),
+            displayTotal: retCurr === "USD" ? formatUSD(price * qty) : formatIQD(price * qty),
+            quantity: qty,
+            currency: retCurr,
+          };
+        });
         setDetailItems(items);
       } else {
         setError("Return not found");
@@ -793,8 +864,7 @@ const handleDeletePayment = async (paymentId) => {
 
     if (soldBillsList && soldBillsList.length > 0) {
       soldBillsList.forEach((bill) => {
-        const billUSD = Number(bill.totalAmountUSD) || 0;
-        const billIQD = Number(bill.totalAmountIQD) || 0;
+        const { totalUSD: billUSD, totalIQD: billIQD } = computeBillTotals(bill);
         totalSoldUSD += billUSD;
         totalSoldIQD += billIQD;
 
@@ -818,8 +888,7 @@ const handleDeletePayment = async (paymentId) => {
     if (returnsList && returnsList.length > 0) {
       returnsList.forEach((ret) => {
         const returnNumberDisplay = ret.returnBillNumber || `RET-${ret.id?.slice(-6)}`;
-        const returnUSD = Number(ret.totalReturnUSD) || 0;
-        const returnIQD = Number(ret.totalReturnIQD) || 0;
+        const { returnUSD, returnIQD } = computeReturnTotals(ret);
         totalReturnUSD += returnUSD;
         totalReturnIQD += returnIQD;
 
@@ -978,18 +1047,24 @@ const handleDeletePayment = async (paymentId) => {
 
       const soldDetails = allSoldBills
         .filter((bill) => payment.selectedSoldBills?.includes(bill.id))
-        .map((bill) => ({
-          ...bill,
-          displayAmount: getDisplayAmount(bill.totalAmountUSD || 0, bill.totalAmountIQD || 0),
-          billNote: bill.note || "",
-        }));
+        .map((bill) => {
+          const { totalUSD, totalIQD } = computeBillTotals(bill);
+          return {
+            ...bill,
+            displayAmount: getDisplayAmount(totalUSD, totalIQD),
+            billNote: bill.note || "",
+          };
+        });
 
       const returnDetails = allReturns
         .filter((ret) => payment.selectedReturns?.includes(ret.id))
-        .map((ret) => ({
-          ...ret,
-          displayAmount: getDisplayAmount(ret.totalReturnUSD || 0, ret.totalReturnIQD || 0),
-        }));
+        .map((ret) => {
+          const { returnUSD, returnIQD } = computeReturnTotals(ret);
+          return {
+            ...ret,
+            displayAmount: getDisplayAmount(returnUSD, returnIQD),
+          };
+        });
 
       setPaymentDetails((prev) => ({
         ...prev,
@@ -1327,7 +1402,10 @@ const handleDeletePayment = async (paymentId) => {
                   getFilteredBills().map((bill) => {
                     const isSelected = selectedSoldBills.includes(bill.id);
                     const billNote = bill.billNote || bill.note || "";
-                    const displayAmount = getDisplayAmount(bill.totalAmountUSD || 0, bill.totalAmountIQD || 0);
+                    
+                    const { totalUSD, totalIQD, currency } = computeBillTotals(bill);
+                    const displayAmount = getDisplayAmount(totalUSD, totalIQD);
+
                     return (
                       <div key={bill.id} className="bill-item"
                         onClick={() => toggleSoldBill(bill.id)}
@@ -1340,7 +1418,12 @@ const handleDeletePayment = async (paymentId) => {
                         }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: "bold", fontSize: "0.875rem" }}>Bill #{bill.billNumber}</div>
+                            <div style={{ fontWeight: "bold", fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span>Bill #{bill.billNumber}</span>
+                              <span style={{ fontSize: "0.7rem", backgroundColor: currency === "IQD" ? "#dbeafe" : "#dcfce7", color: currency === "IQD" ? "#1e40af" : "#15803d", padding: "1px 6px", borderRadius: "4px", fontWeight: 700 }}>
+                                {currency}
+                              </span>
+                            </div>
                             <div style={{ fontSize: "0.75rem", color: colorScheme.textLight, marginTop: "0.2rem" }}>
                               {formatDateToDMY(bill.date)}
                               {bill.items?.length > 0 && <span style={{ marginLeft: "0.5rem" }}>• {bill.items.length} item{bill.items.length !== 1 ? "s" : ""}</span>}
@@ -1414,10 +1497,10 @@ const handleDeletePayment = async (paymentId) => {
                   getFilteredReturns().map((returnBill) => {
                     const isSelected = selectedSoldReturns.includes(returnBill.id);
                     const retNote = returnBill.returnNote || returnBill.note || "";
-                    const returnUSD = Number(returnBill.totalReturnUSD) || 0;
-                    const returnIQD = Number(returnBill.totalReturnIQD) || 0;
+                    const { returnUSD, returnIQD } = computeReturnTotals(returnBill);
                     const displayAmount = getDisplayAmount(returnUSD, returnIQD);
                     const returnNumberDisplay = returnBill.returnBillNumber || returnBill.pharmacyReturnBillNumber || `RET-${returnBill.id?.slice(-6)}`;
+                    
                     return (
                       <div key={returnBill.id} className="bill-item"
                         onClick={() => toggleSoldReturn(returnBill.id)}
@@ -1614,8 +1697,8 @@ const handleDeletePayment = async (paymentId) => {
                 const parts = [];
                 const netUSD = payment.netAmountUSD || 0;
                 const netIQD = payment.netAmountIQD || 0;
-                if (netUSD !== 0) parts.push(netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`);
-                if (netIQD !== 0) parts.push(netIQD < 0 ? formatIQD(netIQD) : `+${formatIQD(netIQD)}`);
+                if (Math.abs(netUSD) > 0.001) parts.push(netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`);
+                if (Math.abs(netIQD) > 0.5) parts.push(netIQD < 0 ? formatIQD(netIQD) : `+${formatIQD(netIQD)}`);
                 const netDisplayAmount = parts.length > 0 ? parts.join(" and ") : "0 IQD";
 
                 return (
@@ -1713,7 +1796,7 @@ const handleDeletePayment = async (paymentId) => {
                             <td style={{ padding: "8px 10px", color: colorScheme.textLight }}>{formatDateToDMY(bill.date)}</td>
                             <td style={{ padding: "8px 10px", color: colorScheme.textLight, fontStyle: "italic", fontSize: "0.78rem" }}>{bill.billNote || "—"}</td>
                             <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#059669" }}>
-                              +{getDisplayAmount(bill.totalAmountUSD || 0, bill.totalAmountIQD || 0)}
+                              +{bill.displayAmount}
                             </td>
                           </tr>
                         ))}
@@ -1748,7 +1831,7 @@ const handleDeletePayment = async (paymentId) => {
                             <td style={{ padding: "10px 12px", color: colorScheme.textLight }}>{formatDateToDMY(ret.returnDate)}</td>
                             <td style={{ padding: "10px 12px", color: colorScheme.textLight, fontStyle: "italic", fontSize: "0.78rem" }}>{ret.returnNote || "—"}</td>
                             <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: "700", color: "#dc2626" }}>
-                              -{getDisplayAmount(ret.totalReturnUSD || 0, ret.totalReturnIQD || 0)}
+                              -{ret.displayAmount}
                             </td>
                           </tr>
                         ))}
@@ -1766,8 +1849,8 @@ const handleDeletePayment = async (paymentId) => {
                     const netUSD = selectedPayment.netAmountUSD || 0;
                     const netIQD = selectedPayment.netAmountIQD || 0;
                     const parts = [];
-                    if (netUSD !== 0) parts.push(<span key="usd" style={{ color: netUSD < 0 ? '#dc2626' : '#059669' }}>{netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`}</span>);
-                    if (netIQD !== 0) parts.push(<span key="iqd" style={{ color: netIQD < 0 ? '#dc2626' : '#059669' }}>{netIQD < 0 ? formatIQD(netIQD) : `+${formatIQD(netIQD)}`}</span>);
+                    if (Math.abs(netUSD) > 0.001) parts.push(<span key="usd" style={{ color: netUSD < 0 ? '#dc2626' : '#059669' }}>{netUSD < 0 ? formatUSD(netUSD) : `+${formatUSD(netUSD)}`}</span>);
+                    if (Math.abs(netIQD) > 0.5) parts.push(<span key="iqd" style={{ color: netIQD < 0 ? '#dc2626' : '#059669' }}>{netIQD < 0 ? formatIQD(netIQD) : `+${formatIQD(netIQD)}`}</span>);
                     
                     if (parts.length === 0) return <span style={{ color: '#6b7280' }}>0 IQD</span>;
                     

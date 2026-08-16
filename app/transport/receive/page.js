@@ -117,13 +117,17 @@ export default function ReceiveTransportPage() {
       
       const receivedItems = selectedTransport.items.map((item, index) => {
         const key = `${selectedTransport.id}-${index}`;
-        const adjustedQty = adjustedQuantities[key] || item.quantity;
+        const adjustedQty = adjustedQuantities[key] !== undefined ? adjustedQuantities[key] : item.quantity;
         
         return {
+          id: item.id || null,
+          storeDocId: item.storeDocId || item.id || null,
           barcode: item.barcode,
           name: item.name,
           quantity: item.quantity,
           adjustedQuantity: adjustedQty,
+          boughtBillNumber: item.boughtBillNumber || selectedTransport.boughtBillNumber || "N/A",
+          batchId: item.batchId || item.id || null,
           netPrice: item.netPrice,
           outPrice: item.outPrice,
           expireDate: item.expireDate,
@@ -135,6 +139,8 @@ export default function ReceiveTransportPage() {
           netPriceIQD: item.netPriceIQD || 0,
           outPriceUSD: item.outPriceUSD || 0,
           outPriceIQD: item.outPriceIQD || 0,
+          fromBranch: selectedTransport.fromBranch,
+          toBranch: selectedTransport.toBranch,
         };
       });
       
@@ -239,8 +245,8 @@ export default function ReceiveTransportPage() {
             borderRadius: '9999px', 
             height: '40px', 
             width: '40px', 
-            borderTop: '2px solid var(--primary)',
-            borderBottom: '2px solid var(--primary)'
+            borderTop: '2px solid var(--primary)', 
+            borderBottom: '2px solid var(--primary)' 
           }}></div>
           <p style={{ marginTop: '12px', fontSize: '14px', color: 'var(--gray)' }}>Loading transports...</p>
         </div>
@@ -326,7 +332,6 @@ export default function ReceiveTransportPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '8px' }}>
                   <div>
                     <h3 style={{ fontSize: '18px', fontWeight: '600', color: 'var(--dark)' }}>Transport #{transport.id.slice(-6)}</h3>
-                    {/* Show sender information prominently */}
                     <div style={{ 
                       fontSize: '13px', 
                       color: 'var(--gray)', 
@@ -400,12 +405,13 @@ export default function ReceiveTransportPage() {
                           <table style={{ 
                             width: '100%', 
                             borderCollapse: 'collapse',
-                            minWidth: '900px'
+                            minWidth: '950px'
                           }}>
                             <thead>
                               <tr>
                                 <th style={{ padding: '10px 14px', fontSize: '13px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Item Name</th>
                                 <th style={{ padding: '10px 14px', fontSize: '13px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Barcode</th>
+                                <th style={{ padding: '10px 14px', fontSize: '13px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Bought Bill #</th>
                                 <th style={{ padding: '10px 14px', fontSize: '13px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap' }}>Sent</th>
                                 <th style={{ padding: '10px 14px', fontSize: '13px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap' }}>Received</th>
                                 <th style={{ padding: '10px 14px', fontSize: '13px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap' }}>Diff</th>
@@ -417,7 +423,7 @@ export default function ReceiveTransportPage() {
                             <tbody>
                               {transport.items.map((item, index) => {
                                 const key = `${transport.id}-${index}`;
-                                const adjustedQty = adjustedQuantities[key] || item.quantity;
+                                const adjustedQty = adjustedQuantities[key] !== undefined ? adjustedQuantities[key] : item.quantity;
                                 const difference = adjustedQty - item.quantity;
                                 const currency = item.currency || item.originalCurrency || "IQD";
                                 
@@ -425,6 +431,15 @@ export default function ReceiveTransportPage() {
                                   <tr key={index} style={{ transition: 'background-color 0.2s' }}>
                                     <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>{item.name}</td>
                                     <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: '13px', color: 'var(--gray)' }}>{item.barcode}</td>
+                                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: '13px', color: 'var(--dark)', fontFamily: 'monospace' }}>
+                                      {item.boughtBillNumber && item.boughtBillNumber !== "N/A" ? (
+                                        <span style={{ backgroundColor: '#e5e7eb', padding: '2px 6px', borderRadius: '4px' }}>
+                                          #{item.boughtBillNumber}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: '#9ca3af' }}>N/A</span>
+                                      )}
+                                    </td>
                                     <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--gray)', textAlign: 'center' }}>
                                       {item.quantity}
                                     </td>
@@ -520,9 +535,9 @@ export default function ReceiveTransportPage() {
                                   borderRadius: '9999px', 
                                   height: '16px', 
                                   width: '16px', 
-                                  borderTop: '2px solid white',
-                                  borderBottom: '2px solid white',
-                                  marginRight: '8px'
+                                  borderTop: '2px solid white', 
+                                  borderBottom: '2px solid white', 
+                                  marginRight: '8px' 
                                 }}></div>
                                 Processing...
                               </>
@@ -542,9 +557,9 @@ export default function ReceiveTransportPage() {
                                   borderRadius: '9999px', 
                                   height: '16px', 
                                   width: '16px', 
-                                  borderTop: '2px solid white',
-                                  borderBottom: '2px solid white',
-                                  marginRight: '8px'
+                                  borderTop: '2px solid white', 
+                                  borderBottom: '2px solid white', 
+                                  marginRight: '8px' 
                                 }}></div>
                                 Processing...
                               </>
@@ -562,7 +577,7 @@ export default function ReceiveTransportPage() {
                           fontSize: '14px',
                           color: 'var(--dark)'
                         }}>
-                          <strong>Note:</strong> When you adjust quantities, missing items will be returned to the sender's branch automatically.
+                          <strong>Note:</strong> When you adjust quantities, missing items will be moved to the Missing Items tracking list rather than creating duplicate store rows with missing bill numbers.
                         </div>
                       </div>
                     </motion.div>

@@ -11,10 +11,8 @@ const formatCurrency = (amount, currency) => {
   const curr = currency || "IQD"; // Fallback if no currency is set
   
   if (String(curr).toUpperCase() === "IQD") {
-    // For IQD: Add commas, 0 decimal places
     return `${num.toLocaleString('en-US', { maximumFractionDigits: 0 })} IQD`;
   } else {
-    // For USD and others: Add commas, 2 decimal places
     return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 };
@@ -137,42 +135,53 @@ export default function SendTransportPage() {
         let expireDate = item.expireDate;
         if (expireDate && expireDate.toDate) {
           expireDate = expireDate.toDate();
+        } else if (typeof expireDate === 'string') {
+          expireDate = new Date(expireDate);
         }
         
-        // Use the actual currency stored in the database
         const itemCurrency = item.originalCurrency || item.currency || "IQD";
+        const isUSD = itemCurrency === "USD";
         
-        // IMPORTANT: Get the correct prices based on currency
         let netPrice = Number(item.netPrice) || 0;
         let outPrice = Number(item.outPrice) || 0;
         
-        // If we have USD and IQD prices stored separately, use the right one
-        if (itemCurrency === "USD" && item.netPriceUSD) {
+        if (isUSD && item.netPriceUSD) {
           netPrice = Number(item.netPriceUSD);
           outPrice = Number(item.outPriceUSD) || Number(item.outPrice) || netPrice * 1.5;
-        } else if (itemCurrency === "IQD" && item.netPriceIQD) {
+        } else if (!isUSD && item.netPriceIQD) {
           netPrice = Number(item.netPriceIQD);
           outPrice = Number(item.outPriceIQD) || Number(item.outPrice) || netPrice * 1.5;
         }
+
+        const rawBasePrice = Number(item.basePrice || item.basePriceUSD || item.basePriceIQD || item.netPrice || 0);
+        const basePriceUSD = Number(item.basePriceUSD || (isUSD ? rawBasePrice : 0));
+        const basePriceIQD = Number(item.basePriceIQD || (!isUSD ? rawBasePrice : 0));
+
+        const boughtBillNumber = item.boughtBillNumber || item.billNumber || "N/A";
         
-        // Create a unique key that includes ALL distinguishing factors
-        const key = `${item.barcode}_${netPrice}_${outPrice}_${itemCurrency}_${expireDate?.toISOString() || 'no_expiry'}`;
+        // Group by distinguishing batch keys including boughtBillNumber
+        const key = `${item.barcode}_${netPrice}_${outPrice}_${itemCurrency}_${boughtBillNumber}_${expireDate instanceof Date ? expireDate.toISOString() : 'no_expiry'}`;
         
         if (!uniqueBatches[key]) {
           uniqueBatches[key] = {
             id: item.id,
+            storeDocId: item.id,
             barcode: item.barcode,
             name: item.name,
             netPrice: netPrice,
             outPrice: outPrice,
+            basePrice: rawBasePrice,
+            basePriceUSD: basePriceUSD,
+            basePriceIQD: basePriceIQD,
             currency: itemCurrency,
             originalCurrency: item.originalCurrency || itemCurrency,
             expireDate: expireDate,
             quantity: 0,
             branch: item.branch,
+            boughtBillNumber: boughtBillNumber,
+            batchId: item.batchId || item.id || null,
             isConsignment: item.isConsignment || false,
             consignmentOwnerId: item.consignmentOwnerId || null,
-            // Keep all the original data for reference
             _original: item,
           };
         }
@@ -180,52 +189,12 @@ export default function SendTransportPage() {
       });
 
     const batches = Object.values(uniqueBatches).sort((a, b) => {
-      const dateA = a.expireDate || new Date(0);
-      const dateB = b.expireDate || new Date(0);
+      const dateA = a.expireDate instanceof Date ? a.expireDate : new Date(0);
+      const dateB = b.expireDate instanceof Date ? b.expireDate : new Date(0);
       return dateA - dateB;
     });
 
     return batches;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setIsLoading(true);
-    try {
-      if (items.length === 0) {
-        throw new Error("Please add at least one item to send.");
-      }
-
-      const preparedItems = items.map((item) => ({
-        ...item,
-        netPrice: Number(item.netPrice),
-        outPrice: Number(item.outPrice),
-        quantity: parseInt(item.quantity),
-        currency: item.currency,
-        originalCurrency: item.originalCurrency || item.currency,
-        netPriceUSD: item.netPriceUSD || 0,
-        netPriceIQD: item.netPriceIQD || 0,
-        outPriceUSD: item.outPriceUSD || 0,
-        outPriceIQD: item.outPriceIQD || 0,
-        expireDate: toFirestoreTimestamp(item.expireDate),
-      }));
-
-      const exactFromBranch = preparedItems[0]?.branch || fromBranch; 
-      
-      await sendTransport(exactFromBranch, toBranch, preparedItems, user.uid, sendDate, notes);
-      setSuccess("Transport sent successfully!");
-      setItems([]);
-      setNotes("");
-
-      await fetchStoreItems();
-    } catch (err) {
-      console.error("Transport submission error:", err);
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleAddItem = (batch) => {
@@ -242,13 +211,19 @@ export default function SendTransportPage() {
       return;
     }
 
+    const isUSD = (batch.currency || batch.originalCurrency || "USD") === "USD";
+    const rawBasePrice = Number(batch.basePrice || batch._original?.basePrice || batch.netPrice || 0);
+    const basePriceUSD = Number(batch.basePriceUSD || batch._original?.basePriceUSD || (isUSD ? rawBasePrice : 0));
+    const basePriceIQD = Number(batch.basePriceIQD || batch._original?.basePriceIQD || (!isUSD ? rawBasePrice : 0));
+
     const existingItemIndex = items.findIndex(
       (item) =>
         item.barcode === batch.barcode &&
         toFirestoreTimestamp(item.expireDate).isEqual(toFirestoreTimestamp(normalizedExpireDate)) &&
         Number(item.netPrice) === Number(batch.netPrice) &&
         Number(item.outPrice) === Number(batch.outPrice) &&
-        item.currency === batch.currency
+        item.currency === batch.currency &&
+        (item.boughtBillNumber || "N/A") === (batch.boughtBillNumber || "N/A")
     );
 
     if (existingItemIndex >= 0) {
@@ -261,11 +236,15 @@ export default function SendTransportPage() {
       setItems([
         ...items,
         {
+          id: batch.id,
+          storeDocId: batch.storeDocId || batch.id,
           barcode: batch.barcode,
           name: batch.name,
           quantity: 1,
           netPrice: Number(batch.netPrice),
           outPrice: Number(batch.outPrice),
+          basePriceUSD: basePriceUSD,
+          basePriceIQD: basePriceIQD,
           currency: batch.currency,
           originalCurrency: batch.originalCurrency || batch.currency,
           netPriceUSD: batch._original?.netPriceUSD || (batch.currency === "USD" ? batch.netPrice : 0),
@@ -275,6 +254,10 @@ export default function SendTransportPage() {
           expireDate: normalizedExpireDate,
           availableQuantity: batch.quantity,
           branch: batch.branch,
+          boughtBillNumber: batch.boughtBillNumber || "N/A",
+          batchId: batch.batchId || batch.id || null,
+          isConsignment: batch.isConsignment || false,
+          consignmentOwnerId: batch.consignmentOwnerId || null,
           exchangeRate: batch._original?.exchangeRate || 1500,
         },
       ]);
@@ -305,6 +288,59 @@ export default function SendTransportPage() {
     setFromBranch(newFromBranch);
     setToBranch(newFromBranch === "Slemany" ? "Erbil" : "Slemany");
     setItems([]);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
+    try {
+      if (items.length === 0) {
+        throw new Error("Please add at least one item to send.");
+      }
+
+      // Explicitly preserve base prices, boughtBillNumber, and original identifiers
+      const preparedItems = items.map((item) => {
+        const isUSD = (item.currency || item.originalCurrency || "USD") === "USD";
+        const baseUSD = item.basePriceUSD ? Number(item.basePriceUSD) : (isUSD ? Number(item.netPrice || item.price || 0) : 0);
+        const baseIQD = item.basePriceIQD ? Number(item.basePriceIQD) : (!isUSD ? Number(item.netPrice || item.price || 0) : 0);
+
+        return {
+          ...item,
+          id: item.id || null,
+          storeDocId: item.storeDocId || item.id || null,
+          netPrice: Number(item.netPrice),
+          outPrice: Number(item.outPrice),
+          quantity: parseInt(item.quantity),
+          currency: item.currency,
+          originalCurrency: item.originalCurrency || item.currency,
+          basePriceUSD: baseUSD,
+          basePriceIQD: baseIQD,
+          netPriceUSD: item.netPriceUSD || 0,
+          netPriceIQD: item.netPriceIQD || 0,
+          outPriceUSD: item.outPriceUSD || 0,
+          outPriceIQD: item.outPriceIQD || 0,
+          boughtBillNumber: item.boughtBillNumber || "N/A",
+          batchId: item.batchId || item.id || null,
+          expireDate: toFirestoreTimestamp(item.expireDate),
+        };
+      });
+
+      const exactFromBranch = preparedItems[0]?.branch || fromBranch; 
+      
+      await sendTransport(exactFromBranch, toBranch, preparedItems, user.uid, sendDate, notes);
+      setSuccess("Transport sent successfully!");
+      setItems([]);
+      setNotes("");
+
+      await fetchStoreItems();
+    } catch (err) {
+      console.error("Transport submission error:", err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!user) {
@@ -484,12 +520,19 @@ export default function SendTransportPage() {
                                 <div style={{ fontSize: '12px', color: 'var(--gray)' }}>
                                   Net: {formatCurrency(batch.netPrice, batch.currency)} | Out: {formatCurrency(batch.outPrice, batch.currency)}
                                 </div>
-                                <div style={{ 
-                                  fontSize: '10px', 
-                                  color: batch.currency === 'USD' ? '#059669' : '#d97706',
-                                  fontWeight: 'bold'
-                                }}>
-                                  {batch.currency === 'USD' ? '🇺🇸 USD' : '🇮🇶 IQD'}
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                                  <span style={{ 
+                                    fontSize: '10px', 
+                                    color: batch.currency === 'USD' ? '#059669' : '#d97706',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    {batch.currency === 'USD' ? '🇺🇸 USD' : '🇮🇶 IQD'}
+                                  </span>
+                                  {batch.boughtBillNumber && batch.boughtBillNumber !== "N/A" && (
+                                    <span style={{ fontSize: '11px', color: '#4b5563', backgroundColor: '#e5e7eb', padding: '1px 6px', borderRadius: '4px' }}>
+                                      Bill: #{batch.boughtBillNumber}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -512,11 +555,12 @@ export default function SendTransportPage() {
               </div>
             ) : (
               <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: 'var(--rounded-lg)', border: '1px solid var(--border)' }}>
-                <table className="table" style={{ minWidth: '900px' }}>
+                <table className="table" style={{ minWidth: '950px' }}>
                   <thead>
                     <tr>
                       <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Barcode</th>
                       <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Name</th>
+                      <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Bought Bill #</th>
                       <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap' }}>Quantity</th>
                       <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap' }}>Expire Date</th>
                       <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap' }}>Net Price</th>
@@ -529,6 +573,15 @@ export default function SendTransportPage() {
                       <tr key={index} style={{ transition: 'background-color 0.2s' }}>
                         <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>{item.barcode}</td>
                         <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '14px', color: 'var(--dark)' }}>{item.name}</td>
+                        <td style={{ padding: '12px', whiteSpace: 'nowrap', fontSize: '13px', color: 'var(--dark)', fontFamily: 'monospace' }}>
+                          {item.boughtBillNumber && item.boughtBillNumber !== "N/A" ? (
+                            <span style={{ backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                              #{item.boughtBillNumber}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9ca3af' }}>N/A</span>
+                          )}
+                        </td>
                         <td style={{ padding: '12px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                           <input
                             type="number"
@@ -591,7 +644,7 @@ export default function SendTransportPage() {
           <AnimatePresence>
             {error && (
               <motion.div
-                initial={{ opacity: '0', y: 10 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
                 style={{

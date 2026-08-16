@@ -92,7 +92,7 @@ const formatDateTime = (date) => {
 };
 
 const formatUSD = (amount) => {
-  if (amount === undefined || amount === null || amount === 0) return "-";
+  if (amount === undefined || amount === null || Math.abs(amount) < 0.001) return "-";
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -102,11 +102,11 @@ const formatUSD = (amount) => {
 };
 
 const formatIQD = (amount) => {
-  if (amount === undefined || amount === null || amount === 0) return "-";
+  if (amount === undefined || amount === null || Math.abs(amount) < 0.5) return "-";
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
-  }).format(amount) + " IQD";
+  }).format(Math.round(amount)) + " IQD";
 };
 
 const getBranchStyle = (branch) => {
@@ -162,7 +162,7 @@ const getExpiryStyle = (expireDate) => {
 };
 
 // =========================================================================
-// DEFINED OUTSIDE TO PREVENT RE-RENDERS & FIX TEXT BOX FOCUS BUGS
+// FILTER DROPDOWN COMPONENT
 // =========================================================================
 const ExcelFilterDropdown = ({ 
   columnKey, 
@@ -377,13 +377,11 @@ const TableHeader = ({
   </th>
 );
 
-// Main component
 export default function StorePage() {
   const { user } = useAuth();
   const router = useRouter();
   const [storeItems, setStoreItems] = useState([]);
 
-  // Cleaned up Global Search States
   const [searchQuery, setSearchQuery] = useState("");
   const [barcodeSearch, setBarcodeSearch] = useState("");
   const [billSearch, setBillSearch] = useState("");
@@ -410,7 +408,6 @@ export default function StorePage() {
   const [branchFilter, setBranchFilter] = useState("Slemany");
   const [branchFilterInitialized, setBranchFilterInitialized] = useState(false);
 
-  // Column Filters State
   const [columnFilters, setColumnFilters] = useState({});
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
 
@@ -554,7 +551,12 @@ export default function StorePage() {
       try {
         const grouped = {};
         items.forEach(item => {
-          let priceType = 'USD';
+          if (Number(item.quantity) <= 0) return;
+
+          const rawCurrency = String(item.originalCurrency || item.currency || item.priceType || 'USD').toUpperCase();
+          const isIqd = rawCurrency === 'IQD' || rawCurrency.includes('DINAR');
+          const priceType = isIqd ? 'IQD' : 'USD';
+
           let basePriceUSD = 0;
           let netPriceUSD = 0;
           let outPriceUSD = 0;
@@ -562,19 +564,21 @@ export default function StorePage() {
           let netPriceIQD = 0;
           let outPriceIQD = 0;
 
-          if (item.basePriceUSD || item.netPriceUSD || item.outPriceUSD) {
-            priceType = 'USD';
-            basePriceUSD = item.basePriceUSD || 0;
-            netPriceUSD = item.netPriceUSD || 0;
-            outPriceUSD = item.outPriceUSD || 0;
-          } else if (item.basePriceIQD || item.netPriceIQD || item.outPriceIQD) {
-            priceType = 'IQD';
-            basePriceIQD = item.basePriceIQD || 0;
-            netPriceIQD = item.netPriceIQD || 0;
-            outPriceIQD = item.outPriceIQD || 0;
+          if (isIqd) {
+            basePriceIQD = Number(item.basePriceIQD || item.basePrice || (item.priceType === 'IQD' ? item.price : 0)) || 0;
+            netPriceIQD = Number(item.netPriceIQD || item.netPrice) || 0;
+            outPriceIQD = Number(item.outPriceIQD || item.outPrice) || 0;
+          } else {
+            basePriceUSD = Number(item.basePriceUSD || item.basePrice || (item.priceType === 'USD' ? item.price : 0)) || 0;
+            netPriceUSD = Number(item.netPriceUSD || item.netPrice) || 0;
+            outPriceUSD = Number(item.outPriceUSD || item.outPrice) || 0;
           }
 
-          const key = `${item.barcode}-${priceType}-${basePriceUSD}-${netPriceUSD}-${outPriceUSD}-${basePriceIQD}-${netPriceIQD}-${outPriceIQD}-${item.branch}-${item.boughtBillNumber}`;
+          const boughtBill = item.boughtBillNumber || item.billNumber || 'N/A';
+          const branch = item.branch || 'Slemany';
+
+          const expireDateKey = item.expireDate?.seconds ? item.expireDate.seconds : String(item.expireDate || 'none');
+          const key = `${item.barcode}-${priceType}-${basePriceUSD}-${netPriceUSD}-${outPriceUSD}-${basePriceIQD}-${netPriceIQD}-${outPriceIQD}-${branch}-${boughtBill}-${expireDateKey}`;
 
           if (!grouped[key]) {
             grouped[key] = {
@@ -588,14 +592,14 @@ export default function StorePage() {
               basePriceIQD: basePriceIQD,
               netPriceIQD: netPriceIQD,
               outPriceIQD: outPriceIQD,
-              branch: item.branch,
-              boughtBillNumber: item.boughtBillNumber,
+              branch: branch,
+              boughtBillNumber: boughtBill,
               totalQuantity: 0,
               expireDate: item.expireDate?.toDate ? item.expireDate.toDate() : item.expireDate,
               createdAt: item.createdAt?.toDate ? item.createdAt.toDate() : item.createdAt
             };
           }
-          grouped[key].totalQuantity += item.quantity;
+          grouped[key].totalQuantity += Number(item.quantity) || 0;
         });
 
         setStoreItems(Object.values(grouped));
@@ -901,7 +905,7 @@ export default function StorePage() {
     );
   }
 
-  const columnsCount = (canSeeBasePrice ? 14 : 12) + 1; // Total columns for colSpan
+  const columnsCount = (canSeeBasePrice ? 14 : 12) + 1;
 
   return (
     <div style={{ width: '100%', margin: 0, padding: 0, boxSizing: 'border-box', backgroundColor: 'white', ...nrtFontStyle, minHeight: '100vh' }}>
@@ -1075,7 +1079,6 @@ export default function StorePage() {
           <table style={{ width: '100%', margin: 0, borderCollapse: 'collapse', minWidth: '1000px' }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr style={{ backgroundColor: '#f9fafb' }}>
-                {/* ⬅️ First Column Anchors Left so dropdown expands inward */}
                 <TableHeader title="Barcode" columnKey="barcode" colWidth="110px" alignLeft={true} sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
                 <TableHeader title="Item Name" columnKey="name" colWidth="auto" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
                 <TableHeader title="Branch" columnKey="branch" colWidth="90px" sortConfig={sortConfig} handleSort={handleSort} getSortIcon={getSortIcon} storeItems={storeItems} columnFilters={columnFilters} activeFilterDropdown={activeFilterDropdown} setActiveFilterDropdown={setActiveFilterDropdown} handleUpdateColumnFilter={handleUpdateColumnFilter} clearColumnFilter={clearColumnFilter} />
@@ -1361,7 +1364,6 @@ export default function StorePage() {
 
                 const updateData = {
                   quantity: newQuantity,
-                  priceType: editForm.priceType
                 };
 
                 if (editForm.priceType === 'USD') {
@@ -1391,9 +1393,6 @@ export default function StorePage() {
                   updateData.basePriceUSD = basePriceUSD;
                   updateData.netPriceUSD = netPriceUSD;
                   updateData.outPriceUSD = outPriceUSD;
-                  updateData.basePriceIQD = null;
-                  updateData.netPriceIQD = null;
-                  updateData.outPriceIQD = null;
                 } else {
                   const basePriceIQD = canSeeBasePrice
                     ? parseFloat(editForm.basePriceIQD)
@@ -1421,9 +1420,6 @@ export default function StorePage() {
                   updateData.basePriceIQD = basePriceIQD;
                   updateData.netPriceIQD = netPriceIQD;
                   updateData.outPriceIQD = outPriceIQD;
-                  updateData.basePriceUSD = null;
-                  updateData.netPriceUSD = null;
-                  updateData.outPriceUSD = null;
                 }
 
                 await updateDoc(doc(db, "storeItems", editingItem.id), updateData);
@@ -1449,16 +1445,21 @@ export default function StorePage() {
                 />
               </div>
 
+              {/* Read-Only Currency Display */}
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', marginBottom: '4px', fontWeight: '500', ...nrtFontStyle }}>Currency</label>
-                <select
-                  value={editForm.priceType}
-                  onChange={(e) => setEditForm({...editForm, priceType: e.target.value})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box', ...nrtFontStyle }}
-                >
-                  <option value="USD">USD ($)</option>
-                  <option value="IQD">IQD (د.ع)</option>
-                </select>
+                <div style={{
+                  padding: '8px 12px',
+                  backgroundColor: editForm.priceType === 'USD' ? '#dbeafe' : '#fef3c7',
+                  color: editForm.priceType === 'USD' ? '#1e40af' : '#92400e',
+                  borderRadius: '6px',
+                  border: '1px solid #d1d5db',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  display: 'inline-block'
+                }}>
+                  {editForm.priceType === 'USD' ? 'USD ($)' : 'IQD (د.ع)'}
+                </div>
               </div>
 
               {editForm.priceType === 'USD' ? (

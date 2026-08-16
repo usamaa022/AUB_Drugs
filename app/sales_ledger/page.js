@@ -67,7 +67,7 @@ const formatDateTime = (date) => {
 };
 
 const formatUSD = (amount) => {
-  if (amount === undefined || amount === null || amount === 0) return "-";
+  if (amount === undefined || amount === null || Math.abs(amount) < 0.001) return "-";
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -76,38 +76,70 @@ const formatUSD = (amount) => {
 };
 
 const formatIQD = (amount) => {
-  if (amount === undefined || amount === null || amount === 0) return "-";
+  if (amount === undefined || amount === null || Math.abs(amount) < 0.5) return "-";
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0
-  }).format(amount) + " IQD";
+  }).format(Math.round(amount)) + " IQD";
 };
 
-// DEEP SCANNER
-const extractReferences = (obj, foundIds) => {
-  if (!obj) return;
-  if (Array.isArray(obj)) {
-    obj.forEach(item => extractReferences(item, foundIds));
-  } else if (typeof obj === 'object') {
-    for (const [key, value] of Object.entries(obj)) {
-      const lowerKey = key.toLowerCase();
-      const isRefKey = lowerKey.includes('id') || lowerKey.includes('bill') || lowerKey.includes('num') || lowerKey.includes('ref');
-      
-      if (typeof value === 'string') {
-        if (isRefKey || value.length >= 15) {
-          foundIds.add(value.trim());
-        }
-      } else if (typeof value === 'number' && isRefKey) {
-        foundIds.add(String(value));
-      } else if (typeof value === 'object') {
-        extractReferences(value, foundIds);
+// Helpers for dynamic price computation
+const computeBillAmounts = (bill) => {
+  const currency = String(bill.currency || bill.priceType || (bill.items?.[0]?.originalCurrency) || "USD").toUpperCase();
+  const isIqd = currency === "IQD" || currency.includes("DINAR");
+  
+  if (bill.items && Array.isArray(bill.items) && bill.items.length > 0) {
+    let sum = 0;
+    bill.items.forEach(item => {
+      const qty = Number(item.quantity) || 0;
+      let price = 0;
+      if (isIqd) {
+        price = (item.outPriceIQD && Number(item.outPriceIQD) > 0) ? Number(item.outPriceIQD) : (Number(item.price) || 0);
+      } else {
+        price = (item.outPriceUSD && Number(item.outPriceUSD) > 0) ? Number(item.outPriceUSD) : (Number(item.price) || 0);
       }
-    }
+      sum += price * qty;
+    });
+    const discount = isIqd ? (Number(bill.discountIQD) || 0) : (Number(bill.discountUSD) || 0);
+    const finalSum = Math.max(0, sum - discount);
+    return isIqd ? { bUSD: 0, bIQD: finalSum } : { bUSD: finalSum, bIQD: 0 };
   }
+
+  let bUSD = Number(bill.totalAmountUSD || bill.finalAmountUSD || bill.amountUSD || 0);
+  let bIQD = Number(bill.totalAmountIQD || bill.finalAmountIQD || bill.amountIQD || 0);
+  if (bUSD === 0 && bIQD === 0 && bill.totalAmount) {
+    if (isIqd) bIQD = Number(bill.totalAmount);
+    else bUSD = Number(bill.totalAmount);
+  } else if (isIqd && bIQD === 0 && bUSD > 0 && bill.currency === "IQD") {
+    bIQD = bUSD;
+    bUSD = 0;
+  }
+  return { bUSD, bIQD };
 };
 
-// =========================================================================
-// DEFINED OUTSIDE TO PREVENT RE-RENDERS & FIX TEXT BOX FOCUS BUGS
-// =========================================================================
+const computeReturnAmounts = (ret) => {
+  const currency = String(ret.currency || ret.priceType || (ret.items?.[0]?.currency) || "IQD").toUpperCase();
+  const isIqd = currency === "IQD" || currency.includes("DINAR");
+
+  if (ret.items && Array.isArray(ret.items) && ret.items.length > 0) {
+    let sum = 0;
+    ret.items.forEach(item => {
+      const qty = Number(item.returnQuantity || item.quantity) || 0;
+      const price = Number(item.returnPrice || item.price) || 0;
+      sum += price * qty;
+    });
+    return isIqd ? { retUSD: 0, retIQD: sum } : { retUSD: sum, retIQD: 0 };
+  }
+
+  let retUSD = Number(ret.totalReturnAmountUSD || ret.totalReturnUSD || ret.amountUSD || 0);
+  let retIQD = Number(ret.totalReturnAmountIQD || ret.totalReturnIQD || ret.amountIQD || 0);
+  if (retUSD === 0 && retIQD === 0 && (ret.totalReturnAmount || ret.totalAmount)) {
+    const total = Number(ret.totalReturnAmount || ret.totalAmount || 0);
+    if (isIqd) retIQD = total;
+    else retUSD = total;
+  }
+  return { retUSD, retIQD };
+};
+
 const ExcelFilterDropdown = ({ 
   columnKey, type = "string",
   allData, selectedPharmacy,
@@ -170,7 +202,7 @@ const ExcelFilterDropdown = ({
         <Filter size={14} />
       </div>
       {isOpen && (
-    <div 
+        <div 
           style={{ 
             position: "absolute", 
             top: "100%", 
@@ -189,7 +221,6 @@ const ExcelFilterDropdown = ({
           onClick={e => e.stopPropagation()}
           onMouseDown={e => e.stopPropagation()}
         >
-          {/* Top Section: Operator Select & Value Input stacked vertically */}
           <div 
             style={{ 
               padding: "0.75rem", 
@@ -246,7 +277,6 @@ const ExcelFilterDropdown = ({
             )}
           </div>
           
-          {/* Middle Section: Checkbox Search & List */}
           <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: "0.375rem", padding: "0.25rem 0.5rem", marginBottom: "0.5rem", backgroundColor: "white" }}>
               <Search size={14} color="#94a3b8" />
@@ -284,7 +314,6 @@ const ExcelFilterDropdown = ({
             </div>
           </div>
           
-          {/* Bottom Actions: Clear & Apply */}
           <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", padding: "0.75rem", backgroundColor: "#f8fafc" }}>
             <button 
               onClick={() => handleUpdateColumnFilter(columnKey, { operator: operators[0].value, textValue: '', selectedValues: [] })} 
@@ -318,8 +347,8 @@ const TableHeader = ({
       textAlign: "left", fontSize: "14px", fontFamily: "'NRT-Bd', sans-serif", 
       whiteSpace: "nowrap", borderRight: "1px solid #576574", 
       width: colWidth || "auto", 
-      position: "relative", // Needed so z-index works correctly locally
-      zIndex: isActive ? 9999 : 1 // Elevates the active header above siblings
+      position: "relative",
+      zIndex: isActive ? 9999 : 1
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
         <div onClick={() => handleSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
@@ -336,9 +365,6 @@ const TableHeader = ({
   );
 };
 
-// =========================================================================
-// MAIN COMPONENT
-// =========================================================================
 export default function SalesLedgerPage() {
   const [allData, setAllData] = useState([]);
   const [pharmacies, setPharmacies] = useState([]);
@@ -372,7 +398,7 @@ export default function SalesLedgerPage() {
     fetchLedgerData();
   }, []);
 
-const fetchLedgerData = async () => {
+  const fetchLedgerData = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -386,9 +412,7 @@ const fetchLedgerData = async () => {
       const normalizedData = [];
       const pharmacySet = new Set();
 
-      // ==========================================================
       // 1. BUILD BI-DIRECTIONAL PAYMENT MAP
-      // ==========================================================
       const paymentMap = new Map();
       
       payments.forEach(pay => {
@@ -403,7 +427,6 @@ const fetchLedgerData = async () => {
               paymentMap.set(clean, payNum);
             }
           } else if (typeof val === "object") {
-            // If the array contains object items (e.g. { id, documentId, returnBillNumber })
             if (val.id) registerId(val.id);
             if (val.documentId) registerId(val.documentId);
             if (val.docId) registerId(val.docId);
@@ -414,7 +437,6 @@ const fetchLedgerData = async () => {
           }
         };
 
-        // Standard payment properties
         registerId(pay.billId);
         registerId(pay.soldBillId);
         registerId(pay.returnId);
@@ -425,18 +447,15 @@ const fetchLedgerData = async () => {
         registerId(pay.returnBillNumber);
         registerId(pay.id);
 
-        // Arrays containing IDs or objects
         if (Array.isArray(pay.selectedSoldBills)) pay.selectedSoldBills.forEach(registerId);
         if (Array.isArray(pay.selectedBills)) pay.selectedBills.forEach(registerId);
         if (Array.isArray(pay.billIds)) pay.billIds.forEach(registerId);
         
-        // Return arrays
         if (Array.isArray(pay.selectedReturns)) pay.selectedReturns.forEach(registerId);
         if (Array.isArray(pay.returns)) pay.returns.forEach(registerId);
         if (Array.isArray(pay.selectedReturnBills)) pay.selectedReturnBills.forEach(registerId);
         if (Array.isArray(pay.items)) pay.items.forEach(registerId);
 
-        // Deep recursive scan
         const deepScan = (obj) => {
           if (!obj) return;
           if (Array.isArray(obj)) {
@@ -455,9 +474,7 @@ const fetchLedgerData = async () => {
         deepScan(pay);
       });
 
-      // ==========================================================
-      // 2. Process Sold Bills
-      // ==========================================================
+      // 2. Process Sold Bills (Dynamically computing accurate prices)
       bills.forEach(bill => {
         const pName = bill.pharmacyName || "Unknown";
         pharmacySet.add(pName);
@@ -486,13 +503,7 @@ const fetchLedgerData = async () => {
         const isMarkedPaid = bill.isPaid === true || statusStr === "paid" || statusStr === "completed" || statusStr === "processed";
         if (payNum || isMarkedPaid) currentStatus = "Paid";
 
-        let bUSD = bill.totalAmountUSD || bill.amountUSD || 0;
-        let bIQD = bill.totalAmountIQD || bill.amountIQD || 0;
-        if (bUSD === 0 && bIQD === 0 && bill.totalAmount) {
-          const curr = String(bill.priceType || bill.currency || 'USD').toUpperCase();
-          if (curr === 'IQD' || curr.includes('DINAR')) bIQD = bill.totalAmount;
-          else bUSD = bill.totalAmount;
-        }
+        const { bUSD, bIQD } = computeBillAmounts(bill);
 
         normalizedData.push({
           id: bill.id,
@@ -507,9 +518,7 @@ const fetchLedgerData = async () => {
         });
       });
 
-      // ==========================================================
-      // 3. Process Returns
-      // ==========================================================
+      // 3. Process Returns (Dynamically computing accurate prices)
       returns.forEach(ret => {
         const pName = ret.pharmacyName || "Unknown";
         pharmacySet.add(pName);
@@ -517,7 +526,6 @@ const fetchLedgerData = async () => {
         let payNum = ret.paymentNumber || ret.paymentId || ret.returnPaymentNumber || ret.linkedPayment || null;
         
         if (!payNum) {
-          // Check all possible aliases including Firestore documentId and returnBillNumber
           const identifiers = [
             String(ret.documentId || ""),
             String(ret.docId || ""),
@@ -537,7 +545,6 @@ const fetchLedgerData = async () => {
           }
         }
 
-        // Direct matching fallback against all payments
         if (!payNum) {
           for (const pay of payments) {
             const pNum = pay.paymentNumber || pay.paymentId || pay.transactionId || pay.id;
@@ -569,13 +576,7 @@ const fetchLedgerData = async () => {
         const isMarkedPaid = ret.isPaid === true || statusStr === "paid" || statusStr === "completed" || statusStr === "processed";
         if (payNum || isMarkedPaid) currentStatus = "Paid";
 
-        let retUSD = ret.totalReturnAmountUSD || ret.amountUSD || 0;
-        let retIQD = ret.totalReturnAmountIQD || ret.amountIQD || 0;
-        if (retUSD === 0 && retIQD === 0 && ret.totalReturnAmount) {
-          const curr = String(ret.priceType || ret.currency || 'USD').toUpperCase();
-          if (curr === 'IQD' || curr.includes('DINAR')) retIQD = ret.totalReturnAmount;
-          else retUSD = ret.totalReturnAmount;
-        }
+        const { retUSD, retIQD } = computeReturnAmounts(ret);
 
         normalizedData.push({
           id: ret.id,
@@ -590,9 +591,7 @@ const fetchLedgerData = async () => {
         });
       });
 
-      // ==========================================================
       // 4. Process Payments
-      // ==========================================================
       payments.forEach(pay => {
         const pName = pay.pharmacyName || "Unknown";
         pharmacySet.add(pName);
@@ -784,9 +783,6 @@ const fetchLedgerData = async () => {
     }, 250);
   };
 
-  const totalBalanceUSD = filteredLedger.reduce((sum, row) => sum + row.amountUSD, 0);
-  const totalBalanceIQD = filteredLedger.reduce((sum, row) => sum + row.amountIQD, 0);
-
   const totalSalesUSD = filteredLedger.filter(row => row.type === "Sold Bill" && row.amountUSD > 0).reduce((sum, row) => sum + row.amountUSD, 0);
   const totalSalesIQD = filteredLedger.filter(row => row.type === "Sold Bill" && row.amountIQD > 0).reduce((sum, row) => sum + row.amountIQD, 0);
 
@@ -887,7 +883,7 @@ const fetchLedgerData = async () => {
               style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', outline: 'none', ...nrtFontStyle }}
             >
               <option value="All">All Transactions</option>
-              <option value="Bill">Bills Only</option>
+              <option value="Sold Bill">Bills Only</option>
               <option value="Return">Returns Only</option>
               <option value="Payment">Payments Only</option>
             </select>
@@ -971,7 +967,7 @@ const fetchLedgerData = async () => {
                            borderRadius: '6px', 
                            fontSize: '12px', 
                            fontWeight: '600', 
-                           display: 'inline-block',
+                           display: 'inline-block', 
                            ...nrtFontStyle 
                          }}>
                             {isPaid ? "Paid" : "Unpaid"}
@@ -999,7 +995,6 @@ const fetchLedgerData = async () => {
               )}
             </tbody>
             
-            {/* The footer is given zIndex: 10 so it stays UNDER the dropdowns when opened (which have 99999) */}
             <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10 }}>
               <tr style={{ backgroundColor: '#f0fdf4', borderTop: '2px solid #cbd5e1' }}>
                 <td colSpan="3" style={{ padding: '10px 12px', textAlign: 'right', borderRight: '1px solid #cbd5e1', color: '#1e293b', fontSize: '13px', ...nrtFontBoldStyle }}>

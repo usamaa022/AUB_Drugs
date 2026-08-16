@@ -18,7 +18,8 @@ import {
   Save, 
   CheckCircle2, 
   AlertCircle,
-  FolderLock
+  FolderLock,
+  TrendingDown
 } from "lucide-react";
 
 // --- Grouped Modules Configuration Exactly Matching Your Navbar ---
@@ -78,7 +79,17 @@ const NAVIGATION_GROUPS = [
     pages: [
       { key: "transport_send", label: "Send Transport", path: "/transport/send", description: "Dispatch items to another branch" },
       { key: "transport_receive", label: "Receive Transport", path: "/transport/receive", description: "Confirm receipt of incoming inventory" },
-      { key: "transport_history", label: "Transport History", path: "/transport/transportHistory", description: "View transport shipment history" }
+      { key: "transport_history", label: "Transport History", path: "/transport/transportHistory", description: "View transport shipment history" },
+      { key: "transport_missing", label: "Missing Items", path: "/transport/missing", description: "Track transit item discrepancies" }
+    ]
+  },
+  {
+    groupId: "expenses",
+    groupLabel: "Expenses Module",
+    icon: TrendingDown,
+    description: "Insert and track operational store expenses across branches",
+    pages: [
+      { key: "expenses", label: "Store Expenses", path: "/expenses", description: "Manage and filter store expenses" }
     ]
   },
   {

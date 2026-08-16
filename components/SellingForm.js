@@ -1675,10 +1675,9 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       ).join(", ");
 
       alert(
-        `❌ Cannot edit Bill #${formatBillNumber(bill.billNumber)}!\n\n` +
-        `This bill has return invoices associated with it: ${returnInvoices || "Return Invoices"}.\n\n` +
-        `Editing a bill with active returns will cause inventory and accounting discrepancies.\n` +
-        `Please manage or reverse the return invoice first if you need to make changes.`
+        `❌ Cannot edit Bill #${formatBillNumber(bill.billNumber)}!\n` +
+        `ببورە! ئەم وەسڵی فرۆشە استرجاعی تیا کراوە بە ژمارە وەسڵی استرجاع: ${returnInvoices || "Return Invoices"} ` 
+
       );
       return;
     }
@@ -1808,7 +1807,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [recentBills, storeItems, loadReturnedItemsForBill]);
 
-  const handleUpdateBill = useCallback(async () => {
+ const handleUpdateBill = useCallback(async () => {
     if (!pharmacyId) { setError("Please select a pharmacy."); return; }
     if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
     if (!editingBillNumber) { setError("No bill selected for update."); return; }
@@ -1894,6 +1893,20 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         }
       }
 
+      // Calculate totals based on active currency
+      let calculatedTotalUSD = 0;
+      let calculatedTotalIQD = 0;
+
+      filteredItems.forEach((item) => {
+        const qty = parseInt(item.quantity) || 0;
+        const unitPrice = parseFloat(item.price) || 0;
+        if (billCurrency === "IQD") {
+          calculatedTotalIQD += unitPrice * qty;
+        } else {
+          calculatedTotalUSD += unitPrice * qty;
+        }
+      });
+
       const updatedBill = await updateSoldBill(editingBillNumber, {
         items: filteredItems,
         pharmacyId,
@@ -1905,6 +1918,9 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         note: note.trim(),
         updatedBy: updaterEmail,
         updatedByName: updaterName,
+        totalAmountUSD: calculatedTotalUSD,
+        totalAmountIQD: calculatedTotalIQD,
+        totalAmount: billCurrency === "IQD" ? calculatedTotalIQD : calculatedTotalUSD,
       });
 
       if (onBillCreated) onBillCreated(updatedBill);
@@ -1934,7 +1950,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       setIsLoading(false);
     }
   }, [pharmacyId, selectedItems, validateBillBeforeSubmit, editingBillNumber, user, onBillCreated, pharmacyName, saleDate, paymentMethod, isConsignment, note, selectedBill, loadAllAttachments, recentBills, resetForm, billCurrency]);
-
   const generateSellingBillNumber = useCallback(async () => {
     try {
       const billsRef = collection(db, "soldBills");

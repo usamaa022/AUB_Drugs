@@ -1,9 +1,11 @@
 "use client";
-import React, { useState, useRef } from "react";
-import { getBoughtBills, getReturnsForCompany } from "@/lib/data";
+import React, { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { getCompanyBoughtBills, getReturnsForCompany } from "@/lib/data";
 import CompanySelectionModal from "@/components/CompanySelectionModal";
 
 const BoughtStatementPage = () => {
+  const { user } = useAuth();
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [showModal, setShowModal] = useState(true);
   const [bills, setBills] = useState([]);
@@ -46,7 +48,6 @@ const BoughtStatementPage = () => {
       <html>
         <head>
           <meta charset="utf-8" />
-       
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1f2937; background: white; padding: 20px; }
@@ -65,7 +66,6 @@ const BoughtStatementPage = () => {
             
             tr.alt { background: #f8fafc; }
             tfoot tr { background: #f1f5f9; font-weight: 700; }
-            tfoot tr.red { background: #fee2e2; }
             
             .usd { color: #059669; font-weight: 600; }
             .iqd { color: #2563eb; font-weight: 600; }
@@ -83,8 +83,6 @@ const BoughtStatementPage = () => {
             
             .notes-box { margin-top: 20px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 10px; line-height: 1.5; color: #4b5563; }
             .notes-box strong { color: #1f2937; display: block; margin-bottom: 4px; }
-            
-            .footer { margin-top: 30px; text-align: center; font-size: 9px; color: #9ca3af; }
             
             @media print { 
               body { padding: 0; } 
@@ -105,32 +103,22 @@ const BoughtStatementPage = () => {
     }, 500);
   };
 
-  const handleCompanySelect = async (company) => {
+const handleCompanySelect = async (company) => {
     setSelectedCompany(company);
     setShowModal(false);
     setIsLoading(true);
     setError(null);
     try {
-      const [billsData, returnsData] = await Promise.all([
-        getBoughtBills(),
+      const [companyBills, returnsData] = await Promise.all([
+        getCompanyBoughtBills(company.id),
         getReturnsForCompany(company.id),
       ]);
-
-      const companyBills = billsData.filter(
-        (bill) =>
-          bill.companyId === company.id &&
-          (bill.paymentStatus === "Unpaid" || !bill.paymentStatus)
-      );
 
       // Group returns by returnBillNumber
       const returnsMap = new Map();
 
       returnsData.forEach((ret) => {
-        let returnBillNumber = ret.returnBillNumber || ret.returnNumber;
-
-        if (!returnBillNumber) {
-          returnBillNumber = `BRET-${ret.id.slice(-6).toUpperCase()}`;
-        }
+        let returnBillNumber = ret.returnBillNumber || ret.returnNumber || `BRET-${ret.id.slice(-6).toUpperCase()}`;
 
         if (!returnsMap.has(returnBillNumber)) {
           returnsMap.set(returnBillNumber, {
@@ -142,33 +130,29 @@ const BoughtStatementPage = () => {
             totalUSD: 0,
             totalIQD: 0,
             items: [],
-            currency: null,
             paymentStatus: ret.paymentStatus,
           });
         }
 
         const group = returnsMap.get(returnBillNumber);
-        const qty = ret.returnQuantity || 0;
-        const itemCurrency = ret.currency || "USD";
+        const qty = Number(ret.returnQuantity) || 0;
+        const itemCurrency = String(ret.currency || "USD").toUpperCase();
 
-        if (!group.currency) {
-          group.currency = itemCurrency;
+        // Extract price accurately with multiple fallbacks
+        const priceUSD = Number(ret.returnPriceUSD || (itemCurrency === "USD" ? (ret.returnPrice || ret.netPrice || 0) : 0)) || 0;
+        const priceIQD = Number(ret.returnPriceIQD || (itemCurrency === "IQD" ? (ret.returnPrice || ret.netPrice || 0) : 0)) || 0;
+
+        if (itemCurrency === "USD" || priceUSD > 0) {
+          group.totalUSD += qty * (priceUSD > 0 ? priceUSD : Number(ret.returnPrice || 0));
         }
-
-        if (itemCurrency === "USD") {
-          const priceUSD = ret.returnPriceUSD || ret.returnPrice || 0;
-          const total = qty * priceUSD;
-          group.totalUSD += total;
-        } else if (itemCurrency === "IQD") {
-          const priceIQD = ret.returnPriceIQD || ret.returnPrice || 0;
-          const total = qty * priceIQD;
-          group.totalIQD += total;
+        if (itemCurrency === "IQD" || priceIQD > 0) {
+          group.totalIQD += qty * (priceIQD > 0 ? priceIQD : Number(ret.returnPrice || 0));
         }
 
         group.items.push(ret);
 
-        if (!group.date && ret.returnDate) {
-          group.date = ret.returnDate;
+        if (!group.date && (ret.returnDate || ret.date)) {
+          group.date = ret.returnDate || ret.date;
         }
         if (!group.note && ret.returnNote) {
           group.note = ret.returnNote;
@@ -176,12 +160,13 @@ const BoughtStatementPage = () => {
       });
 
       const groupedReturns = Array.from(returnsMap.values()).filter(
-        (ret) => ret.paymentStatus !== "Processed" && ret.paymentStatus !== "Paid"
+        (ret) => (ret.totalUSD > 0 || ret.totalIQD > 0) && ret.paymentStatus !== "Processed" && ret.paymentStatus !== "Paid"
       );
 
       setBills(companyBills);
       setReturns(groupedReturns);
     } catch (err) {
+      console.error("Error loading company statement data:", err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -190,20 +175,33 @@ const BoughtStatementPage = () => {
 
   const billTotals = bills.map((bill) => {
     const currency = bill.currency || "USD";
-    if (currency === "USD") {
-      const usd = bill.items?.reduce((s, item) => s + (item.basePriceUSD || item.netPriceUSD || 0) * (item.quantity || 0), 0) || 0;
-      return { usd, iqd: null, currency: "USD" };
-    } else {
-      const iqd = bill.items?.reduce((s, item) => s + (item.basePriceIQD || item.netPriceIQD || 0) * (item.quantity || 0), 0) || 0;
-      return { usd: null, iqd, currency: "IQD" };
-    }
+    const exchangeRate = bill.exchangeRate || 1500;
+    
+    let usd = 0;
+    let iqd = 0;
+
+    (bill.items || []).forEach(item => {
+      const q = Number(item.quantity) || 0;
+      const c = item.currency || item.originalCurrency || currency;
+      if (c === "USD") {
+        usd += (Number(item.basePriceUSD || item.netPriceUSD || item.price || 0)) * q;
+      } else {
+        iqd += (Number(item.basePriceIQD || item.netPriceIQD || item.price || 0)) * q;
+      }
+    });
+
+    if (currency === "USD" && usd === 0 && bill.totalAmountUSD) usd = bill.totalAmountUSD;
+    if (currency === "IQD" && iqd === 0 && bill.totalAmountIQD) iqd = bill.totalAmountIQD;
+
+    return { usd: usd > 0 ? usd : null, iqd: iqd > 0 ? iqd : null, currency };
   });
 
   const totalBeforeReturnUSD = billTotals.reduce((s, t) => s + (t.usd || 0), 0);
   const totalBeforeReturnIQD = billTotals.reduce((s, t) => s + (t.iqd || 0), 0);
 
-  const totalReturnUSD = returns.reduce((s, r) => s + r.totalUSD, 0);
-  const totalReturnIQD = returns.reduce((s, r) => s + r.totalIQD, 0);
+  const totalReturnUSD = returns.reduce((s, r) => s + (r.totalUSD || 0), 0);
+  const totalReturnIQD = returns.reduce((s, r) => s + (r.totalIQD || 0), 0);
+
   const totalAfterReturnUSD = totalBeforeReturnUSD - totalReturnUSD;
   const totalAfterReturnIQD = totalBeforeReturnIQD - totalReturnIQD;
 
@@ -245,14 +243,13 @@ const BoughtStatementPage = () => {
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%)", padding: "1rem", fontFamily: "system-ui, sans-serif" }}>
-      {/* Changed maxWidth to 1000px and width to 100% for mobile responsiveness */}
       <div style={{ width: '100%', maxWidth: '1000px', margin: "0 auto" }}>
         
-        {/* Top Control Header with flexWrap for mobile */}
+        {/* Top Control Header */}
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", backgroundColor: "white", padding: "1.25rem 1.5rem", borderRadius: "1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
           <div>
             <h1 style={{ fontSize: "1.25rem", fontWeight: "700", color: "#111827", margin: 0 }}>
-              Statement Overview
+              Statement Overview (All Branches)
             </h1>
             <p style={{ fontSize: "0.85rem", color: "#6b7280", margin: "4px 0 0 0" }}>{selectedCompany.name}</p>
           </div>
@@ -273,14 +270,14 @@ const BoughtStatementPage = () => {
           </div>
         </div>
 
-        {/* Printable Area Wrapper - Adjusted padding for mobile */}
+        {/* Printable Area Wrapper */}
         <div style={{ backgroundColor: "white", padding: "1.5rem 1rem", borderRadius: "1rem", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
           <div ref={printRef}>
             
             {/* Print Header */}
             <div className="header-container" style={{ textAlign: "center", marginBottom: "2rem", borderBottom: "2px solid #f1f5f9", paddingBottom: "1.5rem" }}>
               <h1 style={{ fontSize: "1.4rem", fontWeight: "800", color: "#111827", margin: "0 0 4px 0" }}>
-                {selectedCompany.name} - كشف حساب کڕین
+                {selectedCompany.name} - کشف حساب کڕین (سەرجەم لقییەکان)
               </h1>
               <p className="subtitle" style={{ fontSize: "0.85rem", color: "#6b7280", margin: 0 }}>
                 Generated on: {formatDate(new Date())}
@@ -292,40 +289,49 @@ const BoughtStatementPage = () => {
               <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#374151", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Unpaid Purchase Bills
               </h2>
-              {/* Added overflowX wrapper for mobile tables */}
               <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", minWidth: "600px" }}>
                   <thead>
                     <tr>
                       <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Bill #</th>
                       <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Company Bill #</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Branch</th>
                       <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Date</th>
                       <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount ($)</th>
                       <th className="right" style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "right", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600" }}>Amount (IQD)</th>
-                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600", width: "25%" }}>Note</th>
+                      <th style={{ background: "#f8fafc", padding: "8px 10px", textAlign: "left", border: "1px solid #e2e8f0", color: "#4b5563", fontWeight: "600", width: "20%" }}>Note</th>
                     </tr>
                   </thead>
                   <tbody>
                     {bills.map((bill, idx) => {
-                      const { usd, iqd, currency } = billTotals[idx];
+                      const { usd, iqd } = billTotals[idx];
                       return (
                         <tr key={bill.id || idx} className={idx % 2 === 0 ? "" : "alt"} style={{ background: idx % 2 === 0 ? "white" : "#f8fafc" }}>
                           <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", fontWeight: "600", color: "#1f2937" }}>#{bill.billNumber}</td>
                           <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{bill.companyBillNumber || "N/A"}</td>
+                          <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>
+                            <span style={{ backgroundColor: bill.branch === "Slemany" ? "#dcfce7" : "#fef3c7", color: bill.branch === "Slemany" ? "#166534" : "#92400e", padding: "2px 6px", borderRadius: "4px", fontWeight: "600" }}>
+                              {bill.branch || "Slemany"}
+                            </span>
+                          </td>
                           <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563" }}>{formatDate(bill.date)}</td>
-                          {currency === "USD"
-                            ? <td className="right usd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "600" }}>${formatCurrency(usd)}</td>
-                            : <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>}
-                          {currency === "IQD"
-                            ? <td className="right iqd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "600" }}>{formatIQD(iqd)} IQD</td>
-                            : <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>}
+                          {usd ? (
+                            <td className="right usd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "600" }}>${formatCurrency(usd)}</td>
+                          ) : (
+                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>
+                          )}
+                          {iqd ? (
+                            <td className="right iqd" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#2563eb", fontWeight: "600" }}>{formatIQD(iqd)} IQD</td>
+                          ) : (
+                            <td className="center" style={{ padding: "8px 10px", border: "1px solid #e2e8f0", textAlign: "center", color: "#9ca3af" }}>—</td>
+                          )}
                           <td style={{ padding: "8px 10px", border: "1px solid #e2e8f0", color: "#4b5563", fontSize: "0.75rem", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bill.billNote || "—"}</td>
                         </tr>
                       );
                     })}
                     {!bills.length && (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: "center", padding: "24px", color: "#9ca3af", border: "1px solid #e2e8f0" }}>
+                        <td colSpan="7" style={{ textAlign: "center", padding: "24px", color: "#9ca3af", border: "1px solid #e2e8f0" }}>
                           No unpaid purchase bills found
                         </td>
                       </tr>
@@ -333,7 +339,7 @@ const BoughtStatementPage = () => {
                   </tbody>
                   <tfoot>
                     <tr style={{ background: "#f1f5f9" }}>
-                      <td colSpan="3" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", fontWeight: "700", color: "#4b5563", fontSize: "0.8rem" }}>TOTAL BOUGHT:</td>
+                      <td colSpan="4" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", fontWeight: "700", color: "#4b5563", fontSize: "0.8rem" }}>TOTAL BOUGHT:</td>
                       <td className="right usd" style={{ padding: "10px", border: "1px solid #e2e8f0", textAlign: "right", color: "#059669", fontWeight: "700", fontSize: "0.9rem" }}>
                         {totalBeforeReturnUSD > 0 ? `$${formatCurrency(totalBeforeReturnUSD)}` : "—"}
                       </td>
@@ -353,7 +359,6 @@ const BoughtStatementPage = () => {
                 <h2 style={{ fontSize: "0.9rem", fontWeight: "700", color: "#991b1b", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Return Bills
                 </h2>
-                {/* Added overflowX wrapper for mobile tables */}
                 <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", minWidth: "600px" }}>
                     <thead>
@@ -368,9 +373,9 @@ const BoughtStatementPage = () => {
                     </thead>
                     <tbody>
                       {returns.map((ret, idx) => (
-                        <tr key={ret.id} style={{ background: idx % 2 === 0 ? "white" : "#fef2f2" }}>
+                        <tr key={ret.id || idx} style={{ background: idx % 2 === 0 ? "white" : "#fef2f2" }}>
                           <td style={{ padding: "8px 10px", border: "1px solid #fecaca", fontWeight: "600", color: "#7f1d1d" }}>
-                            {ret.returnBillNumber || `BRET-${ret.id.slice(-6).toUpperCase()}`}
+                            {ret.returnBillNumber}
                           </td>
                           <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{ret.billNumber || "N/A"}</td>
                           <td style={{ padding: "8px 10px", border: "1px solid #fecaca", color: "#991b1b" }}>{formatDate(ret.date)}</td>
@@ -409,10 +414,10 @@ const BoughtStatementPage = () => {
               </div>
             )}
 
-            {/* Summary Grid - Added overflowX for mobile protection */}
+            {/* Summary Grid */}
             <div className="summary-container" style={{ marginTop: "2rem", border: "1px solid #e2e8f0", borderRadius: "12px", overflowX: "auto", background: "white" }}>
               <div style={{ minWidth: "400px" }}>
-                <div className="summary-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0", fontWeight: "600", fontSize: "0.75rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <div className="summary-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0", fontWeight: "600", fontSize: "0.75rem", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   <div>Description</div>
                   <div style={{ textAlign: "right", color: "#059669" }}>USD ($)</div>
                   <div style={{ textAlign: "right", color: "#2563eb" }}>IQD</div>
@@ -457,14 +462,10 @@ const BoughtStatementPage = () => {
                 <div style={{ fontSize: "0.85rem", color: "#4b5563", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{notes}</div>
               </div>
             )}
-
-            <div className="footer" style={{ marginTop: "40px", paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: "0.75rem", color: "#9ca3af" }}>
-              {/* <p>Generated by Cashier System on {formatDate(new Date())}</p> */}
-            </div>
           </div>
         </div>
 
-        {/* Note Input Area (Hidden on Print) */}
+        {/* Note Input Area */}
         <div style={{ marginTop: "1.5rem", backgroundColor: "white", borderRadius: "1rem", padding: "1.5rem 1rem", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
           <h3 style={{ fontSize: "1rem", fontWeight: "600", color: "#374151", marginBottom: "0.75rem" }}>Add Notes to Statement</h3>
           <textarea

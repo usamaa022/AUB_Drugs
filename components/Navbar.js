@@ -80,6 +80,7 @@ export default function Navbar() {
   const canSeePayments = isSuperAdmin || canAccess("sales_payment") || canAccess("buy_payment") || canAccess("sales_ledger");
   const canSeeTransport = isSuperAdmin || canAccess("transport_send") || canAccess("transport_receive") || canAccess("transport_history");
   const canSeeAccounts = isSuperAdmin || canAccess("accounts_pharmacies") || canAccess("accounts_companies");
+  const canSeeExpenses = isSuperAdmin || canAccess("expenses") || true; // Adjust or lock via permissions key if needed
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -367,6 +368,39 @@ export default function Navbar() {
                     {canAccess("transport_send") && <Link href="/transport/send" style={{ display: "block", padding: "0.5rem 1rem", color: pathname === "/transport/send" ? "#2563eb" : "#374151", textDecoration: "none", fontSize: "0.875rem" }} onClick={() => setOpenDropdown(null)}>Send Transport</Link>}
                     {canAccess("transport_receive") && <Link href="/transport/receive" style={{ display: "block", padding: "0.5rem 1rem", color: pathname === "/transport/receive" ? "#2563eb" : "#374151", textDecoration: "none", fontSize: "0.875rem" }} onClick={() => setOpenDropdown(null)}>Receive Transport</Link>}
                     {canAccess("transport_history") && <Link href="/transport/transportHistory" style={{ display: "block", padding: "0.5rem 1rem", color: pathname === "/transport/transportHistory" ? "#2563eb" : "#374151", textDecoration: "none", fontSize: "0.875rem" }} onClick={() => setOpenDropdown(null)}>Transport History</Link>}
+                    {canAccess("transport_missing") && <Link href="/transport/missing" style={{ display: "block", padding: "0.5rem 1rem", color: pathname === "/transport/missing" ? "#2563eb" : "#374151", textDecoration: "none", fontSize: "0.875rem" }} onClick={() => setOpenDropdown(null)}>Missing Items</Link>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Expenses Dropdown */}
+            {canSeeExpenses && (
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => toggleDropdown('expenses')}
+                  style={{
+                    background: pathname.includes("/expenses") ? "#eff6ff" : "none",
+                    border: "none",
+                    color: pathname.includes("/expenses") ? "#2563eb" : "#4b5563",
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "0.375rem",
+                    transition: "all 0.2s ease",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Expenses
+                  <svg style={{ width: "14px", height: "14px", transform: openDropdown === 'expenses' ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {openDropdown === 'expenses' && (
+                  <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, minWidth: "190px", backgroundColor: "#ffffff", borderRadius: "0.5rem", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)", padding: "0.375rem 0", border: "1px solid #e5e7eb", zIndex: 9999 }}>
+                    <Link href="/expenses" style={{ display: "block", padding: "0.5rem 1rem", color: pathname === "/expenses" ? "#2563eb" : "#374151", textDecoration: "none", fontSize: "0.875rem" }} onClick={() => setOpenDropdown(null)}>Store Expenses</Link>
                   </div>
                 )}
               </div>
@@ -759,6 +793,20 @@ export default function Navbar() {
                   {canAccess("transport_send") && <Link href="/transport/send" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none" }} onClick={closeMobileMenu}>Send Transport</Link>}
                   {canAccess("transport_receive") && <Link href="/transport/receive" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none" }} onClick={closeMobileMenu}>Receive Transport</Link>}
                   {canAccess("transport_history") && <Link href="/transport/transportHistory" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none" }} onClick={closeMobileMenu}>Transport History</Link>}
+                  {canAccess("transport_missing") && <Link href="/transport/missing" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none" }} onClick={closeMobileMenu}>Missing Items</Link>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {canSeeExpenses && (
+            <div style={{ marginBottom: "0.5rem" }}>
+              <button onClick={() => toggleDropdown('m-expenses')} style={{ background: "none", border: "none", color: "#1e293b", fontSize: "0.9375rem", fontWeight: 600, width: "100%", textAlign: "left", padding: "0.625rem 0", display: "flex", justifyContent: "space-between" }}>
+                Expenses
+              </button>
+              {openDropdown === 'm-expenses' && (
+                <div style={{ paddingLeft: "0.75rem" }}>
+                  <Link href="/expenses" style={{ display: "block", padding: "0.4rem 0", color: "#475569", textDecoration: "none" }} onClick={closeMobileMenu}>Store Expenses</Link>
                 </div>
               )}
             </div>

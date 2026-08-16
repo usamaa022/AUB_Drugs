@@ -200,9 +200,35 @@ export default function TransportHistoryPage() {
 
   return (
     <div style={{ width: '100%', minHeight: '100vh', padding: '1rem' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--dark)', marginBottom: '4px' }}>Transport History</h1>
-        <p style={{ color: 'var(--gray)' }}>View all sent and received transports with quantity adjustments</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--dark)', marginBottom: '4px' }}>Transport History</h1>
+          <p style={{ color: 'var(--gray)' }}>View all sent and received transports with quantity adjustments</p>
+        </div>
+        
+        {/* Missing Items Button */}
+        <button
+          onClick={() => router.push("/transport/missing")}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 18px',
+            backgroundColor: '#f59e0b',
+            color: 'white',
+            fontWeight: '600',
+            fontSize: '14px',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 4px rgba(245, 158, 11, 0.2)',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d97706'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f59e0b'}
+        >
+          ⚠️ Missing Items
+        </button>
       </div>
       
       {/* Search and Filters */}
@@ -469,7 +495,7 @@ export default function TransportHistoryPage() {
                       <div style={{ fontSize: '14px', color: 'var(--dark)' }}>
                         {(() => {
                           const totalSent = transport.items.reduce((sum, item) => sum + (item.sentQuantity || item.quantity), 0);
-                          const totalReceived = transport.items.reduce((sum, item) => sum + (item.adjustedQuantity || item.quantity), 0);
+                          const totalReceived = transport.items.reduce((sum, item) => sum + (item.adjustedQuantity !== undefined ? item.adjustedQuantity : item.quantity), 0);
                           if (totalSent === totalReceived) {
                             return "Full delivery ✓";
                           } else if (totalReceived < totalSent) {
@@ -494,9 +520,9 @@ export default function TransportHistoryPage() {
                       <div style={{ 
                         padding: '1.5rem', 
                         backgroundColor: '#f9fafb', 
-                        borderRadius: '8px',
-                        margin: '0 1.5rem 1.5rem 1.5rem',
-                        border: '1px solid #e5e7eb'
+                        borderRadius: '8px', 
+                        margin: '0 1.5rem 1.5rem 1.5rem', 
+                        border: '1px solid #e5e7eb' 
                       }}>
                         {/* Sender and Receiver Info */}
                         <div style={{
@@ -506,21 +532,21 @@ export default function TransportHistoryPage() {
                           marginBottom: '1.5rem'
                         }}>
                           <div style={{ 
-                            padding: '1rem',
-                            backgroundColor: 'white',
-                            borderRadius: '6px',
-                            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                            border: '1px solid #e5e7eb'
+                            padding: '1rem', 
+                            backgroundColor: 'white', 
+                            borderRadius: '6px', 
+                            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                            border: '1px solid #e5e7eb' 
                           }}>
                             <h4 style={{ 
                               fontSize: '14px', 
                               fontWeight: '600', 
                               color: 'var(--dark)', 
-                              marginBottom: '8px'
+                              marginBottom: '8px' 
                             }}>Sender Information</h4>
                             <div style={{ 
                               fontSize: '14px', 
-                              color: 'var(--dark)'
+                              color: 'var(--dark)' 
                             }}>
                               <div><strong>Name:</strong> {getUserName(transport.senderId)}</div>
                               <div><strong>Branch:</strong> {transport.fromBranch}</div>
@@ -529,21 +555,21 @@ export default function TransportHistoryPage() {
                           </div>
                           {(transport.receiverId || transport.status !== 'pending') && (
                             <div style={{ 
-                              padding: '1rem',
-                              backgroundColor: 'white',
-                              borderRadius: '6px',
-                              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                              border: '1px solid #e5e7eb'
+                              padding: '1rem', 
+                              backgroundColor: 'white', 
+                              borderRadius: '6px', 
+                              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                              border: '1px solid #e5e7eb' 
                             }}>
                               <h4 style={{ 
                                 fontSize: '14px', 
                                 fontWeight: '600', 
                                 color: 'var(--dark)', 
-                                marginBottom: '8px'
+                                marginBottom: '8px' 
                               }}>Receiver Information</h4>
                               <div style={{ 
                                 fontSize: '14px', 
-                                color: 'var(--dark)'
+                                color: 'var(--dark)' 
                               }}>
                                 <div><strong>Name:</strong> {transport.receiverId ? getUserName(transport.receiverId) : "N/A"}</div>
                                 <div><strong>Branch:</strong> {transport.toBranch}</div>
@@ -591,98 +617,35 @@ export default function TransportHistoryPage() {
                         <div style={{ 
                           overflowX: 'auto', 
                           borderRadius: '8px', 
-                          border: '1px solid #e5e7eb',
-                          backgroundColor: 'white'
+                          border: '1px solid #e5e7eb', 
+                          backgroundColor: 'white' 
                         }}>
                           <table style={{ 
-                            width: '100%',
-                            borderCollapse: 'collapse',
-                            minWidth: '1000px'
+                            width: '100%', 
+                            borderCollapse: 'collapse', 
+                            minWidth: '1050px' 
                           }}>
                             <thead>
                               <tr style={{ 
-                                backgroundColor: '#f9fafb',
-                                borderBottom: '2px solid #e5e7eb'
+                                backgroundColor: '#f9fafb', 
+                                borderBottom: '2px solid #e5e7eb' 
                               }}>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '180px'
-                                }}>Item Name</th>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '120px'
-                                }}>Barcode</th>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'center',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '80px'
-                                }}>Sent</th>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'center',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '80px'
-                                }}>Received</th>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'center',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '70px'
-                                }}>Diff</th>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'right',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '120px'
-                                }}>Net Price</th>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'right',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '120px'
-                                }}>Out Price</th>
-                                <th style={{ 
-                                  padding: '12px', 
-                                  fontSize: '12px', 
-                                  fontWeight: '600', 
-                                  color: 'var(--gray)', 
-                                  textAlign: 'left',
-                                  whiteSpace: 'nowrap',
-                                  minWidth: '100px'
-                                }}>Expire Date</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap', minWidth: '180px' }}>Item Name</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap', minWidth: '120px' }}>Barcode</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap', minWidth: '110px' }}>Bought Bill #</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap', minWidth: '80px' }}>Sent</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap', minWidth: '80px' }}>Received</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'center', whiteSpace: 'nowrap', minWidth: '70px' }}>Diff</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap', minWidth: '120px' }}>Net Price</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'right', whiteSpace: 'nowrap', minWidth: '120px' }}>Out Price</th>
+                                <th style={{ padding: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--gray)', textAlign: 'left', whiteSpace: 'nowrap', minWidth: '100px' }}>Expire Date</th>
                               </tr>
                             </thead>
                             <tbody>
                               {transport.items.map((item, index) => {
                                 const sentQty = item.sentQuantity || item.originalQuantity || item.quantity;
                                 const receivedQty = transport.status === "received" 
-                                  ? (item.adjustedQuantity || item.quantity) 
+                                  ? (item.adjustedQuantity !== undefined ? item.adjustedQuantity : item.quantity) 
                                   : sentQty;
                                 const difference = receivedQty - sentQty;
                                 const currency = item.currency || item.originalCurrency || "IQD";
@@ -691,28 +654,44 @@ export default function TransportHistoryPage() {
                                   <tr 
                                     key={index} 
                                     style={{ 
-                                      transition: 'background-color 0.2s',
-                                      borderBottom: '1px solid #e5e7eb'
+                                      transition: 'background-color 0.2s', 
+                                      borderBottom: '1px solid #e5e7eb' 
                                     }}
                                   >
                                     <td style={{ 
                                       padding: '12px', 
                                       fontSize: '14px', 
-                                      color: 'var(--dark)',
-                                      minWidth: '180px',
-                                      maxWidth: '300px',
-                                      wordWrap: 'break-word',
-                                      whiteSpace: 'normal'
+                                      color: 'var(--dark)', 
+                                      minWidth: '180px', 
+                                      maxWidth: '300px', 
+                                      wordWrap: 'break-word', 
+                                      whiteSpace: 'normal' 
                                     }}>{item.name}</td>
                                     
                                     <td style={{ 
                                       padding: '12px', 
                                       fontSize: '13px', 
-                                      color: 'var(--gray)',
-                                      minWidth: '120px',
-                                      fontFamily: 'monospace, Consolas, Monaco, "Courier New", monospace',
-                                      whiteSpace: 'nowrap'
+                                      color: 'var(--gray)', 
+                                      minWidth: '120px', 
+                                      fontFamily: 'monospace, Consolas, Monaco, "Courier New", monospace', 
+                                      whiteSpace: 'nowrap' 
                                     }}>{item.barcode}</td>
+
+                                    <td style={{ 
+                                      padding: '12px', 
+                                      fontSize: '13px', 
+                                      color: 'var(--dark)', 
+                                      fontFamily: 'monospace', 
+                                      whiteSpace: 'nowrap' 
+                                    }}>
+                                      {item.boughtBillNumber && item.boughtBillNumber !== "N/A" ? (
+                                        <span style={{ backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e5e7eb', fontWeight: 'bold' }}>
+                                          #{item.boughtBillNumber}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: '#9ca3af' }}>N/A</span>
+                                      )}
+                                    </td>
                                     
                                     <td style={{
                                       padding: '12px',
@@ -757,10 +736,10 @@ export default function TransportHistoryPage() {
                                     <td style={{ 
                                       padding: '12px', 
                                       fontSize: '13px', 
-                                      color: 'var(--gray)',
-                                      minWidth: '120px',
-                                      textAlign: 'right',
-                                      whiteSpace: 'nowrap'
+                                      color: 'var(--gray)', 
+                                      minWidth: '120px', 
+                                      textAlign: 'right', 
+                                      whiteSpace: 'nowrap' 
                                     }}>
                                       {formatCurrency(item.netPrice, currency)}
                                       <div style={{ fontSize: '10px', color: 'var(--gray)', opacity: 0.7, textAlign: 'right' }}>
@@ -771,10 +750,10 @@ export default function TransportHistoryPage() {
                                     <td style={{ 
                                       padding: '12px', 
                                       fontSize: '13px', 
-                                      color: 'var(--gray)',
-                                      minWidth: '120px',
-                                      textAlign: 'right',
-                                      whiteSpace: 'nowrap'
+                                      color: 'var(--gray)', 
+                                      minWidth: '120px', 
+                                      textAlign: 'right', 
+                                      whiteSpace: 'nowrap' 
                                     }}>
                                       {formatCurrency(item.outPrice, currency)}
                                       <div style={{ fontSize: '10px', color: 'var(--gray)', opacity: 0.7, textAlign: 'right' }}>
@@ -785,9 +764,9 @@ export default function TransportHistoryPage() {
                                     <td style={{ 
                                       padding: '12px', 
                                       fontSize: '13px', 
-                                      color: 'var(--gray)',
-                                      minWidth: '100px',
-                                      whiteSpace: 'nowrap'
+                                      color: 'var(--gray)', 
+                                      minWidth: '100px', 
+                                      whiteSpace: 'nowrap' 
                                     }}>
                                       {item.expireDate ? formatDate(item.expireDate) : "N/A"}
                                     </td>
@@ -825,7 +804,7 @@ export default function TransportHistoryPage() {
                             <div>
                               <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray)' }}>Total Received</div>
                               <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--secondary)' }}>
-                                {transport.items.reduce((sum, item) => sum + (item.adjustedQuantity || item.quantity), 0)}
+                                {transport.items.reduce((sum, item) => sum + (item.adjustedQuantity !== undefined ? item.adjustedQuantity : item.quantity), 0)}
                               </div>
                             </div>
                             <div>
