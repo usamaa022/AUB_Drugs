@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { getInitializedItems, addInitializedItem, updateInitializedItem, deleteInitializedItem, searchInitializedItems } from "@/lib/data";
 import { Filter, Search } from "lucide-react";
 
@@ -33,6 +33,10 @@ export default function ItemsPage() {
   const [columnFilters, setColumnFilters] = useState({});
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
 
+  // --- Advanced Suggestions State ---
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionRef = useRef(null);
+
   useEffect(() => {
     fetchItems();
   }, []);
@@ -52,11 +56,14 @@ export default function ItemsPage() {
     }
   }, [nextBarcode, barcodeMode, editingItem]);
 
-  // Handle outside clicks for filter dropdowns
+  // Handle outside clicks for filter dropdowns and name suggestions
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!e.target.closest('.filter-dropdown-container')) {
         setActiveFilterDropdown(null);
+      }
+      if (suggestionRef.current && !suggestionRef.current.contains(e.target)) {
+        setShowSuggestions(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -149,6 +156,17 @@ export default function ItemsPage() {
     }
   };
 
+  // --- Advanced Name Suggestions Computation ---
+  const filteredSuggestions = useMemo(() => {
+    const query = formData.name.trim().toLowerCase();
+    if (!query) return [];
+    
+    const uniqueNames = Array.from(new Set(items.map(item => item.name)))
+      .filter(name => name && name.toLowerCase().includes(query));
+    
+    return uniqueNames;
+  }, [formData.name, items]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -224,6 +242,7 @@ export default function ItemsPage() {
     });
     setEditingItem(null);
     setBarcodeError("");
+    setShowSuggestions(false);
   };
 
   const handleCancel = () => {
@@ -281,7 +300,6 @@ export default function ItemsPage() {
   const filteredItems = useMemo(() => {
     let result = [...items];
 
-    // Apply Column Filters
     for (const [columnKey, filterData] of Object.entries(columnFilters)) {
       result = result.filter(item => {
         let itemValue = "";
@@ -291,7 +309,6 @@ export default function ItemsPage() {
       });
     }
 
-    // Apply Sorting
     if (sortConfig.key) {
       result.sort((a, b) => {
         let aVal = a[sortConfig.key] || "";
@@ -308,14 +325,21 @@ export default function ItemsPage() {
     return result;
   }, [items, columnFilters, sortConfig]);
 
-  // --- Components ---
+  // --- Standalone Filter Dropdown Component to Prevent Focus Loss ---
   const ExcelFilterDropdown = ({ columnKey }) => {
-    const [search, setSearch] = useState("");
     const isOpen = activeFilterDropdown === columnKey;
     const operators = STRING_OPERATORS;
     
     const filterState = columnFilters[columnKey] || { operator: operators[0].value, textValue: '', selectedValues: [] };
     const { operator, textValue, selectedValues } = filterState;
+
+    const [search, setSearch] = useState("");
+    const [localTextValue, setLocalTextValue] = useState(textValue || "");
+
+    // Keep local text value synced if parent resets filters
+    useEffect(() => {
+      setLocalTextValue(textValue || "");
+    }, [textValue]);
 
     const uniqueValues = useMemo(() => {
       const vals = new Set();
@@ -366,9 +390,13 @@ export default function ItemsPage() {
                   <input 
                     type="text" 
                     placeholder="Value..." 
-                    value={textValue || ""} 
-                    onChange={(e) => handleUpdateColumnFilter(columnKey, { textValue: e.target.value })}
+                    value={localTextValue} 
+                    onChange={(e) => {
+                      setLocalTextValue(e.target.value);
+                      handleUpdateColumnFilter(columnKey, { textValue: e.target.value });
+                    }}
                     style={{ width: "100%", boxSizing: "border-box", padding: "0.4rem", borderRadius: "0.375rem", border: "1px solid #cbd5e1", fontSize: "0.875rem", outline: "none" }}
+                    autoFocus
                   />
                 )}
               </div>
@@ -416,6 +444,7 @@ export default function ItemsPage() {
                 const updated = {...columnFilters};
                 delete updated[columnKey];
                 setColumnFilters(updated);
+                setLocalTextValue("");
               }} style={{ background: "transparent", border: "none", color: "#ef4444", fontSize: "0.875rem", cursor: "pointer", fontWeight: 600 }}>Clear</button>
               <button onClick={() => setActiveFilterDropdown(null)} style={{ background: "#2563eb", border: "none", color: "white", fontSize: "0.875rem", padding: "0.4rem 1rem", borderRadius: "0.375rem", cursor: "pointer", fontWeight: 600 }}>Apply</button>
             </div>
@@ -623,8 +652,8 @@ export default function ItemsPage() {
                 )}
               </div>
 
-              {/* Item Name Field */}
-              <div>
+              {/* Item Name Field with Advanced Suggestions */}
+              <div style={{ position: 'relative' }} ref={suggestionRef}>
                 <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '500', color: '#475569', marginBottom: '0.25rem' }}>
                   Item Name <span style={{ color: '#ef4444' }}>*</span>
                 </label>
@@ -640,9 +669,54 @@ export default function ItemsPage() {
                   }}
                   placeholder="Enter item name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
                   required
                 />
+                
+                {/* Suggestions Dropdown */}
+                {showSuggestions && filteredSuggestions.length > 0 && (
+                  <ul style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    margin: '4px 0 0 0',
+                    padding: 0,
+                    listStyle: 'none',
+                    zIndex: 99
+                  }}>
+                    {filteredSuggestions.map((suggestion, idx) => (
+                      <li
+                        key={idx}
+                        onClick={() => {
+                          setFormData({ ...formData, name: suggestion });
+                          setShowSuggestions(false);
+                        }}
+                        style={{
+                          padding: '0.5rem 0.75rem',
+                          fontSize: '0.9rem',
+                          color: '#1e293b',
+                          cursor: 'pointer',
+                          borderBottom: idx < filteredSuggestions.length - 1 ? '1px solid #f1f5f9' : 'none'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#f8fafc'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                      >
+                        {suggestion}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 
