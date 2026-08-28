@@ -6,6 +6,29 @@ import { searchBoughtBills, getCompanies, getBase64BoughtBillAttachment, getBoug
 import * as XLSX from 'xlsx';
 import { Search, X, Filter, Maximize2, Minimize2, Download, Image as ImageIcon } from "lucide-react";
 
+// ============================================================
+// Shared Reusable Uiverse Wi-Fi Loader Component
+// ============================================================
+const WifiLoader = ({ text = "processing" }) => (
+  <div className="bf-global-loader-overlay">
+    <div className="bf-wifi-loader">
+      <svg className="circle-outer" viewBox="0 0 86 86">
+        <circle className="back" cx="43" cy="43" r="40"></circle>
+        <circle className="front" cx="43" cy="43" r="40"></circle>
+      </svg>
+      <svg className="circle-middle" viewBox="0 0 60 60">
+        <circle className="back" cx="30" cy="30" r="27"></circle>
+        <circle className="front" cx="30" cy="30" r="27"></circle>
+      </svg>
+      <svg className="circle-inner" viewBox="0 0 34 34">
+        <circle className="back" cx="17" cy="17" r="14"></circle>
+        <circle className="front" cx="17" cy="17" r="14"></circle>
+      </svg>
+      <div className="text" data-text={text}></div>
+    </div>
+  </div>
+);
+
 // --- Advanced Filter Operators ---
 const STRING_OPERATORS = [
   { value: "contains", label: "Contains" },
@@ -304,6 +327,31 @@ export default function BoughtPage() {
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [noImageFound, setNoImageFound] = useState(false);
 
+  // Notification State
+  const [notifications, setNotifications] = useState([]);
+
+  // ============================================================
+  // Notification System
+  // ============================================================
+  const notify = useCallback((type, message) => {
+    const id = Date.now() + Math.random();
+    setNotifications(prev => [...prev, { id, type, message }]);
+    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
+  }, []);
+
+  const dismissNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case 'success': return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.5 11.5 11 14l4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+      case 'error': return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m15 9-6 6m0-6 6 6m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+      case 'warning': return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 13V8m0 8h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+      case 'info': default: return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 11h2v5m-2 0h4m-2.592-8.5h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+    }
+  };
+
   useEffect(() => {
     const rawRole = (localStorage.getItem('userRole') || 'user').toLowerCase();
     const role = rawRole === 'superadmin' ? 'superAdmin' : rawRole;
@@ -336,13 +384,13 @@ export default function BoughtPage() {
         setBills(processedBills);
         setCompanies(companiesData);
       } catch (error) {
-        setError("Failed to fetch data. Please try again.");
+        notify("error", "Failed to fetch data. Please try again.");
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [notify]);
 
   const allItems = useMemo(() =>
     bills.flatMap(bill =>
@@ -557,8 +605,8 @@ export default function BoughtPage() {
   };
 
   const exportToExcel = () => {
-    if (userRole !== 'superAdmin') return alert("Only Super Admins are authorized to export data.");
-    if (itemsWithUniqueId.length === 0) return alert("No data to export.");
+    if (userRole !== 'superAdmin') return notify("warning", "Only Super Admins are authorized to export data.");
+    if (itemsWithUniqueId.length === 0) return notify("info", "No data to export.");
 
     const exportData = itemsWithUniqueId.map((item, index) => ({
       '#': index + 1,
@@ -616,9 +664,6 @@ export default function BoughtPage() {
       setIsImageLoading(false);
     }
   };
-
-  if (isLoading) return <div style={{ padding: "2rem", textAlign: "center", fontWeight: "bold", fontSize: "1.25rem", color: "#475569" }}>Loading Buying Architecture...</div>;
-  if (error) return <div style={{ padding: "2rem", color: "#dc2626", fontWeight: "bold" }}>{error}</div>;
 
   return (
     <>
@@ -690,7 +735,85 @@ export default function BoughtPage() {
         @keyframes spin { 
           to { transform: rotate(360deg); } 
         }
+
+        /* OVERLAY LOADER CSS */
+        .bf-global-loader-overlay {
+          position: fixed; inset: 0; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999999;
+        }
+        .bf-wifi-loader { --background: #62abff; --front-color: #ef4d86; --front-color-in: #fbb216; --back-color: #c3c8de; --text-color: #414856; width: 64px; height: 64px; border-radius: 50px; position: relative; display: flex; justify-content: center; align-items: center; }
+        .bf-wifi-loader svg { position: absolute; display: flex; justify-content: center; align-items: center; }
+        .bf-wifi-loader svg circle { position: absolute; fill: none; stroke-width: 6px; stroke-linecap: round; stroke-linejoin: round; transform: rotate(-100deg); transform-origin: center; }
+        .bf-wifi-loader svg circle.back { stroke: var(--back-color); }
+        .bf-wifi-loader svg circle.front { stroke: var(--front-color); }
+        .bf-wifi-loader svg.circle-outer { height: 86px; width: 86px; }
+        .bf-wifi-loader svg.circle-outer circle { stroke-dasharray: 62.75 188.25; }
+        .bf-wifi-loader svg.circle-outer circle.back { animation: circle-outer135 1.8s ease infinite 0.3s; }
+        .bf-wifi-loader svg.circle-outer circle.front { animation: circle-outer135 1.8s ease infinite 0.15s; }
+        .bf-wifi-loader svg.circle-middle { height: 60px; width: 60px; }
+        .bf-wifi-loader svg.circle-middle circle { stroke: var(--front-color-in); stroke-dasharray: 42.5 127.5; }
+        .bf-wifi-loader svg.circle-middle circle.back { animation: circle-middle6123 1.8s ease infinite 0.25s; }
+        .bf-wifi-loader svg.circle-middle circle.front { animation: circle-middle6123 1.8s ease infinite 0.1s; }
+        .bf-wifi-loader svg.circle-inner { height: 34px; width: 34px; }
+        .bf-wifi-loader svg.circle-inner circle { stroke-dasharray: 22 66; }
+        .bf-wifi-loader svg.circle-inner circle.back { animation: circle-inner162 1.8s ease infinite 0.2s; }
+        .bf-wifi-loader svg.circle-inner circle.front { animation: circle-inner162 1.8s ease infinite 0.05s; }
+        .bf-wifi-loader .text { position: absolute; bottom: -40px; display: flex; justify-content: center; align-items: center; text-transform: lowercase; font-weight: 600; font-size: 15px; letter-spacing: 0.2px; }
+        .bf-wifi-loader .text::before, .bf-wifi-loader .text::after { content: attr(data-text); }
+        .bf-wifi-loader .text::before { color: var(--text-color); }
+        .bf-wifi-loader .text::after { color: var(--front-color-in); animation: text-animation76 3.6s ease infinite; position: absolute; left: 0; }
+        @keyframes circle-outer135 { 0% { stroke-dashoffset: 25; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 301; } 80% { stroke-dashoffset: 276; } 100% { stroke-dashoffset: 276; } }
+        @keyframes circle-middle6123 { 0% { stroke-dashoffset: 17; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 204; } 80% { stroke-dashoffset: 187; } 100% { stroke-dashoffset: 187; } }
+        @keyframes circle-inner162 { 0% { stroke-dashoffset: 9; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 106; } 80% { stroke-dashoffset: 97; } 100% { stroke-dashoffset: 97; } }
+        @keyframes text-animation76 { 0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0); } 100% { clip-path: inset(0 0 0 100%); } }
+
+        /* TOAST NOTIFICATIONS CSS */
+        .notification-container { position: fixed; top: 2%; right: 2%; z-index: 9999999; max-width: 400px; --content-color: black; --background-color: #f3f3f3; --font-size-content: 0.85em; --icon-size: 1.25em; display: flex; flex-direction: column; gap: 0.5em; list-style-type: none; font-family: inherit; color: var(--content-color); margin: 0; padding: 0; }
+        .notification-item { position: relative; display: flex; justify-content: space-between; align-items: center; flex-direction: row; gap: 1em; overflow: hidden; padding: 12px 18px; border-radius: 8px; box-shadow: rgba(0, 0, 0, 0.2) 0px 8px 24px; background-color: var(--background-color); transition: all 250ms ease; animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; --grid-color: rgba(225, 225, 225, 0.7); background-image: linear-gradient(0deg, transparent 23%, var(--grid-color) 24%, var(--grid-color) 25%, transparent 26%, transparent 73%, var(--grid-color) 74%, var(--grid-color) 75%, transparent 76%, transparent), linear-gradient(90deg, transparent 23%, var(--grid-color) 24%, var(--grid-color) 25%, transparent 26%, transparent 73%, var(--grid-color) 74%, var(--grid-color) 75%, transparent 76%, transparent); background-size: 55px 55px; }
+        @keyframes slideIn { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .notification-item svg { transition: 250ms ease; }
+        .notification-item:hover { transform: scale(1.02); }
+        .notification-item:active { transform: scale(1.05); }
+        .notification-item .notification-close { padding: 2px; border-radius: 5px; transition: all 250ms; cursor: pointer; }
+        .notification-item .notification-close:hover { background-color: rgba(204, 204, 204, 0.45); }
+        .notification-item .notification-close:hover svg { color: rgb(0, 0, 0); }
+        .notification-container svg { width: var(--icon-size); height: var(--icon-size); color: var(--content-color); }
+        .notification-icon { display: flex; align-items: center; }
+        .notification-item.success { color: #047857; background-color: #7dffbc; --grid-color: rgba(16, 185, 129, 0.25); } .notification-item.success svg { color: #047857; } .notification-item.success .notification-progress-bar { background-color: #047857; } .notification-item.success:hover { background-color: #5bffaa; }
+        .notification-item.info { color: #1e3a8a; background-color: #7eb8ff; --grid-color: rgba(59, 131, 246, 0.25); } .notification-item.info svg { color: #1e3a8a; } .notification-item.info .notification-progress-bar { background-color: #1e3a8a; } .notification-item.info:hover { background-color: #5ba5ff; }
+        .notification-item.warning { color: #78350f; background-color: #ffe57e; --grid-color: rgba(245, 159, 11, 0.25); } .notification-item.warning svg { color: #78350f; } .notification-item.warning .notification-progress-bar { background-color: #78350f; } .notification-item.warning:hover { background-color: #ffde59; }
+        .notification-item.error { color: #7f1d1d; background-color: #ff7e7e; --grid-color: rgba(239, 68, 68, 0.25); } .notification-item.error svg { color: #7f1d1d; } .notification-item.error .notification-progress-bar { background-color: #7f1d1d; } .notification-item.error:hover { background-color: #ff5f5f; }
+        .notification-content { display: flex; justify-content: flex-start; align-items: center; gap: 0.75em; }
+        .notification-text { font-size: var(--font-size-content); font-weight: 600; user-select: none; }
+        .notification-progress-bar { position: absolute; bottom: 0; left: 0; height: 3px; background: var(--content-color); width: 100%; transform: translateX(100%); animation: progressBar 5s linear forwards; }
+        @keyframes progressBar { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
       `}</style>
+
+      {/* GLOBAL LOADING OVERLAY */}
+      {isLoading && (
+        <div className="bf-global-loader-overlay">
+          <WifiLoader text="loading bills..." />
+        </div>
+      )}
+
+      {/* GLOBAL TOAST NOTIFICATIONS */}
+      <ul className="notification-container">
+        {notifications.map((note) => (
+          <li key={note.id} className={`notification-item ${note.type}`}>
+            <div className="notification-content">
+              <div className="notification-icon">
+                {getNotificationIcon(note.type)}
+              </div>
+              <div className="notification-text">{note.message}</div>
+            </div>
+            <div className="notification-icon notification-close" onClick={() => dismissNotification(note.id)}>
+              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18 17.94 6M18 18 6.06 6"></path>
+              </svg>
+            </div>
+            <div className="notification-progress-bar"></div>
+          </li>
+        ))}
+      </ul>
 
       <div className="page-container">
         

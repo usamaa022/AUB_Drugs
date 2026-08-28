@@ -1,21 +1,23 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Lock, Mail, Store } from "lucide-react";
-
-// --- NEW: Import Firebase to fetch the role after login ---
+import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase"; // Make sure this path matches your project structure
+import { auth, db } from "@/lib/firebase";
 
 export default function LoginPage() {
   const { user, login } = useAuth();
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
 
   useEffect(() => {
     if (!loading && user) {
@@ -27,124 +29,138 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+
     try {
-      // 1. Authenticate using your AuthContext
+      // 1. Authenticate using AuthContext
       await login(email, password);
 
-      // 2. NEW FIX: Fetch user data from Firestore and save role to localStorage
+      // 2. Fetch user data from Firestore and save role to localStorage
       if (auth.currentUser) {
         const userDocRef = doc(db, "users", auth.currentUser.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
-          // This saves the exact role (e.g., 'superAdmin') so SoldPage can read it
           localStorage.setItem("userRole", userData.role);
         }
       }
-
     } catch (err) {
-      // Keep email, only clear password and show error
       setPassword("");
       setError(err.message || "Invalid email or password");
+      
+      // Trigger error shake animation
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 500);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={styles.container}>
-      {/* Background Animation */}
-      <div style={styles.bgAnimation}>
-        <div style={styles.circle1}></div>
-        <div style={styles.circle2}></div>
-        <div style={styles.circle3}></div>
-      </div>
+    <div className="nm-wrapper">
+      <style>{neumorphicStyles}</style>
 
-      <div style={styles.loginBox}>
-        {/* Logo/Icon */}
-       <div style={styles.iconContainer}>
-  <img 
-    src="/Aranlogo.png" 
-    alt="Aran Med Store" 
-    style={{
-      width: "400px",
-      height: "auto",
-      objectFit: "contain",
-      display: "block",
-    }}
-  />
-</div>
+      <div className={`nm-card ${isShaking ? "nm-shake" : ""}`}>
+        {/* Aran Logo Extrusion */}
+        <div className="nm-avatar-container">
+          <div className="">
+            <img
+              src="/Aranlogo.png"
+              alt="Aran Med Store"
+              className=""
+              width={"250px"}
+ 
+            />
+          </div>
+        </div>
 
-        {/* <h1 style={styles.title}>Aran Med Store</h1> */}
-        
-        <p style={styles.subtitle}></p>
+        {/* Header */}
+        <div className="nm-header">
+      
+          <p className="nm-subtitle">Please sign in to continue</p>
+        </div>
 
+        {/* Error Alert */}
         {error && (
-          <div style={styles.errorContainer}>
-            <div style={styles.errorIcon}>⚠️</div>
-            <div style={styles.errorMessage}>{error}</div>
+          <div className="nm-error-box">
+            <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          {/* Email Field */}
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Email Address</label>
-            <div style={styles.inputWrapper}>
-              <Mail size={20} style={styles.inputIcon} color="#9ca3af" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={styles.input}
-                placeholder="Enter your email"
-                required
-                disabled={loading}
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="nm-form">
+          {/* Email Input */}
+          <div className="nm-input-wrapper">
+            <Mail
+              size={18}
+              className={`nm-input-icon ${error ? "nm-icon-error" : ""}`}
+            />
+            <input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError("");
+              }}
+              disabled={loading}
+              required
+              className={`nm-input ${error ? "nm-input-error" : ""}`}
+            />
           </div>
 
-          {/* Password Field */}
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Password</label>
-            <div style={styles.inputWrapper}>
-              <Lock size={20} style={styles.inputIcon} color="#9ca3af" />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
-                placeholder="Enter your password"
-                required
-                disabled={loading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-                disabled={loading}
-              >
-                {showPassword ? (
-                  <EyeOff size={20} color="#9ca3af" />
-                ) : (
-                  <Eye size={20} color="#9ca3af" />
-                )}
-              </button>
-            </div>
+          {/* Password Input */}
+          <div className="nm-input-wrapper">
+            <Lock
+              size={18}
+              className={`nm-input-icon ${error ? "nm-icon-error" : ""}`}
+            />
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError("");
+              }}
+              disabled={loading}
+              required
+              className={`nm-input ${error ? "nm-input-error" : ""}`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="nm-toggle-btn"
+              tabIndex={-1}
+            >
+              {showPassword ? (
+                <EyeOff size={18} className="nm-icon-muted" />
+              ) : (
+                <Eye size={18} className="nm-icon-muted" />
+              )}
+            </button>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              ...styles.button,
-              ...(loading ? styles.buttonDisabled : {}),
-            }}
-          >
+          {/* Utilities: Remember Me */}
+          <div className="nm-utility-row">
+            <label className="nm-checkbox-label">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="nm-checkbox-input"
+              />
+              <span className="nm-checkbox-custom">
+                {rememberMe && <span className="nm-checkbox-dot" />}
+              </span>
+              <span>Remember me</span>
+            </label>
+          </div>
+
+          {/* Primary Action Button */}
+          <button type="submit" disabled={loading} className="nm-btn-primary">
             {loading ? (
-              <span style={styles.loadingText}>
-                <span style={styles.spinner}></span>
+              <span className="nm-loading-row">
+                <span className="nm-spinner" />
                 Signing in...
               </span>
             ) : (
@@ -153,9 +169,15 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={styles.footer}>
-          <p style={styles.footerText}>
-            © {new Date().getFullYear()} Aran Med Store. All rights reserved.
+        {/* Divider */}
+        <div className="nm-divider-container">
+          <div className="nm-divider-line" />
+        </div>
+
+        {/* Footer */}
+        <div className="nm-footer">
+          <p>
+            Copyright &copy; {new Date().getFullYear()} Aran Med Store. All rights reserved.
           </p>
         </div>
       </div>
@@ -163,261 +185,294 @@ export default function LoginPage() {
   );
 }
 
-const styles = {
-  container: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    position: "relative",
-    overflow: "hidden",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-  },
-  // Background Animation
-  bgAnimation: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    overflow: "hidden",
-  },
-  circle1: {
-    position: "absolute",
-    width: "500px",
-    height: "500px",
-    borderRadius: "50%",
-    background: "rgba(255, 255, 255, 0.05)",
-    top: "-100px",
-    right: "-100px",
-    animation: "float 20s ease-in-out infinite",
-  },
-  circle2: {
-    position: "absolute",
-    width: "400px",
-    height: "400px",
-    borderRadius: "50%",
-    background: "rgba(255, 255, 255, 0.05)",
-    bottom: "-50px",
-    left: "-50px",
-    animation: "float 25s ease-in-out infinite reverse",
-  },
-  circle3: {
-    position: "absolute",
-    width: "300px",
-    height: "300px",
-    borderRadius: "50%",
-    background: "rgba(255, 255, 255, 0.08)",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    animation: "pulse 15s ease-in-out infinite",
-  },
-  loginBox: {
-    background: "rgba(255, 255, 255, 1)",
-    backdropFilter: "blur(10px)",
-    padding: "48px 40px",
-    borderRadius: "20px",
-    boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
-    width: "100%",
-    maxWidth: "420px",
-    zIndex: 10,
-    position: "relative",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-  },
-  iconContainer: {
-    width: "80px",
-    height: "80px",
-    borderRadius: "50%",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    margin: "0 auto 20px",
-    boxShadow: "0 10px 30px rgba(102, 126, 234, 0.3)",
-  },
-  title: {
-    textAlign: "center",
-    color: "#1a1a2e",
-    margin: "0 0 8px 0",
-    fontSize: "28px",
-    fontWeight: "700",
-    letterSpacing: "-0.5px",
-  },
-  subtitle: {
-    textAlign: "center",
-    color: "#6b7280",
-    margin: "0 0 32px 0",
-    fontSize: "15px",
-    fontWeight: "400",
-  },
-  errorContainer: {
-    backgroundColor: "#fef2f2",
-    border: "1px solid #fecaca",
-    borderRadius: "10px",
-    padding: "12px 16px",
-    marginBottom: "20px",
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    animation: "shake 0.5s ease-in-out",
-  },
-  errorIcon: {
-    fontSize: "20px",
-    flexShrink: 0,
-  },
-  errorMessage: {
-    color: "#dc2626",
-    fontSize: "14px",
-    fontWeight: "500",
-    flex: 1,
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "20px",
-  },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "6px",
-  },
-  label: {
-    color: "#374151",
-    fontWeight: "600",
-    fontSize: "14px",
-    letterSpacing: "0.3px",
-  },
-  inputWrapper: {
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-  },
-  inputIcon: {
-    position: "absolute",
-    left: "14px",
-    pointerEvents: "none",
-  },
-  input: {
-    width: "100%",
-    padding: "12px 14px 12px 44px",
-    border: "2px solid #e5e7eb",
-    borderRadius: "10px",
-    fontSize: "15px",
-    transition: "all 0.3s ease",
-    outline: "none",
-    backgroundColor: "#fafafa",
-    color: "#1a1a2e",
-    fontFamily: "inherit",
-    "&:focus": {
-      borderColor: "#667eea",
-      boxShadow: "0 0 0 4px rgba(102, 126, 234, 0.1)",
-      backgroundColor: "#ffffff",
-    },
-    "&:disabled": {
-      opacity: 0.6,
-      cursor: "not-allowed",
-    },
-  },
-  eyeButton: {
-    position: "absolute",
-    right: "14px",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: "4px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.2s ease",
-    "&:hover": {
-      opacity: 0.7,
-    },
-    "&:disabled": {
-      opacity: 0.4,
-      cursor: "not-allowed",
-    },
-  },
-  button: {
-    padding: "14px",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    color: "white",
-    border: "none",
-    borderRadius: "10px",
-    fontSize: "16px",
-    fontWeight: "600",
-    cursor: "pointer",
-    transition: "all 0.3s ease",
-    marginTop: "8px",
-    boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
-    letterSpacing: "0.5px",
-    position: "relative",
-    overflow: "hidden",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: "0 8px 25px rgba(102, 126, 234, 0.5)",
-    },
-    "&:active": {
-      transform: "translateY(0)",
-    },
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-    cursor: "not-allowed",
-    transform: "none !important",
-  },
-  loadingText: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "10px",
-  },
-  spinner: {
-    display: "inline-block",
-    width: "20px",
-    height: "20px",
-    border: "3px solid rgba(255, 255, 255, 0.3)",
-    borderTop: "3px solid #ffffff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-  footer: {
-    marginTop: "24px",
-    textAlign: "center",
-  },
-  footerText: {
-    color: "#9ca3af",
-    fontSize: "13px",
-    margin: 0,
-  },
-};
+const neumorphicStyles = `
+  :root {
+    --nm-bg: #e6ebf1;
+    --nm-light-shadow: #ffffff;
+    --nm-dark-shadow: #c8d0da;
+    --nm-text-main: #2d3748;
+    --nm-text-muted: #8c9ba5;
+    --nm-error: #ef4444;
+    --nm-error-bg: #fee2e2;
+  }
 
-// Add CSS animations to your globals.css or in a style tag
-const animations = `
-@keyframes float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-30px) rotate(5deg); }
-}
+  .nm-wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--nm-bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 24px 16px;
+    box-sizing: border-box;
+  }
 
-@keyframes pulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
-  50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.5; }
-}
+  .nm-card {
+    background: var(--nm-bg);
+    width: 100%;
+    max-width: 380px;
+    border-radius: 36px;
+    padding: 40px 32px 36px;
+    box-shadow: 14px 14px 28px var(--nm-dark-shadow),
+                -14px -14px 28px var(--nm-light-shadow);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    transition: transform 0.2s ease;
+  }
 
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-  20%, 40%, 60%, 80% { transform: translateX(5px); }
-}
+  /* Smooth Error Shake */
+  .nm-shake {
+    animation: nm-shake-anim 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+  @keyframes nm-shake-anim {
+    10%, 90% { transform: translate3d(-2px, 0, 0); }
+    20%, 80% { transform: translate3d(3px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-5px, 0, 0); }
+    40%, 60% { transform: translate3d(5px, 0, 0); }
+  }
+
+  .nm-avatar-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  .nm-avatar-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--nm-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 8px;
+    box-sizing: border-box;
+    box-shadow: 6px 6px 12px var(--nm-dark-shadow),
+                -6px -6px 12px var(--nm-light-shadow);
+  }
+
+  .nm-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .nm-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .nm-title {
+    color: var(--nm-text-main);
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: -0.3px;
+  }
+
+  .nm-subtitle {
+    color: var(--nm-text-muted);
+    font-size: 13px;
+    margin: 0;
+    font-weight: 400;
+  }
+
+  .nm-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .nm-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .nm-input-icon {
+    position: absolute;
+    left: 16px;
+    color: var(--nm-text-muted);
+    pointer-events: none;
+    transition: color 0.2s ease;
+  }
+
+  .nm-icon-error {
+    color: var(--nm-error) !important;
+  }
+
+  .nm-input {
+    width: 100%;
+    height: 52px;
+    padding: 0 44px 0 46px;
+    background: var(--nm-bg);
+    border: 1.5px solid transparent;
+    outline: none;
+    border-radius: 14px;
+    font-size: 14px;
+    color: var(--nm-text-main);
+    box-shadow: inset 4px 4px 8px var(--nm-dark-shadow),
+                inset -4px -4px 8px var(--nm-light-shadow);
+    transition: all 0.25s ease;
+    box-sizing: border-box;
+  }
+
+  .nm-input::placeholder {
+    color: var(--nm-text-muted);
+  }
+
+  .nm-input:focus {
+    box-shadow: inset 5px 5px 10px var(--nm-dark-shadow),
+                inset -5px -5px 10px var(--nm-light-shadow);
+  }
+
+  /* Red Border & Inner Shadow on Error */
+  .nm-input-error {
+    border-color: rgba(239, 68, 68, 0.6) !important;
+    box-shadow: inset 3px 3px 6px var(--nm-dark-shadow),
+                inset -3px -3px 6px var(--nm-light-shadow),
+                0 0 0 1px rgba(239, 68, 68, 0.2) !important;
+  }
+
+  .nm-toggle-btn {
+    position: absolute;
+    right: 14px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+  }
+
+  .nm-icon-muted {
+    color: var(--nm-text-muted);
+  }
+
+  .nm-utility-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    padding: 2px 2px;
+  }
+
+  .nm-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--nm-text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .nm-checkbox-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .nm-checkbox-custom {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: var(--nm-bg);
+    box-shadow: inset 2px 2px 4px var(--nm-dark-shadow),
+                inset -2px -2px 4px var(--nm-light-shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nm-checkbox-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background-color: var(--nm-text-main);
+  }
+
+  .nm-btn-primary {
+    height: 50px;
+    margin-top: 8px;
+    background: var(--nm-bg);
+    border: none;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--nm-text-main);
+    cursor: pointer;
+    box-shadow: 5px 5px 10px var(--nm-dark-shadow),
+                -5px -5px 10px var(--nm-light-shadow);
+    transition: all 0.15s ease-in-out;
+  }
+
+  .nm-btn-primary:active {
+    box-shadow: inset 3px 3px 6px var(--nm-dark-shadow),
+                inset -3px -3px 6px var(--nm-light-shadow);
+  }
+
+  .nm-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .nm-divider-container {
+    display: flex;
+    align-items: center;
+    margin: 24px 0 16px;
+  }
+
+  .nm-divider-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--nm-dark-shadow), transparent);
+  }
+
+  .nm-footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--nm-text-muted);
+  }
+
+  .nm-footer p {
+    margin: 0;
+  }
+
+  .nm-error-box {
+    background: var(--nm-error-bg);
+    color: var(--nm-error);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 14px;
+    text-align: center;
+    font-weight: 500;
+  }
+
+  .nm-loading-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .nm-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--nm-text-muted);
+    border-top: 2px solid var(--nm-text-main);
+    border-radius: 50%;
+    animation: nm-spin 0.8s linear infinite;
+  }
+
+  @keyframes nm-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
 `;
-
-// Add the styles to the document head if not using CSS modules
-if (typeof document !== "undefined") {
-  const style = document.createElement("style");
-  style.textContent = animations;
-  document.head.appendChild(style);
-}

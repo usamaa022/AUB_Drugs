@@ -2,6 +2,7 @@
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import { AuthProvider } from "@/context/AuthContext";
+import AuthGuard from "@/components/AuthGuard"; // <--- Import the new AuthGuard
 import localFont from 'next/font/local';
 import InstallBanner from "@/components/InstallBanner"; 
 
@@ -44,11 +45,14 @@ export default function RootLayout({ children }) {
       </head>
       <body className="bg-gray-50" suppressHydrationWarning>
         <AuthProvider>
-          <div className="app-wrapper">
-            <Navbar    />
-            <main className="content-scroll pt-16">{children}</main>
-            <InstallBanner />
-          </div>
+          {/* Wrap everything inside the AuthGuard */}
+          <AuthGuard>
+            <div className="app-wrapper">
+              <Navbar />
+              <main className="content-scroll pt-16">{children}</main>
+              <InstallBanner />
+            </div>
+          </AuthGuard>
         </AuthProvider>
       </body>
     </html>

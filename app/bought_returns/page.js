@@ -19,6 +19,29 @@ import Select from "react-select";
 import * as XLSX from 'xlsx';
 import { Filter, Search } from "lucide-react";
 
+// ============================================================
+// Shared Reusable Uiverse Wi-Fi Loader Component
+// ============================================================
+const WifiLoader = ({ text = "processing", isButton = false }) => (
+  <div style={isButton ? { transform: 'scale(0.55)', width: '40px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 8px 0 -10px' } : {}}>
+    <div className={`bf-wifi-loader ${isButton ? 'bf-wifi-loader-btn' : ''}`}>
+      <svg className="circle-outer" viewBox="0 0 86 86">
+        <circle className="back" cx="43" cy="43" r="40"></circle>
+        <circle className="front" cx="43" cy="43" r="40"></circle>
+      </svg>
+      <svg className="circle-middle" viewBox="0 0 60 60">
+        <circle className="back" cx="30" cy="30" r="27"></circle>
+        <circle className="front" cx="30" cy="30" r="27"></circle>
+      </svg>
+      <svg className="circle-inner" viewBox="0 0 34 34">
+        <circle className="back" cx="17" cy="17" r="14"></circle>
+        <circle className="front" cx="17" cy="17" r="14"></circle>
+      </svg>
+      <div className="text" data-text={text}></div>
+    </div>
+  </div>
+);
+
 // --- Advanced Filter Operators ---
 const STRING_OPERATORS = [
   { value: "contains", label: "Contains" },
@@ -57,12 +80,13 @@ export default function BoughtReturnHistory() {
   const [returnItems, setReturnItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
   const [availableItems, setAvailableItems] = useState([]);
   const [itemFilters, setItemFilters] = useState([]);
   const [companySelectValue, setCompanySelectValue] = useState(null);
   const [returnNote, setReturnNote] = useState("");
+
+  // Notification State
+  const [notifications, setNotifications] = useState([]);
   
   // --- Return History Table States ---
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
@@ -76,6 +100,36 @@ export default function BoughtReturnHistory() {
   const [activeBillFilterDropdown, setActiveBillFilterDropdown] = useState(null);
 
   const router = useRouter();
+
+  // ============================================================
+  // Notification System
+  // ============================================================
+  const notify = useCallback((type, message) => {
+    const id = Date.now() + Math.random();
+    setNotifications(prev => [...prev, { id, type, message }]);
+    
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  }, []);
+
+  const dismissNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case 'success':
+        return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.5 11.5 11 14l4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+      case 'error':
+        return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m15 9-6 6m0-6 6 6m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+      case 'warning':
+        return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 13V8m0 8h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+      case 'info':
+      default:
+        return <svg aria-hidden="true" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 11h2v5m-2 0h4m-2.592-8.5h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></svg>;
+    }
+  };
 
   // Handle outside click for filter dropdowns
   useEffect(() => {
@@ -238,12 +292,12 @@ export default function BoughtReturnHistory() {
       marginBottom: "1.5rem",
       background: "white",
     },
-table: {
+    table: {
       width: "100%",
-      minWidth: "100%", // Forces it to fill the entire container on wide screens
+      minWidth: "100%",
       borderCollapse: "collapse",
       fontSize: "0.9rem",
-      tableLayout: "auto", // Allows columns to distribute space dynamically
+      tableLayout: "auto",
     },
     th: {
       padding: "0.75rem 1rem",
@@ -415,28 +469,6 @@ table: {
       color: "#6366f1",
       fontWeight: "600",
     },
-    alertError: {
-      padding: "0.75rem 1rem",
-      background: "#fef2f2",
-      borderLeft: "4px solid #ef4444",
-      borderRadius: "8px",
-      color: "#991b1b",
-      marginBottom: "1rem",
-      fontSize: "0.9rem",
-      width: "100%",
-      boxSizing: "border-box",
-    },
-    alertSuccess: {
-      padding: "0.75rem 1rem",
-      background: "#f0fdf4",
-      borderLeft: "4px solid #10b981",
-      borderRadius: "8px",
-      color: "#065f46",
-      marginBottom: "1rem",
-      fontSize: "0.9rem",
-      width: "100%",
-      boxSizing: "border-box",
-    },
     emptyState: {
       textAlign: "center",
       padding: "3rem 1.5rem",
@@ -445,15 +477,6 @@ table: {
     emptyStateIcon: {
       fontSize: "3rem",
       marginBottom: "1rem",
-    },
-    loadingSpinner: {
-      display: "inline-block",
-      width: "20px",
-      height: "20px",
-      border: "3px solid rgba(255,255,255,0.3)",
-      borderTopColor: "white",
-      borderRadius: "50%",
-      animation: "spin 0.8s linear infinite",
     },
     sectionTitle: {
       fontSize: "1.1rem",
@@ -550,7 +573,7 @@ table: {
     return sortConfig.direction === 'asc' ? '↑' : '↓';
   };
 
-const fetchAllReturns = async () => {
+  const fetchAllReturns = async () => {
     try {
       const allCompanies = await getCompanies();
       const allPayments = await getPayments();
@@ -576,11 +599,6 @@ const fetchAllReturns = async () => {
             
             return {
               ...returnItem,
-              // getReturnsForCompany returns this field as `returnBillNumber`.
-              // Alias it to `returnNumber` here since every render/sort/filter/
-              // export spot in this component reads `.returnNumber` — without
-              // this the field was always undefined and fell back to showing
-              // the raw Firestore document id (e.g. "2V9Xgd").
               returnNumber: returnItem.returnBillNumber || returnItem.returnNumber || null,
               companyName: company.name,
               companyCode: company.code,
@@ -605,6 +623,7 @@ const fetchAllReturns = async () => {
       setReturns(allReturnsData);
     } catch (error) {
       console.error("Error fetching all returns:", error);
+      notify("error", "Failed to load returns history.");
     }
   };
 
@@ -641,15 +660,15 @@ const fetchAllReturns = async () => {
         await fetchAllReturns();
       } catch (error) {
         console.error("Error fetching data:", error);
-        setError("Failed to fetch data. Please try again.");
+        notify("error", "Failed to load page data.");
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-  }, []);
+  }, [notify]);
 
-useEffect(() => {
+  useEffect(() => {
     if (selectedCompany?.id) {
       const fetchReturns = async () => {
         try {
@@ -692,7 +711,7 @@ useEffect(() => {
           setReturns(processedReturns);
         } catch (error) {
           console.error("Error fetching returns:", error);
-          setError("Failed to fetch returns. Please try again.");
+          notify("error", "Failed to fetch company returns.");
         } finally {
           setIsLoading(false);
         }
@@ -701,7 +720,7 @@ useEffect(() => {
     } else {
       setReturns(allReturns);
     }
-  }, [selectedCompany, allReturns]);
+  }, [selectedCompany, allReturns, notify]);
 
   const handleCompanySelect = (selectedOption) => {
     if (!selectedOption) {
@@ -710,7 +729,6 @@ useEffect(() => {
       setSelectedBill(null);
       setSelectedReturn(null);
       setEditingReturn(null);
-      setError(null);
       setBillSearchText("");
       setBillColumnFilters({});
       return;
@@ -721,7 +739,6 @@ useEffect(() => {
     setSelectedBill(null);
     setSelectedReturn(null);
     setEditingReturn(null);
-    setError(null);
     setBillSearchText("");
     setBillColumnFilters({});
   };
@@ -739,7 +756,7 @@ useEffect(() => {
     }
 
     if (!bill || !bill.items || !Array.isArray(bill.items)) {
-      setError("Invalid bill selected");
+      notify("warning", "Invalid bill selected");
       return;
     }
 
@@ -804,7 +821,7 @@ useEffect(() => {
       setReturnItems(validReturnItems);
     } catch (err) {
       console.error("Error calculating stock for return:", err);
-      setError("Failed to load available quantities");
+      notify("error", "Failed to load available quantities");
     }
   };
 
@@ -841,7 +858,7 @@ useEffect(() => {
 
   const handleEditReturn = (returnItem) => {
     if (returnItem.isPaid) {
-      alert("Cannot edit a return that has already been paid.");
+      notify("warning", "Cannot edit a return that has already been paid.");
       return;
     }
     
@@ -871,7 +888,7 @@ useEffect(() => {
       setEditNote(returnItem.returnNote || "");
     } catch (err) {
       console.error(err);
-      alert("Failed to setup edit interface.");
+      notify("error", "Failed to setup edit interface.");
     }
   };
 
@@ -911,28 +928,29 @@ useEffect(() => {
 
 const handleSubmitEdit = async () => {
     if (!editingReturn || !editingReturn.id) {
-      alert("Invalid return item: missing ID");
+      notify("warning", "Invalid return item: missing ID");
       return;
     }
 
     const editedItem = editItems[0];
     if (!editedItem) {
-      alert("No item data found");
+      notify("warning", "No item data found");
       return;
     }
 
     if (editedItem.returnQuantity <= 0) {
-      alert("Return quantity must be greater than 0, you can delete the return bill if you want 0 quantity.");
+      notify("warning", "Return quantity must be greater than 0, you can delete the return bill if you want 0 quantity.");
       return;
     }
 
     const priceValue = editedItem.returnPriceValue || 0;
     if (priceValue <= 0) {
-      alert("Return price must be greater than 0");
+      notify("warning", "Return price must be greater than 0");
       return;
     }
 
     try {
+      setIsSubmitting(true);
       const currency = editingReturn.currency || "USD";
       const exchangeRate = editingReturn.exchangeRate || 1500;
 
@@ -946,11 +964,6 @@ const handleSubmitEdit = async () => {
         returnPriceUSD = priceValue / exchangeRate;
       }
 
-      // Scope to items belonging to the SAME Firestore return document only.
-      // Matching by `returnNumber` string was unsafe — two different return
-      // documents could end up with an identical generated label, which
-      // would have pulled unrelated items into this update and overwritten
-      // the wrong document's items array.
       const allItemsInReturn = allReturns.filter(r =>
         r && String(r.id) === String(editingReturn.id)
       );
@@ -971,29 +984,30 @@ const handleSubmitEdit = async () => {
 
       await updateBoughtReturnBill(editingReturn.id, updatedItems, editNote);
 
-      setSuccessMessage("Return updated successfully!");
-      setTimeout(() => setSuccessMessage(null), 3000);
+      notify("success", "Return updated successfully!");
       handleCancelEdit();
       await fetchAllReturns();
       getStoreItems(true).then(setStoreItems); 
     } catch (error) {
       console.error("Error updating return:", error);
-      setError(`Failed to update return: ${error.message}`);
-      setTimeout(() => setError(null), 5000);
+      notify("error", `Failed to update return: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteReturnItem = async (returnItem) => {
     if (!returnItem || !returnItem.id) {
-      alert("Invalid return item");
+      notify("warning", "Invalid return item");
       return;
     }
     if (returnItem.isPaid) {
-      alert("Cannot delete a return that has already been paid.");
+      notify("warning", "Cannot delete a return that has already been paid.");
       return;
     }
     if (confirm(`Are you sure you want to delete return for "${returnItem.name}"? This will restore ${returnItem.returnQuantity} items to store.`)) {
       try {
+        setIsSubmitting(true);
         await deleteBoughtReturnItem(returnItem.id, returnItem.barcode, returnItem.returnQuantity, returnItem);
 
         const matchesRow = (r) =>
@@ -1004,13 +1018,13 @@ const handleSubmitEdit = async () => {
         setAllReturns(prev => prev.filter(r => !matchesRow(r)));
         setReturns(prev => prev.filter(r => !matchesRow(r)));
         
-        setSuccessMessage(`Return for "${returnItem.name}" deleted successfully!`);
-        setTimeout(() => setSuccessMessage(null), 3000);
+        notify("success", `Return for "${returnItem.name}" deleted successfully!`);
         getStoreItems(true).then(setStoreItems);
       } catch (error) {
         console.error("Error deleting return:", error);
-        setError(`Failed to delete return: ${error.message}`);
-        setTimeout(() => setError(null), 5000);
+        notify("error", `Failed to delete return: ${error.message}`);
+      } finally {
+        setIsSubmitting(false);
       }
     }
   };
@@ -1042,26 +1056,24 @@ const handleSubmitEdit = async () => {
     if (isSubmitting) return;
     
     if (!selectedCompany?.id || !selectedBill) {
-      setError("Please select a company and bill");
-      setTimeout(() => setError(null), 3000);
+      notify("warning", "Please select a company and bill");
       return;
     }
     
     const itemsToReturn = returnItems.filter((item) => item && item.returnQuantity > 0);
     if (itemsToReturn.length === 0) {
-      alert("Please select at least one item to return.");
+      notify("warning", "Please select at least one item to return.");
       return;
     }
     
     for (const item of itemsToReturn) {
       if (item.returnQuantity > item.availableQuantity) {
-        alert(`Cannot return more than ${item.availableQuantity} of ${item.name}.`);
+        notify("warning", `Cannot return more than ${item.availableQuantity} of ${item.name}.`);
         return;
       }
     }
     
     setIsSubmitting(true);
-    setError(null);
     
     try {
       const billCurrency = selectedBill.currency || "USD";
@@ -1149,8 +1161,7 @@ const handleSubmitEdit = async () => {
       setAllReturns(prev => [...newRows, ...prev]);
       setReturns(prev => [...newRows, ...prev]);
 
-      setSuccessMessage(`Return #${result.returnBillNumber} processed successfully!`);
-      setTimeout(() => setSuccessMessage(null), 4000);
+      notify("success", `Return #${result.returnBillNumber} processed successfully!`);
       
       setSelectedBill(null);
       setReturnItems([]);
@@ -1160,14 +1171,12 @@ const handleSubmitEdit = async () => {
       
     } catch (error) {
       console.error("Error processing return:", error);
-      setError(`Failed to process return: ${error.message}`);
-      setTimeout(() => setError(null), 5000);
+      notify("error", `Failed to process return: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // --- Core Evaluate Filter Function ---
   const evaluateFilter = (itemValue, filterData, type = "string") => {
     if (!filterData) return true;
     const { operator, textValue, selectedValues } = filterData;
@@ -1195,9 +1204,6 @@ const handleSubmitEdit = async () => {
     return true;
   };
 
-  // ==========================================
-  // --- Return History Table Filters Logic ---
-  // ==========================================
   const handleUpdateColumnFilter = (columnKey, updates) => {
     setColumnFilters(prev => {
       const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
@@ -1268,10 +1274,6 @@ const handleSubmitEdit = async () => {
     return filtered;
   }, [returns, filters, itemFilters, columnFilters, sortConfig]);
 
-
-  // ==========================================
-  // --- Bought Bills Table Filters Logic ---
-  // ==========================================
   const handleUpdateBillColumnFilter = (columnKey, updates) => {
     setBillColumnFilters(prev => {
       const current = prev[columnKey] || { operator: '', textValue: '', selectedValues: [] };
@@ -1296,7 +1298,6 @@ const handleSubmitEdit = async () => {
     return billSortConfig.direction === 'asc' ? '↑' : '↓';
   };
 
-  // Pre-process bills to calculate totals once for filtering and sorting
   const processedBoughtBills = useMemo(() => {
     return boughtBills.map(bill => {
       const billTotal = bill.currency === "IQD"
@@ -1311,7 +1312,6 @@ const handleSubmitEdit = async () => {
       if (!selectedCompany?.id || !bill) return false;
       if (bill.companyId !== selectedCompany.id) return false;
 
-      // Multi-item search box filter
       if (billSearchText.trim()) {
         const searchTerms = billSearchText.split(',').map(term => term.trim().toLowerCase()).filter(Boolean);
         if (searchTerms.length > 0) {
@@ -1324,7 +1324,6 @@ const handleSubmitEdit = async () => {
         }
       }
 
-      // Column Filters
       for (const [columnKey, filterData] of Object.entries(billColumnFilters)) {
         let itemValue = "";
         if (columnKey === 'billNumber') itemValue = bill.billNumber;
@@ -1360,7 +1359,6 @@ const handleSubmitEdit = async () => {
     return filtered;
   }, [processedBoughtBills, selectedCompany, billSearchText, billColumnFilters, billSortConfig]);
 
-
   const exportToExcel = () => {
     const exportData = filteredSortedReturns.map(returnItem => ({
       'Company': returnItem.companyName || 'N/A',
@@ -1386,10 +1384,6 @@ const handleSubmitEdit = async () => {
 
   const handleInputFocus = (e) => e.target.select();
 
-
-  // ==========================================
-  // --- UI Filter Components ---
-  // ==========================================
   const ExcelFilterDropdown = ({ columnKey, type = "string" }) => {
     const [search, setSearch] = useState("");
     const isOpen = activeFilterDropdown === columnKey;
@@ -1499,7 +1493,6 @@ const handleSubmitEdit = async () => {
     </th>
   );
 
-  // Filter component specifically for the "Create New Bought Return" table
   const BillExcelFilterDropdown = ({ columnKey, type = "string" }) => {
     const [search, setSearch] = useState("");
     const isOpen = activeBillFilterDropdown === columnKey;
@@ -1510,7 +1503,6 @@ const handleSubmitEdit = async () => {
 
     const uniqueValues = useMemo(() => {
       const vals = new Set();
-      // Only process unique values for the currently selected company
       processedBoughtBills.filter(b => b.companyId === selectedCompany?.id).forEach(bill => {
         let val = "";
         if (columnKey === 'billNumber') val = bill.billNumber;
@@ -1592,7 +1584,7 @@ const handleSubmitEdit = async () => {
     );
   };
 
-const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
+  const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
     <th style={{ 
       padding: "0.75rem 1rem", 
       textAlign: "left", 
@@ -1605,7 +1597,7 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
       borderBottom: "2px solid #e2e8f0", 
       borderRight: "1px solid #e2e8f0", 
       whiteSpace: "nowrap",
-      width: width || "auto" // <--- ADD THIS LINE
+      width: width || "auto"
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
         <div onClick={() => handleBillSort(columnKey)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", flex: 1 }}>
@@ -1633,26 +1625,6 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
     label: item,
   }));
 
-  if (isLoading && returns.length === 0) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.wrapper}>
-          <div style={styles.header}>
-            <div>
-              <h1 style={styles.headerTitle}>📦 Bought Return History</h1>
-              <p style={styles.headerSubtitle}>Manage product returns from suppliers</p>
-            </div>
-          </div>
-          <div style={{...styles.mainCard, textAlign: "center", padding: "3rem"}}>
-            <div style={{ display: "inline-block", width: "48px", height: "48px", border: "3px solid #e2e8f0", borderTopColor: "#6366f1", borderRadius: "50%", animation: "spin 1s linear infinite" }}></div>
-            <p style={{ marginTop: "1rem", color: "#64748b" }}>Loading return history...</p>
-          </div>
-        </div>
-        <style dangerouslySetInnerHTML={{__html: `@keyframes spin { to { transform: rotate(360deg); } }`}} />
-      </div>
-    );
-  }
-
   return (
     <div style={styles.container}>
       <style dangerouslySetInnerHTML={{__html: `
@@ -1670,7 +1642,115 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
         .scrollable-table::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
         .scrollable-table::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .scrollable-table::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* OVERLAY LOADER CSS */
+        .bf-global-loader-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(8px);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          z-index: 999999;
+        }
+
+        /* WIFI LOADER CSS */
+        .bf-wifi-loader {
+          --background: #62abff;
+          --front-color: #ef4d86;
+          --front-color-in: #fbb216;
+          --back-color: #c3c8de;
+          --text-color: #414856;
+          width: 64px;
+          height: 64px;
+          border-radius: 50px;
+          position: relative;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        }
+
+        .bf-wifi-loader svg { position: absolute; display: flex; justify-content: center; align-items: center; }
+        .bf-wifi-loader svg circle {
+          position: absolute; fill: none; stroke-width: 6px; stroke-linecap: round;
+          stroke-linejoin: round; transform: rotate(-100deg); transform-origin: center;
+        }
+        .bf-wifi-loader svg circle.back { stroke: var(--back-color); }
+        .bf-wifi-loader svg circle.front { stroke: var(--front-color); }
+        .bf-wifi-loader svg.circle-outer { height: 86px; width: 86px; }
+        .bf-wifi-loader svg.circle-outer circle { stroke-dasharray: 62.75 188.25; }
+        .bf-wifi-loader svg.circle-outer circle.back { animation: circle-outer135 1.8s ease infinite 0.3s; }
+        .bf-wifi-loader svg.circle-outer circle.front { animation: circle-outer135 1.8s ease infinite 0.15s; }
+        .bf-wifi-loader svg.circle-middle { height: 60px; width: 60px; }
+        .bf-wifi-loader svg.circle-middle circle { stroke: var(--front-color-in); stroke-dasharray: 42.5 127.5; }
+        .bf-wifi-loader svg.circle-middle circle.back { animation: circle-middle6123 1.8s ease infinite 0.25s; }
+        .bf-wifi-loader svg.circle-middle circle.front { animation: circle-middle6123 1.8s ease infinite 0.1s; }
+        .bf-wifi-loader svg.circle-inner { height: 34px; width: 34px; }
+        .bf-wifi-loader svg.circle-inner circle { stroke-dasharray: 22 66; }
+        .bf-wifi-loader svg.circle-inner circle.back { animation: circle-inner162 1.8s ease infinite 0.2s; }
+        .bf-wifi-loader svg.circle-inner circle.front { animation: circle-inner162 1.8s ease infinite 0.05s; }
+        .bf-wifi-loader .text { position: absolute; bottom: -40px; display: flex; justify-content: center; align-items: center; text-transform: lowercase; font-weight: 600; font-size: 15px; letter-spacing: 0.2px; }
+        .bf-wifi-loader .text::before, .bf-wifi-loader .text::after { content: attr(data-text); }
+        .bf-wifi-loader .text::before { color: var(--text-color); }
+        .bf-wifi-loader .text::after { color: var(--front-color-in); animation: text-animation76 3.6s ease infinite; position: absolute; left: 0; }
+        @keyframes circle-outer135 { 0% { stroke-dashoffset: 25; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 301; } 80% { stroke-dashoffset: 276; } 100% { stroke-dashoffset: 276; } }
+        @keyframes circle-middle6123 { 0% { stroke-dashoffset: 17; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 204; } 80% { stroke-dashoffset: 187; } 100% { stroke-dashoffset: 187; } }
+        @keyframes circle-inner162 { 0% { stroke-dashoffset: 9; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 106; } 80% { stroke-dashoffset: 97; } 100% { stroke-dashoffset: 97; } }
+        @keyframes text-animation76 { 0% { clip-path: inset(0 100% 0 0); } 50% { clip-path: inset(0); } 100% { clip-path: inset(0 0 0 100%); } }
+
+        /* TOAST NOTIFICATION CSS */
+        .notification-container { position: fixed; top: 2%; right: 2%; z-index: 9999999; max-width: 400px; --content-color: black; --background-color: #f3f3f3; --font-size-content: 0.85em; --icon-size: 1.25em; display: flex; flex-direction: column; gap: 0.5em; list-style-type: none; font-family: inherit; color: var(--content-color); margin: 0; padding: 0; }
+        .notification-item { position: relative; display: flex; justify-content: space-between; align-items: center; flex-direction: row; gap: 1em; overflow: hidden; padding: 12px 18px; border-radius: 8px; box-shadow: rgba(0, 0, 0, 0.2) 0px 8px 24px; background-color: var(--background-color); transition: all 250ms ease; animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; --grid-color: rgba(225, 225, 225, 0.7); background-image: linear-gradient(0deg, transparent 23%, var(--grid-color) 24%, var(--grid-color) 25%, transparent 26%, transparent 73%, var(--grid-color) 74%, var(--grid-color) 75%, transparent 76%, transparent), linear-gradient(90deg, transparent 23%, var(--grid-color) 24%, var(--grid-color) 25%, transparent 26%, transparent 73%, var(--grid-color) 74%, var(--grid-color) 75%, transparent 76%, transparent); background-size: 55px 55px; }
+        @keyframes slideIn { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .notification-item svg { transition: 250ms ease; }
+        .notification-item:hover { transform: scale(1.02); }
+        .notification-item:active { transform: scale(1.05); }
+        .notification-item .notification-close { padding: 2px; border-radius: 5px; transition: all 250ms; cursor: pointer; }
+        .notification-item .notification-close:hover { background-color: rgba(204, 204, 204, 0.45); }
+        .notification-item .notification-close:hover svg { color: rgb(0, 0, 0); }
+        .notification-item .notification-close:active svg { transform: scale(1.1); }
+        .notification-container svg { width: var(--icon-size); height: var(--icon-size); color: var(--content-color); }
+        .notification-icon { display: flex; align-items: center; }
+
+        .notification-item.success { color: #047857; background-color: #7dffbc; --grid-color: rgba(16, 185, 129, 0.25); } .notification-item.success svg { color: #047857; } .notification-item.success .notification-progress-bar { background-color: #047857; } .notification-item.success:hover { background-color: #5bffaa; }
+        .notification-item.info { color: #1e3a8a; background-color: #7eb8ff; --grid-color: rgba(59, 131, 246, 0.25); } .notification-item.info svg { color: #1e3a8a; } .notification-item.info .notification-progress-bar { background-color: #1e3a8a; } .notification-item.info:hover { background-color: #5ba5ff; }
+        .notification-item.warning { color: #78350f; background-color: #ffe57e; --grid-color: rgba(245, 159, 11, 0.25); } .notification-item.warning svg { color: #78350f; } .notification-item.warning .notification-progress-bar { background-color: #78350f; } .notification-item.warning:hover { background-color: #ffde59; }
+        .notification-item.error { color: #7f1d1d; background-color: #ff7e7e; --grid-color: rgba(239, 68, 68, 0.25); } .notification-item.error svg { color: #7f1d1d; } .notification-item.error .notification-progress-bar { background-color: #7f1d1d; } .notification-item.error:hover { background-color: #ff5f5f; }
+        
+        .notification-content { display: flex; justify-content: flex-start; align-items: center; gap: 0.75em; }
+        .notification-text { font-size: var(--font-size-content); font-weight: 600; user-select: none; }
+        .notification-progress-bar { position: absolute; bottom: 0; left: 0; height: 3px; background: var(--content-color); width: 100%; transform: translateX(100%); animation: progressBar 5s linear forwards; }
+        @keyframes progressBar { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
       `}} />
+
+      {/* FULL SCREEN WIFI LOADER OVERLAY */}
+      {(isLoading || isSubmitting) && (
+        <div className="bf-global-loader-overlay">
+          <WifiLoader text={isSubmitting ? "processing..." : "loading..."} />
+        </div>
+      )}
+
+      {/* GLOBAL TOAST NOTIFICATIONS */}
+      <ul className="notification-container">
+        {notifications.map((note) => (
+          <li key={note.id} className={`notification-item ${note.type}`}>
+            <div className="notification-content">
+              <div className="notification-icon">
+                {getNotificationIcon(note.type)}
+              </div>
+              <div className="notification-text">{note.message}</div>
+            </div>
+            <div className="notification-icon notification-close" onClick={() => dismissNotification(note.id)}>
+              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18 17.94 6M18 18 6.06 6"></path>
+              </svg>
+            </div>
+            <div className="notification-progress-bar"></div>
+          </li>
+        ))}
+      </ul>
 
       <div style={styles.wrapper}>
         <div style={styles.header}>
@@ -1682,9 +1762,6 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
             📊 Export to Excel
           </button>
         </div>
-
-        {error && <div style={styles.alertError} className="fade-in">⚠️ {error}</div>}
-        {successMessage && <div style={styles.alertSuccess} className="fade-in">✅ {successMessage}</div>}
 
         <div style={styles.mainCard}>
           <div style={styles.cardHeader}>
@@ -2103,7 +2180,7 @@ const BillTableHeader = ({ title, columnKey, type = "string", width }) => (
                                           </table>
                                         </div>
 
-                                        <div style={{ marginTop: "1rem", display: "flex", justifycontent: "flex-end" }}>
+                                        <div style={{ marginTop: "1rem", display: "flex", justifyContent: "flex-end" }}>
                                           <button 
                                             style={{
                                               ...styles.buttonSuccess,

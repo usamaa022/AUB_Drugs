@@ -13,7 +13,6 @@ import {
   Users,
   RefreshCw,
   Search,
-  Loader2,
   X,
   Calendar,
   DollarSign,
@@ -63,8 +62,8 @@ const parseDate = (dateVal) => {
 // --- Theme ---
 const THEME = {
   primary: "#4F46E5",
-  admin: "#2563EB", // Blue for Admin
-  superAdmin: "#7C3AED", // Purple for SuperAdmin
+  admin: "#2563EB",
+  superAdmin: "#7C3AED",
   usd: "#2563EB",
   usdLight: "#DBEAFE",
   iqd: "#059669",
@@ -78,12 +77,34 @@ const THEME = {
   border: "#E2E8F0"
 };
 
+// --- Custom WiFi Loader Component ---
+const WifiLoader = ({ text = "Loading..." }) => {
+  return (
+    <div id="wifi-loader">
+      <svg viewBox="0 0 86 86" className="circle-outer">
+        <circle r="40" cy="43" cx="43" className="back"></circle>
+        <circle r="40" cy="43" cx="43" className="front"></circle>
+        <circle r="40" cy="43" cx="43" className="new"></circle>
+      </svg>
+      <svg viewBox="0 0 60 60" className="circle-middle">
+        <circle r="27" cy="30" cx="30" className="back"></circle>
+        <circle r="27" cy="30" cx="30" className="front"></circle>
+      </svg>
+      <svg viewBox="0 0 34 34" className="circle-inner">
+        <circle r="14" cy="17" cx="17" className="back"></circle>
+        <circle r="14" cy="17" cx="17" className="front"></circle>
+      </svg>
+      <div data-text={text} className="text"></div>
+    </div>
+  );
+};
+
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
 export default function DetailedDashboardPage() {
   const router = useRouter();
-  
+
   // --- State ---
   const [userRole, setUserRole] = useState("");
   const [authLoading, setAuthLoading] = useState(true);
@@ -96,11 +117,11 @@ export default function DetailedDashboardPage() {
   });
 
   const [filters, setFilters] = useState({
-    dateRange: "month", // all, day, week, month, year
+    dateRange: "month",
     selectedMonth: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
     selectedYear: new Date().getFullYear(),
-    currency: "all", // all, USD, IQD
-    paymentStatus: "all", // all, Paid, Unpaid
+    currency: "all",
+    paymentStatus: "all",
     searchQuery: "",
   });
 
@@ -118,17 +139,15 @@ export default function DetailedDashboardPage() {
       if (!user) {
         router.push("/login");
         return;
-      } 
-      
+      }
+
       try {
-        // 1. Try fetching by UID first (Most reliable)
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           setUserRole(userDocSnap.data().role || "user");
         } else {
-          // 2. Fallback: Search by email if UID doc isn't found
           const usersRef = collection(db, "users");
           const q = query(usersRef, where("email", "==", user.email));
           const querySnapshot = await getDocs(q);
@@ -136,7 +155,7 @@ export default function DetailedDashboardPage() {
           if (!querySnapshot.empty) {
             setUserRole(querySnapshot.docs[0].data().role || "user");
           } else {
-            setUserRole("user"); 
+            setUserRole("user");
           }
         }
       } catch (error) {
@@ -146,7 +165,7 @@ export default function DetailedDashboardPage() {
         setAuthLoading(false);
       }
     });
-    
+
     return () => unsubscribe();
   }, [router]);
 
@@ -232,7 +251,7 @@ export default function DetailedDashboardPage() {
       const isUnpaid = bill.paymentStatus !== "Paid";
       m.sales.usd += bill.totalAmountUSD || 0;
       m.sales.iqd += bill.totalAmountIQD || 0;
-      
+
       if (isUnpaid) {
         m.sales.unpaidUsd += bill.totalAmountUSD || 0;
         m.sales.unpaidIqd += bill.totalAmountIQD || 0;
@@ -248,7 +267,7 @@ export default function DetailedDashboardPage() {
         const qty = Number(item.quantity) || 0;
         m.sales.itemsSold += qty;
         const pName = item.name || "Unknown";
-        
+
         const costUsd = (Number(item.basePriceUSD) || 0) * qty;
         const costIqd = (Number(item.basePriceIQD) || 0) * qty;
         const revUsd = (Number(item.outPriceUSD) || Number(item.price) || 0) * qty;
@@ -322,19 +341,19 @@ export default function DetailedDashboardPage() {
         label: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i],
         salesUSD: 0, salesIQD: 0, purchasesUSD: 0, purchasesIQD: 0, profitUSD: 0
       }));
-      
+
       const processBill = (bill, isSale) => {
         const d = parseDate(bill.date);
         const mIdx = d.getMonth();
         if (d.getFullYear() !== targetYear) return;
-        
+
         bill.items?.forEach(item => {
           const qty = Number(item.quantity) || 0;
           if (isSale) {
             const rUsd = (Number(item.outPriceUSD) || 0) * qty;
             dataPoints[mIdx].salesUSD += rUsd;
             dataPoints[mIdx].salesIQD += (Number(item.outPriceIQD) || 0) * qty;
-            dataPoints[mIdx].profitUSD += rUsd - ((Number(item.basePriceUSD)||0) * qty);
+            dataPoints[mIdx].profitUSD += rUsd - ((Number(item.basePriceUSD) || 0) * qty);
           } else {
             dataPoints[mIdx].purchasesUSD += (Number(item.basePriceUSD) || Number(item.price) || 0) * qty;
             dataPoints[mIdx].purchasesIQD += (Number(item.basePriceIQD) || Number(item.price) || 0) * qty;
@@ -355,14 +374,14 @@ export default function DetailedDashboardPage() {
       const processBillDay = (bill, isSale) => {
         const d = parseDate(bill.date);
         const dIdx = d.getDate() - 1;
-        
+
         bill.items?.forEach(item => {
           const qty = Number(item.quantity) || 0;
           if (isSale) {
             const rUsd = (Number(item.outPriceUSD) || 0) * qty;
             dataPoints[dIdx].salesUSD += rUsd;
             dataPoints[dIdx].salesIQD += (Number(item.outPriceIQD) || 0) * qty;
-            dataPoints[dIdx].profitUSD += rUsd - ((Number(item.basePriceUSD)||0) * qty);
+            dataPoints[dIdx].profitUSD += rUsd - ((Number(item.basePriceUSD) || 0) * qty);
           } else {
             dataPoints[dIdx].purchasesUSD += (Number(item.basePriceUSD) || Number(item.price) || 0) * qty;
             dataPoints[dIdx].purchasesIQD += (Number(item.basePriceIQD) || Number(item.price) || 0) * qty;
@@ -376,16 +395,12 @@ export default function DetailedDashboardPage() {
     return dataPoints;
   }, [filteredSold, filteredBought, filters, canViewAll]);
 
-  // --- View Control ---
+  // --- Loader Screen ---
   if (authLoading || dataLoading) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: THEME.bg }}>
-        <div style={{ textAlign: "center" }}>
-          <Loader2 style={{ width: "3rem", height: "3rem", animation: "spin 1s linear infinite", color: THEME.primary, margin: "0 auto 1rem" }} />
-          <p style={{ color: THEME.neutral, fontWeight: 500 }}>
-            {authLoading ? "Authenticating securely..." : "Compiling Datasets..."}
-          </p>
-        </div>
+        <style dangerouslySetInnerHTML={{ __html: loaderStyles }} />
+        <WifiLoader text={authLoading ? "Authenticating..." : "Compiling Data..."} />
       </div>
     );
   }
@@ -399,8 +414,10 @@ export default function DetailedDashboardPage() {
   return (
     <div style={{ minHeight: "100vh", background: THEME.bg, fontFamily: "system-ui, sans-serif", paddingBottom: "4rem" }}>
       
-      {/* INJECTED CSS FOR MOBILE RESPONSIVENESS */}
-      <style dangerouslySetInnerHTML={{__html: `
+      {/* INJECTED CSS STYLES (UI + WiFi Loader) */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        ${loaderStyles}
+
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -451,7 +468,7 @@ export default function DetailedDashboardPage() {
               </div>
             </div>
             
-            <button className="sync-btn" onClick={() => setRefreshKey(k=>k+1)} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 1rem", background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: "0.5rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" }}>
+            <button className="sync-btn" onClick={() => setRefreshKey(k => k + 1)} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 1rem", background: THEME.bg, border: `1px solid ${THEME.border}`, borderRadius: "0.5rem", cursor: "pointer", fontSize: "0.875rem", fontWeight: "500" }}>
               <RefreshCw size={16} /> Sync Data
             </button>
           </div>
@@ -465,7 +482,7 @@ export default function DetailedDashboardPage() {
             </select>
 
             {filters.dateRange === "month" ? (
-              <input type="month" value={filters.selectedMonth} onChange={(e) => setFilters(f => ({...f, selectedMonth: e.target.value}))} style={{ padding: "0.4rem", borderRadius: "0.375rem", border: `1px solid ${THEME.border}`, fontSize: "0.875rem" }} />
+              <input type="month" value={filters.selectedMonth} onChange={(e) => setFilters(f => ({ ...f, selectedMonth: e.target.value }))} style={{ padding: "0.4rem", borderRadius: "0.375rem", border: `1px solid ${THEME.border}`, fontSize: "0.875rem" }} />
             ) : (
               <select value={filters.selectedYear} onChange={(e) => setFilters(f => ({ ...f, selectedYear: parseInt(e.target.value) }))} style={{ padding: "0.4rem", borderRadius: "0.375rem", border: `1px solid ${THEME.border}`, fontSize: "0.875rem" }}>
                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
@@ -487,7 +504,7 @@ export default function DetailedDashboardPage() {
             <div className="search-box" style={{ display: "flex", flex: 1, minWidth: "200px", background: "white", padding: "0.4rem", borderRadius: "0.375rem", border: `1px solid ${THEME.border}`, alignItems: "center" }}>
               <Search size={16} color={THEME.neutral} style={{ marginRight: "0.5rem", flexShrink: 0 }} />
               <input type="text" placeholder="Search invoices, items, or clients..." value={filters.searchQuery} onChange={(e) => setFilters(f => ({ ...f, searchQuery: e.target.value }))} style={{ border: "none", outline: "none", width: "100%", fontSize: "0.875rem", minWidth: 0 }} />
-              {filters.searchQuery && <X size={14} color={THEME.expense} cursor="pointer" style={{ flexShrink: 0 }} onClick={() => setFilters(f => ({...f, searchQuery: ""}))} />}
+              {filters.searchQuery && <X size={14} color={THEME.expense} cursor="pointer" style={{ flexShrink: 0 }} onClick={() => setFilters(f => ({ ...f, searchQuery: "" }))} />}
             </div>
           </div>
 
@@ -696,3 +713,157 @@ export default function DetailedDashboardPage() {
     </div>
   );
 }
+
+// --- CSS STYLES FOR THE LOADER ---
+const loaderStyles = `
+#wifi-loader {
+  --background: #62abff;
+  --front-color: #ef4d86;
+  --front-color-in: #fbb216;
+  --back-color: #c3c8de;
+  --text-color: #414856;
+  width: 64px;
+  height: 64px;
+  border-radius: 50px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#wifi-loader svg {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#wifi-loader svg circle {
+  position: absolute;
+  fill: none;
+  stroke-width: 6px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(-100deg);
+  transform-origin: center;
+}
+
+#wifi-loader svg circle.back {
+  stroke: var(--back-color);
+}
+
+#wifi-loader svg circle.front {
+  stroke: var(--front-color);
+}
+
+#wifi-loader svg.circle-outer {
+  height: 86px;
+  width: 86px;
+}
+
+#wifi-loader svg.circle-outer circle {
+  stroke-dasharray: 62.75 188.25;
+}
+
+#wifi-loader svg.circle-outer circle.back {
+  animation: circle-outer135 1.8s ease infinite 0.3s;
+}
+
+#wifi-loader svg.circle-outer circle.front {
+  animation: circle-outer135 1.8s ease infinite 0.15s;
+}
+
+#wifi-loader svg.circle-middle {
+  height: 60px;
+  width: 60px;
+}
+
+#wifi-loader svg.circle-middle circle {
+  stroke: var(--front-color-in);
+  stroke-dasharray: 42.5 127.5;
+}
+
+#wifi-loader svg.circle-middle circle.back {
+  animation: circle-middle6123 1.8s ease infinite 0.25s;
+}
+
+#wifi-loader svg.circle-middle circle.front {
+  animation: circle-middle6123 1.8s ease infinite 0.1s;
+}
+
+#wifi-loader svg.circle-inner {
+  height: 34px;
+  width: 34px;
+}
+
+#wifi-loader svg.circle-inner circle {
+  stroke-dasharray: 22 66;
+}
+
+#wifi-loader svg.circle-inner circle.back {
+  animation: circle-inner162 1.8s ease infinite 0.2s;
+}
+
+#wifi-loader svg.circle-inner circle.front {
+  animation: circle-inner162 1.8s ease infinite 0.05s;
+}
+
+#wifi-loader .text {
+  position: absolute;
+  bottom: -40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-transform: lowercase;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+#wifi-loader .text::before,
+#wifi-loader .text::after {
+  content: attr(data-text);
+}
+
+#wifi-loader .text::before {
+  color: var(--text-color);
+}
+
+#wifi-loader .text::after {
+  color: var(--front-color-in);
+  animation: text-animation76 3.6s ease infinite;
+  position: absolute;
+  left: 0;
+}
+
+@keyframes circle-outer135 {
+  0% { stroke-dashoffset: 25; }
+  25% { stroke-dashoffset: 0; }
+  65% { stroke-dashoffset: 301; }
+  80% { stroke-dashoffset: 276; }
+  100% { stroke-dashoffset: 276; }
+}
+
+@keyframes circle-middle6123 {
+  0% { stroke-dashoffset: 17; }
+  25% { stroke-dashoffset: 0; }
+  65% { stroke-dashoffset: 204; }
+  80% { stroke-dashoffset: 187; }
+  100% { stroke-dashoffset: 187; }
+}
+
+@keyframes circle-inner162 {
+  0% { stroke-dashoffset: 9; }
+  25% { stroke-dashoffset: 0; }
+  65% { stroke-dashoffset: 106; }
+  80% { stroke-dashoffset: 97; }
+  100% { stroke-dashoffset: 97; }
+}
+
+@keyframes text-animation76 {
+  0% { clip-path: inset(0 100% 0 0); }
+  50% { clip-path: inset(0); }
+  100% { clip-path: inset(0 0 0 100%); }
+}
+`;
