@@ -20,8 +20,8 @@ const NRTBd = localFont({
 });
 
 export const metadata = {
-  title: "Aran Med Store",
-  description: "For Medical Equipments.. (+964) 772 533 5252",
+  title: "AUB Drugs",
+  description: "AUB Drugs is a web that created by Usama ",
   viewport: {
     width: "device-width",
     initialScale: 1,
