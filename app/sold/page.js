@@ -1005,7 +1005,7 @@ export default function SoldPage() {
             <div style={{ flex: 1, padding: isFullscreen ? "0" : "1.5rem", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: isFullscreen ? "#000000" : "#f8fafc", minHeight: "300px", position: "relative" }}>
               {isImageLoading ? (
                 <div style={{ textAlign: "center", color: "#64748b", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-                  <div style={{ width: "40px", height: "40px", border: "3px solid #cbd5e1", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin 1s linear infinite" }}></div>
+                  <div style={{ width: "41px", height: "40px", border: "3px solid #cbd5e1", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin 1s linear infinite" }}></div>
                   <p style={{ margin: 0, fontWeight: "500" }}>Fetching attachment from server...</p>
                 </div>
               ) : imagePreview ? (
