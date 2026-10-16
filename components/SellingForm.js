@@ -179,6 +179,49 @@ const formatFinancialLine = (usd, iqd, hasUSD, hasIQD) => {
   return parts[0];
 };
 
+// Merges multiple batches of the same barcode into a single clean row on the invoice
+const consolidateBillItems = (items, billCurrency) => {
+  if (!items || !Array.isArray(items)) return [];
+  const grouped = {};
+
+  items.forEach((item) => {
+    let effectivePrice = 0;
+    if (billCurrency === "IQD") {
+      effectivePrice = parseFloat(item.outPriceIQD ?? item.price ?? 0);
+    } else {
+      effectivePrice = parseFloat(item.outPriceUSD ?? item.price ?? 0);
+    }
+
+    const priceKey = billCurrency === "IQD" ? Math.round(effectivePrice) : effectivePrice.toFixed(2);
+    const key = `${String(item.barcode).trim()}_${priceKey}`;
+    const qty = parseInt(item.quantity, 10) || 0;
+
+    if (qty <= 0) return;
+
+    if (!grouped[key]) {
+      grouped[key] = {
+        ...item,
+        price: effectivePrice,
+        quantity: qty,
+        outPriceUSD: billCurrency === "USD" ? effectivePrice : (item.outPriceUSD || 0),
+        outPriceIQD: billCurrency === "IQD" ? effectivePrice : (item.outPriceIQD || 0),
+        expireDates: [formatExpireDate(item.expireDate)].filter((d) => d !== "N/A"),
+      };
+    } else {
+      grouped[key].quantity += qty;
+      const expStr = formatExpireDate(item.expireDate);
+      if (expStr !== "N/A" && !grouped[key].expireDates.includes(expStr)) {
+        grouped[key].expireDates.push(expStr);
+      }
+    }
+  });
+
+  return Object.values(grouped).map((item) => ({
+    ...item,
+    expireDateDisplay: item.expireDates.length > 0 ? item.expireDates.join(", ") : "N/A",
+  }));
+};
+
 // Calculate Financial Summary (Only counting Unpaid sales and Unpaid returns)
 const calculatePharmacyFinancialSummary = (
   pharmacyId,
@@ -193,13 +236,12 @@ const calculatePharmacyFinancialSummary = (
   let pharmacyHasUSD = false;
   let pharmacyHasIQD = false;
 
-  // 1. Calculate Unpaid Sales Bills
   allBills.forEach((bill) => {
     if (bill.pharmacyId !== pharmacyId) return;
     
     const billStatus = String(bill.paymentStatus || bill.status || "").toLowerCase();
     const isPaid = bill.isPaid === true || billStatus === "paid" || billStatus === "completed" || billStatus === "processed";
-    if (isPaid) return; // Skip paid sales bills
+    if (isPaid) return;
 
     const billCurrency = bill.currency || "USD";
 
@@ -216,7 +258,6 @@ const calculatePharmacyFinancialSummary = (
     });
   });
 
-  // Include current bill items if previewing
   if (isPreview && currentBillItems.length > 0) {
     currentBillItems.forEach((item) => {
       const price = item.price || 0;
@@ -238,7 +279,6 @@ const calculatePharmacyFinancialSummary = (
     });
   }
 
-  // 2. Calculate Unpaid Return Bills Only
   let totalReturnBillsUSD = 0;
   let totalReturnBillsIQD = 0;
 
@@ -280,7 +320,6 @@ const calculatePharmacyFinancialSummary = (
     });
   });
 
-  // Calculate Net Remaining Balance
   const remainingUnpaidUSD = totalUnpaidBillsUSD - totalReturnBillsUSD;
   const remainingUnpaidIQD = totalUnpaidBillsIQD - totalReturnBillsIQD;
 
@@ -299,7 +338,6 @@ const calculatePharmacyFinancialSummary = (
   };
 };
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = {
   container: {
     maxWidth: "100%",
@@ -479,7 +517,8 @@ const styles = {
     fontFamily: "'NRT-Reg', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
   },
   quantityInput: {
-    width: "60px",
+    minWidth: "75px",
+    width: "75px",
     padding: "8px",
     border: "2px solid #e1e8ed",
     borderRadius: "6px",
@@ -489,7 +528,8 @@ const styles = {
     WebkitAppearance: "none",
   },
   priceInput: {
-    width: "90px",
+    minWidth: "105px",
+    width: "105px",
     padding: "8px",
     border: "2px solid #e1e8ed",
     borderRadius: "6px",
@@ -894,8 +934,8 @@ const styles = {
     fontFamily: "'NRT-Bd', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
     touchAction: "manipulation",
   },
-  whatsappButton: {
-    backgroundColor: "#25D366",
+  downloadPdfButton: {
+    backgroundColor: "#3498db",
     color: "white",
     border: "none",
     padding: "8px 12px",
@@ -911,8 +951,8 @@ const styles = {
     transition: "all 0.3s ease",
     width: "100%",
   },
-  whatsappButtonDisabled: {
-    backgroundColor: "#a8e6c1",
+  downloadPdfButtonDisabled: {
+    backgroundColor: "#85c1e9",
     color: "white",
     border: "none",
     padding: "8px 12px",
@@ -1034,7 +1074,7 @@ const styles = {
   },
   rowContainer: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr auto',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
     gap: '12px',
     alignItems: 'end',
     marginBottom: '12px',
@@ -1324,22 +1364,23 @@ const styles = {
     display: 'flex',
     flexWrap: 'wrap',
     alignItems: 'center',
-    gap: '8px',
+    gap: '10px',
     width: '100%',
+    marginTop: '6px',
   },
   itemControlGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '6px',
   },
   itemControlLabel: {
-    fontSize: '12px',
+    fontSize: '13px',
     color: '#6b7280',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   buttonRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
     gap: '10px',
     marginTop: '15px',
   },
@@ -1347,7 +1388,7 @@ const styles = {
     display: 'grid',
     gridTemplateColumns: '1fr',
     gap: '10px',
-    marginTop: '15px',
+    marginTop: '10px',
   },
   consignmentContainer: {
     display: 'flex',
@@ -1399,17 +1440,6 @@ const styles = {
   },
 };
 
-// WhatsApp Icon SVG Component
-const WhatsAppIcon = ({ size = 14, color = "white" }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    viewBox="0 0 448 512" 
-    style={{ width: size, height: size, fill: color, flexShrink: 0 }}
-  >
-    <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.7 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
-  </svg>
-);
-
 export default function SellingForm({ onBillCreated, userRole, user }) {
   const [allPharmacies, setAllPharmacies] = useState([]);
   const [showPharmacyList, setShowPharmacyList] = useState(false);
@@ -1417,7 +1447,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const [pharmacyId, setPharmacyId] = useState("");
   const [pharmacyName, setPharmacyName] = useState("");
   const [pharmacySuggestions, setPharmacySuggestions] = useState([]);
-  const [showPharmacySuggestions, setShowPharmacySuggestions] = useState(false);
   
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState("Unpaid");
@@ -1449,7 +1478,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
   const [isScanning, setIsScanning] = useState(false);
   const [returnedItemsMap, setReturnedItemsMap] = useState({});
   const [sortConfig, setSortConfig] = useState({ key: 'billNumber', direction: 'desc' });
-  const [sharingWhatsApp, setSharingWhatsApp] = useState({});
+  const [downloadingPdf, setDownloadingPdf] = useState({});
   const [filters, setFilters] = useState({
     billNumber: "",
     itemName: "",
@@ -1593,18 +1622,17 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     }
     
     if (field === "quantity") {
-      const maxQty = updatedItems[index].availableQuantity || 1;
-      const val = parseInt(value);
+      const maxQty = updatedItems[index].availableQuantity || 9999;
+      const val = parseInt(value, 10);
       if (value === "") {
         updatedItems[index].quantity = "";
       } else if (!isNaN(val)) {
         updatedItems[index].quantity = Math.min(Math.max(0, val), maxQty);
       }
     } else if (field === "price") {
-      const parsedValue = value === "" ? "" : parseFloat(value);
-      updatedItems[index].price = value; 
-      
-      const calcPrice = parsedValue || 0;
+      const clean = value.replace(/,/g, '');
+      updatedItems[index].price = clean; 
+      const calcPrice = parseFloat(clean) || 0;
       if (billCurrency === "IQD") {
         updatedItems[index].outPriceIQD = calcPrice;
         updatedItems[index].outPriceUSD = 0;
@@ -1626,8 +1654,8 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       return {
         ...item,
         price: initialPrice,
-        outPriceUSD: newCurr === "USD" ? (initialPrice || 0) : 0,
-        outPriceIQD: newCurr === "IQD" ? (initialPrice || 0) : 0,
+        outPriceUSD: newCurr === "USD" ? (parseFloat(initialPrice) || 0) : 0,
+        outPriceIQD: newCurr === "IQD" ? (parseFloat(initialPrice) || 0) : 0,
       };
     });
     setSelectedItems(updatedItems);
@@ -1649,9 +1677,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     setSelectedItems(updatedItems);
   }, [selectedItems]);
 
-  // ─── LOAD BILL FOR EDITING (LOCKED FOR BILLS WITH RETURNS) ──────
   const loadBillForEditing = useCallback(async (bill) => {
-    // 1. Check if the bill has any return invoice attached
     const returnedMap = await loadReturnedItemsForBill(bill.billNumber, bill.pharmacyId);
     const hasAnyReturns = Object.values(returnedMap).some(item => item.hasReturn);
 
@@ -1695,7 +1721,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       setSaleDate(new Date().toISOString().split("T")[0]);
     }
 
-    setPaymentMethod(bill.paymentStatus || "Unpaid");
+    setPaymentMethod(bill.paymentStatus || bill.paymentMethod || "Unpaid");
     setIsConsignment(bill.isConsignment || false);
     setNote(bill.note || "");
 
@@ -1730,7 +1756,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         if (billItem.billNumber === bill.billNumber) continue;
         const foundItem = billItem.items?.find(i => 
           i.barcode === item.barcode && 
-          i.originalCurrency === originalCurrency &&
+          i.originalCurrency === originalCurrency && 
           i.branch === branch
         );
         if (foundItem) {
@@ -1792,7 +1818,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [recentBills, storeItems, loadReturnedItemsForBill]);
 
- const handleUpdateBill = useCallback(async () => {
+  const handleUpdateBill = useCallback(async () => {
     if (!pharmacyId) { setError("Please select a pharmacy."); return; }
     if (selectedItems.length === 0) { setError("Please add at least one item."); return; }
     if (!editingBillNumber) { setError("No bill selected for update."); return; }
@@ -1878,7 +1904,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         }
       }
 
-      // Calculate totals based on active currency
       let calculatedTotalUSD = 0;
       let calculatedTotalIQD = 0;
 
@@ -1892,13 +1917,14 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         }
       });
 
-      const updatedBill = await updateSoldBill(editingBillNumber, {
+      const updatedBillResult = await updateSoldBill(editingBillNumber, {
         items: filteredItems,
         pharmacyId,
         pharmacyName,
         currency: billCurrency,
         date: dateToSave,
-        paymentMethod,
+        paymentStatus: paymentMethod,
+        paymentMethod: paymentMethod,
         isConsignment,
         note: note.trim(),
         updatedBy: updaterEmail,
@@ -1908,11 +1934,27 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         totalAmount: billCurrency === "IQD" ? calculatedTotalIQD : calculatedTotalUSD,
       });
 
-      // Mark the bill to be considered in financial summary during preview
-      updatedBill.isNew = true;
+      const safeBillObj = (typeof updatedBillResult === 'object' && updatedBillResult !== null)
+        ? updatedBillResult
+        : {
+            billNumber: editingBillNumber,
+            pharmacyId,
+            pharmacyName,
+            items: filteredItems,
+            currency: billCurrency,
+            date: dateToSave,
+            paymentStatus: paymentMethod,
+            isConsignment,
+            note: note.trim(),
+            totalAmountUSD: calculatedTotalUSD,
+            totalAmountIQD: calculatedTotalIQD,
+            totalAmount: billCurrency === "IQD" ? calculatedTotalIQD : calculatedTotalUSD,
+          };
 
-      if (onBillCreated) onBillCreated(updatedBill);
-      setCurrentBill(updatedBill);
+      safeBillObj.isNew = true;
+
+      if (onBillCreated) onBillCreated(safeBillObj);
+      setCurrentBill(safeBillObj);
 
       setIsLoading(false);
       setShowBillPreview(true);
@@ -1920,7 +1962,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       alert(`✅ Bill #${formatBillNumber(editingBillNumber)} updated successfully!`);
 
       setTimeout(() => {
-        printBill(updatedBill);
+        printBill(safeBillObj);
       }, 300);
 
       getStoreItems(true).then(setStoreItems);
@@ -2021,7 +2063,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
         billNumber,
       });
 
-      // Mark the bill as new so it's counted in the preview total
       bill.isNew = true;
 
       if (onBillCreated) onBillCreated(bill);
@@ -2034,7 +2075,6 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
       setNote("");
       alert(`Bill #${billNumber} created successfully by ${creatorName}!`);
 
-      // Trigger auto-print
       setTimeout(() => {
         printBill(bill);
       }, 300);
@@ -2425,7 +2465,7 @@ export default function SellingForm({ onBillCreated, userRole, user }) {
     if (currentBill && currentBill.billNumber !== "TEMP0000") resetForm();
   }, [currentBill, resetForm]);
 
-const buildBillHTML = useCallback((bill) => {
+  const buildBillHTML = useCallback((bill) => {
     const billPaymentMethod = bill.paymentStatus || paymentMethod;
 
     const financialSummary = calculatePharmacyFinancialSummary(
@@ -2433,7 +2473,7 @@ const buildBillHTML = useCallback((bill) => {
       recentBills,
       returnBills,
       bill.items,
-      bill.isPreview || bill.isNew // Add items if previewing OR if bill was just created and passed here
+      bill.isPreview || bill.isNew
     );
 
     const { pharmacyHasUSD, pharmacyHasIQD } = financialSummary;
@@ -2448,6 +2488,7 @@ const buildBillHTML = useCallback((bill) => {
     };
 
     const billCurr = bill.currency || "USD";
+    const consolidatedItems = consolidateBillItems(bill.items, billCurr);
 
     const currentBillTotalUSD = billCurr === "USD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceUSD || item.price || 0) * item.quantity), 0) || 0) : 0;
     const currentBillTotalIQD = billCurr === "IQD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceIQD || item.price || 0) * item.quantity), 0) || 0) : 0;
@@ -2518,16 +2559,16 @@ const buildBillHTML = useCallback((bill) => {
                 </tr>
               </thead>
               <tbody>
-          ${bill.items?.map((item, idx) => {
+          ${consolidatedItems.map((item, idx) => {
                 const price = billCurr === "IQD" ? (item.outPriceIQD || item.price || 0) : (item.outPriceUSD || item.price || 0);
                 const priceFormatted = billCurr === "IQD" ? Math.round(price).toLocaleString() + " IQD" : "$" + price.toFixed(2);
                 const totalFormatted = billCurr === "IQD" ? Math.round(price * item.quantity).toLocaleString() + " IQD" : "$" + (price * item.quantity).toFixed(2);
                 return `
                     <tr>
                       <td style="padding: 10px 8px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 600; color: #1a365d;">${idx + 1}</td>
-                      <td style="padding: 10px 8px; border-bottom: 1px solid #e2e8f0;">
-                        <div style="font-weight: 600; font-family: 'NRT-Bd', sans-serif; font-size: 13px; color: #1a365d;">${item.name}</div>
-                      </td>
+                    <td style="padding: 10px 8px; border-bottom: 1px solid #e2e8f0;">
+  <div style="font-weight: 600; font-family: 'NRT-Bd', sans-serif; font-size: 13px; color: #1a365d;">${item.name}</div>${item.expireDateDisplay && item.expireDateDisplay !== "N/A" ? `<div style="font-size: 11px; color: #64748b;">Exp: ${new Date(item.expireDateDisplay).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')}</div>` : ""}
+</td>
                       <td style="padding: 10px 8px; border-bottom: 1px solid #e2e8f0; text-align: center; font-family: monospace; font-size: 13px; color: #3b4c6b;">${item.barcode}</td>
                       <td style="padding: 10px 8px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: 600; color: #1a365d;">${item.quantity}</td>
                       <td style="padding: 10px 8px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600; color: #1a365d;">${priceFormatted}</td>
@@ -2567,8 +2608,11 @@ const buildBillHTML = useCallback((bill) => {
               <p style="font-size: 13px; color: #3b4c6b; margin: 0;">${bill.note}</p>
             </div>
           ` : ""}
+<br>
+<br>
+<br>
 
-          <div style="margin-top: 10px; text-align: right; page-break-inside: avoid;">
+              <div style="margin-top: 10px; text-align: right; page-break-inside: avoid;">
             <div style="width: 250px; height: 1.5px; background-color: #1a365d; margin: 10px 0 8px auto;"></div>
             <p style="font-size: 14px; color: #1a365d; font-style: italic; font-weight: 100; font-family: 'NRT-Reg', sans-serif; margin: 0; padding-right: 15px;">Receiver Signature (Stamp)</p>
           </div>
@@ -2578,139 +2622,79 @@ const buildBillHTML = useCallback((bill) => {
     return { singleBillHTML, displayBillNumber };
   }, [paymentMethod, recentBills, returnBills]);
 
-  const shareViaWhatsApp = useCallback(async (bill) => {
+  const downloadPdf = useCallback(async (bill) => {
     if (!bill) {
       alert("No bill selected");
       return;
     }
 
     const billKey = bill.billNumber;
-    setSharingWhatsApp((prev) => ({ ...prev, [billKey]: true }));
+    setDownloadingPdf((prev) => ({ ...prev, [billKey]: true }));
 
     try {
       const displayBillNumber = formatBillNumber(bill.billNumber);
-      const shareText = `Invoice #${displayBillNumber}`;
-
-      const container = document.createElement("div");
-      container.style.position = "absolute";
-      container.style.top = "0";
-      container.style.left = "0";
-      container.style.width = "794px";
-      container.style.height = "1123px";
-      container.style.zIndex = "99999";
-      container.style.background = "white";
-      container.style.display = "flex";
-      container.style.justifyContent = "center";
-      container.style.alignItems = "center";
-      container.style.overflow = "visible";
-      container.style.opacity = "1";
-      container.style.visibility = "visible";
-      container.style.pointerEvents = "none";
-
       const { singleBillHTML } = buildBillHTML(bill);
 
-      container.innerHTML = `
-        <div id="bill-image-wrap" style="
-          width: 794px;
-          height: 1123px;
-          background: white;
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          box-sizing: border-box;
-          display: flex;
-          flex-direction: column;
-          padding: 50px 60px;
-          margin: 0;
-          overflow: visible;
-        ">
-          ${singleBillHTML}
-        </div>
-      `;
-
-      document.body.appendChild(container);
-      container.offsetHeight;
-
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const delay = isMobile ? 1500 : 500;
-      await new Promise((resolve) => {
-        requestAnimationFrame(() => {
-          setTimeout(resolve, delay);
-        });
-      });
-
-      if (typeof window.html2canvas !== 'function') {
+      if (typeof window.html2pdf !== 'function') {
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
           script.onload = () => {
             setTimeout(resolve, 300);
           };
-          script.onerror = () => reject(new Error('Failed to load html2canvas'));
+          script.onerror = () => reject(new Error('Failed to load html2pdf'));
           document.head.appendChild(script);
         });
       }
 
-      const element = document.getElementById('bill-image-wrap');
-      if (!element) {
-        throw new Error('Bill element not found');
-      }
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.top = "50%";
+      container.style.left = "50%";
+      container.style.transform = "translate(-50%, -50%)";
+      container.style.zIndex = "-9999";
+      container.style.visibility = "hidden";
+      container.style.width = "800px";
+      container.style.background = "white";
+      container.style.padding = "20px";
+      container.style.boxSizing = "border-box";
 
-      const canvas = await window.html2canvas(element, {
-        scale: isMobile ? 3 : 2.5,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: true,
-        width: 794,
-        height: 1123,
-        x: 0,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0,
-        allowTaint: true,
-        windowWidth: 794,
-        windowHeight: 1123,
-        onclone: (clonedDoc) => {
-          const clonedEl = clonedDoc.getElementById('bill-image-wrap');
-          if (clonedEl) {
-            clonedEl.style.width = '794px';
-            clonedEl.style.height = '1123px';
-            clonedEl.style.margin = '0';
-            clonedEl.style.opacity = '1';
-            clonedEl.style.visibility = 'visible';
-            clonedEl.style.overflow = 'visible';
-          }
-        }
-      });
+      container.innerHTML = `
+        <div id="pdf-wrap-download" style="width: 100%; max-width: 800px; margin: 0 auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: white; color: #2c3e50; box-sizing: border-box;">
+          <style>
+            #pdf-wrap-download * { overflow: visible !important; overflow-x: visible !important; box-sizing: border-box; }
+            #pdf-wrap-download .bill-template { max-width: 100%; margin: 0 auto; }
+          </style>
+          ${singleBillHTML}
+        </div>
+      `;
+      document.body.appendChild(container);
 
-      const ctx = canvas.getContext('2d');
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const isBlank = !imageData.data.some(channel => channel !== 0);
+      const opt = {
+        margin: [5, 5, 5, 5],
+        filename: `Bill_${displayBillNumber}.pdf`,
+        image: { type: 'jpeg', quality: 1 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          windowWidth: 800,
+          width: 800,
+          x: 0,
+          y: 0,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
 
-      if (isBlank) {
-        throw new Error('Captured canvas is blank');
-      }
-
+      await window.html2pdf().set(opt).from(container.querySelector('#pdf-wrap-download')).save();
       document.body.removeChild(container);
 
-      const fileName = `Bill_${displayBillNumber}.jpg`;
-      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-
-      const link = document.createElement('a');
-      link.download = fileName;
-      link.href = imageDataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      setTimeout(() => {
-        const encodedText = encodeURIComponent(shareText);
-        window.open(`https://wa.me/?text=${encodedText}`, '_blank');
-      }, 500);
-
     } catch (err) {
-      console.error('Error sharing bill:', err);
-      alert('⚠️ Failed to share the bill. Please try again.');
+      console.error('Error downloading PDF:', err);
+      alert('⚠️ Failed to download the PDF. Please try again.');
     } finally {
-      setSharingWhatsApp((prev) => ({ ...prev, [billKey]: false }));
+      setDownloadingPdf((prev) => ({ ...prev, [billKey]: false }));
     }
   }, [buildBillHTML]);
 
@@ -2720,7 +2704,7 @@ const buildBillHTML = useCallback((bill) => {
     const { singleBillHTML, displayBillNumber } = buildBillHTML(bill);
 
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const numCopies = 1; // Print only 1 copy
+    const numCopies = 1;
 
     if (isMobile) {
       const loadHtml2Pdf = () => {
@@ -2770,12 +2754,12 @@ const buildBillHTML = useCallback((bill) => {
             html2canvas: { 
               scale: 2, 
               useCORS: true, 
-              windowWidth: 800,
-              width: 800,
-              x: 0,
-              y: 0,
-              scrollX: 0,
-              scrollY: 0
+              windowWidth: 800, 
+              width: 800, 
+              x: 0, 
+              y: 0, 
+              scrollX: 0, 
+              scrollY: 0 
             },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
           };
@@ -2806,7 +2790,7 @@ const buildBillHTML = useCallback((bill) => {
         <style>
           @font-face { font-family: 'NRT-Reg'; src: url('/fonts/NRT-Reg.ttf') format('truetype'); }
           @font-face { font-family: 'NRT-Bd';  src: url('/fonts/NRT-Bd.ttf')  format('truetype'); }
-          @page { margin: 0; } /* Removes default header/footer from browser print */
+          @page { margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body {
             font-family: 'NRT-Reg', 'Segoe UI', sans-serif;
@@ -2894,28 +2878,26 @@ const buildBillHTML = useCallback((bill) => {
     const timer = setTimeout(async () => {
       if (searchQuery.trim().length > 0) {
         try {
-          let results = [];
           const searchTerm = searchQuery.trim();
-          
           const freshStoreItems = await getStoreItems(true);
           setStoreItems(freshStoreItems);
-          
+
           const searchResults = await searchInitializedItems(searchTerm, "both");
-          results = searchResults;
-          
+
           const storeSearchResults = freshStoreItems.filter((item) => {
             if (item.quantity <= 0) return false;
             const nameMatch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
             const barcodeMatch = item.barcode.toLowerCase().includes(searchTerm.toLowerCase());
             return nameMatch || barcodeMatch;
           });
-          
-          const allResults = [...results, ...storeSearchResults];
-          
-          const uniqueResults = allResults.filter((item, index, self) => 
-            index === self.findIndex((i) => i.barcode === item.barcode && i.branch === item.branch)
+
+          const allResults = [...searchResults, ...storeSearchResults];
+
+          // DEDUPLICATE BY BARCODE: Each product card shows ONCE with all its batches
+          const uniqueResults = allResults.filter(
+            (item, index, self) => index === self.findIndex((i) => i.barcode === item.barcode)
           );
-          
+
           setSearchResults(uniqueResults);
         } catch (err) {
           console.error("Search error:", err);
@@ -2924,10 +2906,16 @@ const buildBillHTML = useCallback((bill) => {
           const searchTerm = searchQuery.trim().toLowerCase();
           const filtered = freshStoreItems.filter((item) => {
             if (item.quantity <= 0) return false;
-            return item.name.toLowerCase().includes(searchTerm) || 
-                   item.barcode.toLowerCase().includes(searchTerm);
+            return (
+              item.name.toLowerCase().includes(searchTerm) ||
+              item.barcode.toLowerCase().includes(searchTerm)
+            );
           });
-          setSearchResults(filtered);
+
+          const uniqueFallback = filtered.filter(
+            (item, index, self) => index === self.findIndex((i) => i.barcode === item.barcode)
+          );
+          setSearchResults(uniqueFallback);
         }
       } else {
         setSearchResults([]);
@@ -2942,13 +2930,13 @@ const buildBillHTML = useCallback((bill) => {
         try {
           const results = await searchPharmacies(pharmacySearch);
           setPharmacySuggestions(results);
-          setShowPharmacySuggestions(results.length > 0);
+          setShowPharmacyList(results.length > 0);
         } catch (err) {
           console.error("Error searching pharmacies:", err);
         }
       } else {
         setPharmacySuggestions([]);
-        setShowPharmacySuggestions(false);
+        setShowPharmacyList(false);
       }
     }, 300);
     return () => clearTimeout(timer);
@@ -3223,7 +3211,6 @@ const buildBillHTML = useCallback((bill) => {
             </div>
           </div>
 
-          {/* Date, Bill Currency, Payment, Consignment row */}
           <div style={styles.rowContainer}>
             <div style={styles.dateField}>
               <label style={styles.fieldLabel}>Sale Date</label>
@@ -3345,7 +3332,7 @@ const buildBillHTML = useCallback((bill) => {
                               <td style={styles.tableCell}>{formatExpireDate(batch.expireDate)}</td>
                               <td style={{ 
                                 ...styles.tableCell, 
-                                textAlign: "center",
+                                textAlign: "center", 
                                 fontWeight: "600",
                                 color: batch.branch === "Slemany" ? "#16a34a" :
                                        batch.branch === "Erbil" ? "#dc2626" :
@@ -3359,7 +3346,7 @@ const buildBillHTML = useCallback((bill) => {
                                                  batch.branch === "Kirkuk" ? "#fffbeb" :
                                                  batch.branch === "Kalar" ? "#f5f3ff" :
                                                  "transparent",
-                                padding: "6px 10px",
+                                padding: "6px 10px", 
                                 fontSize: "15px"
                               }}>
                                 {batch.branch || "N/A"}
@@ -3405,7 +3392,6 @@ const buildBillHTML = useCallback((bill) => {
               </h3>
               {selectedItems.map((item, index) => {
                 const activePrice = parseFloat(item.price) || 0;
-
                 const isItemIQD = item.originalCurrency === "IQD";
                 const netVal = isItemIQD ? (item.netPriceIQD || item.netPrice || 0) : (item.netPriceUSD || item.netPrice || 0);
                 const netDisplay = isItemIQD
@@ -3461,7 +3447,6 @@ const buildBillHTML = useCallback((bill) => {
                           max={item.availableQuantity}
                           style={{
                             ...styles.quantityInput,
-                            width: "60px",
                             ...(isLocked ? { backgroundColor: "#f0f0f0", cursor: "not-allowed", borderColor: "#e74c3c", opacity: "0.65" } : {})
                           }}
                           value={item.quantity}
@@ -3486,7 +3471,6 @@ const buildBillHTML = useCallback((bill) => {
                           inputMode="decimal"
                           style={{
                             ...styles.priceInput,
-                            width: "90px",
                             ...(isLocked ? { backgroundColor: "#f0f0f0", cursor: "not-allowed", borderColor: "#e74c3c", opacity: "0.65" } : {})
                           }}
                           value={
@@ -3510,7 +3494,7 @@ const buildBillHTML = useCallback((bill) => {
                         <span style={{ fontSize: "13px", color: "#7f8c8d" }}>{billCurrency === "IQD" ? "IQD" : "USD"}</span>
                       </div>
 
-                      <div style={{ fontWeight: "600", minWidth: "80px", textAlign: "right", color: "#2c3e50", fontSize: "15px" }}>
+                      <div style={{ fontWeight: "600", minWidth: "90px", textAlign: "right", color: "#2c3e50", fontSize: "15px" }}>
                         {totalDisplay}
                       </div>
 
@@ -3585,7 +3569,6 @@ const buildBillHTML = useCallback((bill) => {
           </div>
         </div>
 
-        {/* Recent bills section */}
         <div className="card-wrapper" style={styles.recentBillsSection}>
           <div style={styles.sectionHeader}>
             <h3 style={styles.sectionTitle}>Recent Sales Bills</h3>
@@ -3726,7 +3709,6 @@ const buildBillHTML = useCallback((bill) => {
                       const totalAmountIQD = billCurr === "IQD" ? (bill.items?.reduce((sum, item) => sum + ((item.outPriceIQD || item.price || 0) * item.quantity), 0) || 0) : 0;
                       const branchStr = getBillBranchDisplay(bill);
 
-                      // Determine if bill is locked
                       const hasReturn = returnBills.some(r => String(r.billNumber) === String(bill.billNumber));
                       const isLocked = hasReturn;
                       const lockReason = hasReturn ? "Bill has return invoices attached" : "Edit Bill";
@@ -3856,30 +3838,29 @@ const buildBillHTML = useCallback((bill) => {
                                   Print
                                 </button>
                                 <button
-                                  style={sharingWhatsApp[bill.billNumber] ? styles.whatsappButtonDisabled : styles.whatsappButton}
-                                  disabled={!!sharingWhatsApp[bill.billNumber]}
+                                  style={downloadingPdf[bill.billNumber] ? styles.downloadPdfButtonDisabled : styles.downloadPdfButton}
+                                  disabled={!!downloadingPdf[bill.billNumber]}
                                   onClick={(e) => { 
                                     e.stopPropagation(); 
-                                    shareViaWhatsApp(bill); 
+                                    downloadPdf(bill); 
                                   }}
-                                  title="Send via WhatsApp"
+                                  title="Download PDF"
                                   onMouseEnter={(e) => {
-                                    if (!sharingWhatsApp[bill.billNumber]) {
-                                      e.currentTarget.style.backgroundColor = "#128C7E";
+                                    if (!downloadingPdf[bill.billNumber]) {
+                                      e.currentTarget.style.backgroundColor = "#2980b9";
                                     }
                                   }}
                                   onMouseLeave={(e) => {
-                                    if (!sharingWhatsApp[bill.billNumber]) {
-                                      e.currentTarget.style.backgroundColor = "#25D366";
+                                    if (!downloadingPdf[bill.billNumber]) {
+                                      e.currentTarget.style.backgroundColor = "#3498db";
                                     }
                                   }}
                                 >
-                                  {sharingWhatsApp[bill.billNumber] ? (
+                                  {downloadingPdf[bill.billNumber] ? (
                                     "⏳..."
                                   ) : (
                                     <>
-                                      <WhatsAppIcon size={14} color="white" />
-                                      WhatsApp
+                                      📥 Download PDF
                                     </>
                                   )}
                                 </button>
@@ -3897,31 +3878,30 @@ const buildBillHTML = useCallback((bill) => {
                                       <button
                                         style={{
                                           ...styles.printButton,
-                                          backgroundColor: sharingWhatsApp[bill.billNumber] ? "#a8e6c1" : "#25D366",
-                                          cursor: sharingWhatsApp[bill.billNumber] ? "not-allowed" : "pointer",
+                                          backgroundColor: downloadingPdf[bill.billNumber] ? "#85c1e9" : "#3498db",
+                                          cursor: downloadingPdf[bill.billNumber] ? "not-allowed" : "pointer",
                                           display: "flex",
                                           alignItems: "center",
                                           gap: "8px",
                                         }}
-                                        disabled={!!sharingWhatsApp[bill.billNumber]}
-                                        onClick={() => shareViaWhatsApp(bill)}
+                                        disabled={!!downloadingPdf[bill.billNumber]}
+                                        onClick={() => downloadPdf(bill)}
                                         onMouseEnter={(e) => {
-                                          if (!sharingWhatsApp[bill.billNumber]) {
-                                            e.currentTarget.style.backgroundColor = "#128C7E";
+                                          if (!downloadingPdf[bill.billNumber]) {
+                                            e.currentTarget.style.backgroundColor = "#2980b9";
                                           }
                                         }}
                                         onMouseLeave={(e) => {
-                                          if (!sharingWhatsApp[bill.billNumber]) {
-                                            e.currentTarget.style.backgroundColor = "#25D366";
+                                          if (!downloadingPdf[bill.billNumber]) {
+                                            e.currentTarget.style.backgroundColor = "#3498db";
                                           }
                                         }}
                                       >
-                                        {sharingWhatsApp[bill.billNumber] ? (
+                                        {downloadingPdf[bill.billNumber] ? (
                                           "⏳ Preparing..."
                                         ) : (
                                           <>
-                                            <WhatsAppIcon size={16} color="white" />
-                                            Send via WhatsApp
+                                            📥 Download PDF
                                           </>
                                         )}
                                       </button>
@@ -3967,7 +3947,7 @@ const buildBillHTML = useCallback((bill) => {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {bill.items?.map((item, idx) => {
+                                        {consolidateBillItems(bill.items, bill.currency || "USD").map((item, idx) => {
                                           const cCurrency = bill.currency || "USD";
                                           const price = cCurrency === "IQD" ? (item.outPriceIQD || item.price || 0) : (item.outPriceUSD || item.price || 0);
                                           const priceDisplay = cCurrency === "IQD"
@@ -3993,7 +3973,7 @@ const buildBillHTML = useCallback((bill) => {
                                                   {item.name}
                                                 </div>
                                                 <div style={{ fontSize: "15px", color: "#7f8c8d" }}>
-                                                  Exp: {formatExpireDate(item.expireDate)}
+                                                  Exp: {item.expireDateDisplay || formatExpireDate(item.expireDate)}
                                                 </div>
                                               </td>
                                               <td style={{ ...styles.enhancedTableCell, textAlign: "center", fontFamily: "'NRT-Reg', monospace" }}>
@@ -4058,7 +4038,6 @@ const buildBillHTML = useCallback((bill) => {
           )}
         </div>
 
-        {/* Modals */}
         {showBillPreview && currentBill && (
           <div style={styles.modalOverlay}>
             <div style={styles.modalContent}>
@@ -4071,167 +4050,37 @@ const buildBillHTML = useCallback((bill) => {
                   <button
                     style={{
                       ...styles.printButton,
-                      backgroundColor: sharingWhatsApp[currentBill.billNumber] ? "#a8e6c1" : "#25D366",
-                      cursor: sharingWhatsApp[currentBill.billNumber] ? "not-allowed" : "pointer",
+                      backgroundColor: downloadingPdf[currentBill.billNumber] ? "#85c1e9" : "#3498db",
+                      cursor: downloadingPdf[currentBill.billNumber] ? "not-allowed" : "pointer",
                       display: "flex",
                       alignItems: "center",
                       gap: "8px",
                     }}
-                    disabled={!!sharingWhatsApp[currentBill.billNumber]}
-                    onClick={() => shareViaWhatsApp(currentBill)}
+                    disabled={!!downloadingPdf[currentBill.billNumber]}
+                    onClick={() => downloadPdf(currentBill)}
                     onMouseEnter={(e) => {
-                      if (!sharingWhatsApp[currentBill.billNumber]) {
-                        e.currentTarget.style.backgroundColor = "#128C7E";
+                      if (!downloadingPdf[currentBill.billNumber]) {
+                        e.currentTarget.style.backgroundColor = "#2980b9";
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (!sharingWhatsApp[currentBill.billNumber]) {
-                        e.currentTarget.style.backgroundColor = "#25D366";
+                      if (!downloadingPdf[currentBill.billNumber]) {
+                        e.currentTarget.style.backgroundColor = "#3498db";
                       }
                     }}
                   >
-                    {sharingWhatsApp[currentBill.billNumber] ? (
+                    {downloadingPdf[currentBill.billNumber] ? (
                       "⏳ Preparing..."
                     ) : (
                       <>
-                        <WhatsAppIcon size={16} color="white" />
-                        Send via WhatsApp
+                        📥 Download PDF
                       </>
                     )}
                   </button>
                   <button style={styles.closeButton} onClick={closeBillPreview}>Close</button>
                 </div>
               </div>
-              <div style={styles.billTemplate} dangerouslySetInnerHTML={{ __html: `
-                <div style="padding-top: 0px; font-size: 15px;">
-                  <div style="margin-bottom: 0px;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
-                      <div style="flex: 1; min-width: 200px;">
-                        <h1 style="margin: 0 0 2px 0; font-size: 24px; color: #2c3e50; font-family: 'NRT-Bd', sans-serif;">ARAN MED STORE</h1>
-                        <p style="margin: 0 0 3px 0; font-size: 15px; color: #34495e; font-family: 'NRT-Reg', sans-serif;">سلێمانی - بەرامبەر تاوەری تەندروستی سمارت</p>
-                        <p style="margin: 0; font-size: 15px; color: #34495e; font-family: 'NRT-Reg', sans-serif;">+964 772 533 5252 | +964 751 741 2241</p>
-                      </div>
-                      <div style="flex-shrink: 0; text-align: right;">
-                        <img src="/Aranlogo.png" alt="Aran Logo" style="width: 200px; max-width: 100%; object-fit: contain; display: inline-block;" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
-                    <div style="flex: 1; min-width: 200px; padding: 12px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed;">
-                      <h3 style="margin: 0 0 8px 0; font-family: 'NRT-Bd', sans-serif; font-size: 16px; color: #2c3e50;">Bill To: ${currentBill.pharmacyName}</h3>
-                      <table style="width: 100%; font-family: 'NRT-Reg', sans-serif; font-size: 14px;">
-                        <tr>
-                          <td style="font-weight: 600; padding: 3px 10px 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; width: 90px;">Payment:</td>
-                          <td style="padding: 3px 0;">
-                            <div style="background-color: ${currentBill.paymentStatus === "Cash" ? "#27ae60" : currentBill.paymentStatus === "Paid" ? "#3498db" : "#e74c3c"}; display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 14px; font-weight: 600; color: #fff;">
-                              ${currentBill.paymentStatus.toUpperCase()}
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td style="font-weight: 600; padding: 3px 10px 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif; width: 90px;">Consignment:</td>
-                          <td style="padding: 3px 0;">
-                            <div style="display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 14px; font-weight: 500; color: #34495E">
-                              ${currentBill.isConsignment ? 'تحت صرف' : 'Owned'}
-                            </div>
-                          </td>
-                        </tr>
-                      </table>
-                    </div>
-
-                    <div style="flex: 1; min-width: 200px; padding: 12px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e1e8ed;">
-                      <table style="width: 100%; font-family: 'NRT-Reg', sans-serif; font-size: 14px;">
-                        <tr>
-                          <td style="font-weight: 600; padding: 3px 10px 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif;">Invoice #:</td>
-                          <td style="padding: 3px 0; color: #34495e; font-weight: 500;">${currentBill.billNumber === "TEMP0000" ? "TEMP0000" : formatBillNumber(currentBill.billNumber)}</td>
-                        </tr>
-                        <tr>
-                          <td style="font-weight: 600; padding: 3px 10px 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif;">Invoice Date:</td>
-                          <td style="padding: 3px 0; color: #34495e; font-weight: 500;">${formatDate(currentBill.date)}</td>
-                        </tr>
-                        <tr>
-                          <td style="font-weight: 600; padding: 3px 10px 3px 0; color: #2c3e50; font-family: 'NRT-Bd', sans-serif;">Created By:</td>
-                          <td style="padding: 3px 0; color: #34495e; font-weight: 500;">${currentBill.createdByName || "Current User"}</td>
-                        </tr>
-                      </table>
-                    </div>
-
-                    <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-                      <img src="/scann.png" alt="QR Code" style="margin-top:10px; width: 110px; max-width: 90%;" />
-                    </div>
-                  </div>
-
-                  <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 15px; font-size: 14px; min-width: 500px;">
-                      <thead>
-                        <tr style="background-color: #1e3a8a; color: white;">
-                          <th style="padding: 12px 8px; text-align: center; border-radius: 8px 0 0 8px; font-family: 'NRT-Bd', sans-serif;">#</th>
-                          <th style="padding: 12px 8px; text-align: left; font-family: 'NRT-Bd', sans-serif;">Item Details</th>
-                          <th style="padding: 12px 8px; text-align: center; font-family: 'NRT-Bd', sans-serif;">Barcode</th>
-                          <th style="padding: 12px 8px; text-align: center; font-family: 'NRT-Bd', sans-serif;">Qty</th>
-                          <th style="padding: 12px 8px; text-align: right; font-family: 'NRT-Bd', sans-serif;">Unit Price</th>
-                          <th style="padding: 12px 8px; text-align: right; border-radius: 0 8px 8px 0; font-family: 'NRT-Bd', sans-serif;">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        ${currentBill.items?.map((item, idx) => {
-                          const cb = currentBill.currency || "USD";
-                          const price = cb === "IQD"
-                            ? (item.outPriceIQD || item.price || 0)
-                            : (item.outPriceUSD || item.price || 0);
-                          const priceFormatted = cb === "IQD"
-                            ? Math.round(price).toLocaleString() + " IQD"
-                            : "$" + price.toFixed(2);
-                          const totalFormatted = cb === "IQD"
-                            ? Math.round(price * item.quantity).toLocaleString() + " IQD"
-                            : "$" + (price * item.quantity).toFixed(2);
-                          return `
-                            <tr>
-                              <td style="padding: 10px 8px; border-bottom: 1px solid #e1e8ed; text-align: center; font-weight: 600;">${idx + 1}</td>
-                              <td style="padding: 10px 8px; border-bottom: 1px solid #e1e8ed;">
-                                <div style="font-weight: 600; margin-bottom: 2px; font-family: 'NRT-Bd', sans-serif; font-size: 14px;">${item.name}</div>
-                                <div style="font-size: 13px; color: #7f8c8d;">Exp: ${formatExpireDate(item.expireDate)}</div>
-                              </td>
-                              <td style="padding: 10px 8px; border-bottom: 1px solid #e1e8ed; text-align: center; font-family: monospace; font-size: 14px;">${item.barcode}</td>
-                              <td style="padding: 10px 8px; border-bottom: 1px solid #e1e8ed; text-align: center; font-weight: 600;">${item.quantity}</td>
-                              <td style="padding: 10px 8px; border-bottom: 1px solid #e1e8ed; text-align: right; font-weight: 600;">${priceFormatted}</td>
-                              <td style="padding: 10px 8px; border-bottom: 1px solid #e1e8ed; text-align: right; font-weight: 600;">${totalFormatted}</td>
-                            </tr>
-                          `;
-                        }).join("")}
-                        <tr class="total-row">
-                          <td colspan="5" style="background-color: #20c38f !important; color: white; text-align: right; padding: 12px 8px; font-size: 15px; font-family: 'NRT-Bd', sans-serif; border-radius: 8px 0 0 8px;">CURRENT TOTAL:</td>
-                          <td style="background-color: #1e3a8a !important; color: white; text-align: right; padding: 12px 8px; font-family: 'NRT-Bd', sans-serif; font-size: 15px; border-radius: 0 8px 8px 0;">
-                            ${formatTotalLine(
-                              currentBill.items?.reduce((sum, item) => {
-                                if (currentBill.currency === "USD") return sum + ((item.outPriceUSD || item.price || 0) * item.quantity);
-                                return sum;
-                              }, 0) || 0,
-                              currentBill.items?.reduce((sum, item) => {
-                                if (currentBill.currency === "IQD") return sum + ((item.outPriceIQD || item.price || 0) * item.quantity);
-                                return sum;
-                              }, 0) || 0
-                            )}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  ${currentBill.note ? `
-                    <div style="background-color: #fff8e1; padding: 10px; border-radius: 8px; border: 1px solid #ffecb3; margin-bottom: 15px;">
-                      <h4 style="font-weight: 600; margin: 0 0 4px 0; color: #e67e22; font-size: 14px; font-family: 'NRT-Bd', sans-serif;">Note:</h4>
-                      <p style="font-size: 14px; color: #2c3e50; line-height: 1.4; margin: 0; font-family: 'NRT-Reg', sans-serif;">${currentBill.note}</p>
-                    </div>
-                  ` : ""}
-
-                  <div style="margin-top: 80px; text-align: right; page-break-inside: avoid;">
-                    <div style="width: 250px; height: 1.5px; background-color: #2c3e50; margin: 10px 0 8px auto;"></div>
-                    <p style="font-size: 14px; color: #34495e; font-style: italic; font-weight: 600; font-family: 'NRT-Reg', sans-serif; margin: 0; padding-right: 15px;">Receiver Signature (Stamp)</p>
-                  </div>
-                </div>
-              `}} />
+              <div style={styles.billTemplate} dangerouslySetInnerHTML={{ __html: buildBillHTML(currentBill).singleBillHTML }} />
             </div>
           </div>
         )}
